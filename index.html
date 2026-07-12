@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Juni's RNG Game</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Cinzel:wght@600;700;900&display=swap');
+
+  :root{
+    --bg-0:#08070c;
+    --bg-1:#0f0d16;
+    --bg-2:#161320;
+    --panel:#14111d;
+    --border:#2a2438;
+    --border-lit:#3d3552;
+    --text:#e9e5f5;
+    --text-dim:#8b83a3;
+    --text-faint:#5b5474;
+    --accent:#7c5cff;
+    --accent-2:#ff5ca8;
+    --good:#22C55E;
+    --bad:#F43F5E;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Space Grotesk', sans-serif;
+    --display: 'Cinzel', serif;
+    --navh: 68px;
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+
+  html,body{
+    background:var(--bg-0);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(124,92,255,0.15), transparent),
+      radial-gradient(ellipse 700px 500px at 100% 10%, rgba(255,92,168,0.10), transparent),
+      var(--bg-0);
+    padding-bottom:calc(var(--navh) + 24px);
+  }
+
+  ::selection{ background:var(--accent); color:#fff; }
+
+  /* ---------- Layout ---------- */
+  .wrap{
+    max-width:820px;
+    margin:0 auto;
+    padding:24px 16px 0;
+  }
+
+  header.top{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+    padding-bottom:18px;
+    border-bottom:1px solid var(--border);
+    margin-bottom:20px;
+  }
+
+  .brand{ display:flex; flex-direction:column; gap:2px; }
+  .brand .eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.22em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+  }
+  .brand h1{
+    font-family:var(--display);
+    font-size:26px;
+    font-weight:700;
+    letter-spacing:0.01em;
+    background:linear-gradient(120deg,#fff, #b9a8ff 60%, #ff9ecb);
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+  }
+
+  .stat-strip{
+    display:flex;
+    gap:18px;
+    font-family:var(--mono);
+    font-size:12px;
+    flex-wrap:wrap;
+  }
+  .stat-strip .s{ display:flex; flex-direction:column; gap:2px; align-items:flex-end; }
+  .stat-strip .s .label{ color:var(--text-faint); font-size:9px; letter-spacing:0.1em; text-transform:uppercase;}
+  .stat-strip .s .val{ color:var(--text); font-weight:700; font-size:14px; }
+
+  /* ---------- Panels (view switcher) ---------- */
+  .view{ display:none; }
+  .view.active{ display:block; animation:fadeIn .18s ease; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:18px;
+    padding:24px;
+    position:relative;
+    overflow:hidden;
+    margin-bottom:18px;
+  }
+
+  .panel h2.ptitle{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+    margin-bottom:16px;
+  }
+
+  /* ---------- Roll view ---------- */
+  .world-tabs{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .world-tab{
+    font-family:var(--mono);
+    font-size:12px;
+    padding:7px 14px;
+    border-radius:100px;
+    border:1px solid var(--border);
+    background:var(--bg-1);
+    color:var(--text-dim);
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .world-tab.active{
+    border-color:var(--accent);
+    color:#fff;
+    background:linear-gradient(135deg, rgba(124,92,255,0.25), rgba(255,92,168,0.15));
+  }
+  .world-tab:hover:not(.active){ border-color:var(--border-lit); color:var(--text); }
+
+  .area-select{ display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+  .area-btn{
+    font-family:var(--sans);
+    font-size:13px;
+    font-weight:600;
+    padding:8px 16px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:transparent;
+    color:var(--text-dim);
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .area-btn.active{ background:var(--bg-2); border-color:var(--border-lit); color:var(--text); }
+  .area-btn:hover:not(.active){ color:var(--text); }
+
+  .stage{
+    min-height:230px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:16px 10px 6px;
+    position:relative;
+  }
+
+  .result-name{
+    font-family:var(--display);
+    font-size:38px;
+    font-weight:800;
+    line-height:1.15;
+    margin-bottom:10px;
+    word-break:break-word;
+    max-width:100%;
+  }
+  .result-rng{ font-family:var(--mono); font-size:14px; color:var(--text-dim); margin-bottom:6px; }
+  .result-tier{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+    padding:4px 12px;
+    border-radius:100px;
+    border:1px solid var(--border-lit);
+    color:var(--text-dim);
+    margin-bottom:4px;
+  }
+  .result-variant{ font-family:var(--mono); font-size:12px; color:var(--accent-2); margin-top:4px; }
+  .result-placeholder{ color:var(--text-faint); font-family:var(--mono); font-size:14px; }
+  .multi-note{ font-family:var(--mono); font-size:11px; color:var(--text-faint); margin-top:10px; }
+
+  .roll-controls{ display:flex; gap:10px; justify-content:center; margin-top:18px; flex-wrap:wrap; }
+
+  .btn{
+    font-family:var(--sans);
+    font-weight:700;
+    font-size:15px;
+    padding:14px 30px;
+    border-radius:12px;
+    border:none;
+    cursor:pointer;
+    background:linear-gradient(135deg,var(--accent), var(--accent-2));
+    color:#fff;
+    box-shadow:0 6px 24px -6px rgba(124,92,255,0.55);
+    transition:transform .1s ease, box-shadow .15s ease;
+  }
+  .btn:hover{ transform:translateY(-1px); box-shadow:0 10px 28px -6px rgba(124,92,255,0.7); }
+  .btn:active{ transform:translateY(1px) scale(.98); }
+  .btn:disabled{ opacity:0.4; cursor:not-allowed; transform:none; }
+  .btn.secondary{ background:var(--bg-1); border:1px solid var(--border-lit); color:var(--text); box-shadow:none; }
+  .btn.secondary:hover{ background:var(--bg-2); }
+  .btn.small{ padding:9px 16px; font-size:12px; border-radius:9px; }
+  .btn.danger{ background:linear-gradient(135deg,#F43F5E,#F59E0B); box-shadow:0 6px 20px -6px rgba(244,63,94,0.5); }
+  .btn.danger:disabled{ background:var(--bg-1); box-shadow:none; color:var(--text-faint); }
+
+  /* equipped axe strip */
+  .axe-strip{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    background:var(--bg-1);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:10px 14px;
+    margin-bottom:16px;
+    font-family:var(--mono);
+    font-size:12px;
+    flex-wrap:wrap;
+  }
+  .axe-strip .aname{ font-family:var(--sans); font-weight:700; font-size:13px; color:var(--text); }
+  .axe-strip .astats{ color:var(--text-dim); }
+
+  /* ---------- Offline report ---------- */
+  .offline-banner{
+    background:linear-gradient(135deg, rgba(124,92,255,0.15), rgba(255,92,168,0.1));
+    border:1px solid var(--border-lit);
+    border-radius:14px;
+    padding:18px;
+    margin-bottom:18px;
+  }
+  .offline-banner h3{
+    font-family:var(--sans);
+    font-size:15px;
+    font-weight:700;
+    margin-bottom:6px;
+  }
+  .offline-banner p{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--text-dim);
+    margin-bottom:10px;
+  }
+  .offline-summary{
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+    max-height:160px;
+    overflow-y:auto;
+    margin-bottom:12px;
+  }
+  .offline-row{
+    display:flex;
+    justify-content:space-between;
+    font-family:var(--mono);
+    font-size:12px;
+    background:var(--bg-1);
+    padding:6px 10px;
+    border-radius:7px;
+  }
+
+  /* ---------- Log ---------- */
+  .log{ display:flex; flex-direction:column; gap:6px; max-height:280px; overflow-y:auto; padding-right:4px; }
+  .log::-webkit-scrollbar{ width:6px; }
+  .log::-webkit-scrollbar-thumb{ background:var(--border-lit); border-radius:10px; }
+  .log-row{
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+    padding:8px 10px; border-radius:8px; background:var(--bg-1);
+    font-family:var(--mono); font-size:12px; animation:slideIn .25s ease;
+  }
+  @keyframes slideIn{ from{ opacity:0; transform:translateX(-6px);} to{opacity:1; transform:translateX(0);} }
+  .log-row .lname{ font-weight:700; }
+  .log-row .lrng{ color:var(--text-faint); font-size:11px; }
+  .log-empty{ color:var(--text-faint); font-family:var(--mono); font-size:12px; padding:10px 2px;}
+
+  /* ---------- Inventory ---------- */
+  .inv-summary{ font-family:var(--mono); font-size:11px; color:var(--text-faint); }
+  .inv-list{ display:flex; flex-direction:column; gap:6px; }
+  .inv-row{
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+    padding:9px 10px; border-radius:8px; background:var(--bg-1); border:1px solid var(--border);
+  }
+  .inv-row .iname{ font-family:var(--display); font-weight:700; font-size:14px; }
+  .inv-row .imeta{ font-family:var(--mono); font-size:10px; color:var(--text-faint); margin-top:2px; }
+  .inv-row .icount{
+    font-family:var(--mono); font-size:12px; color:var(--text-dim);
+    background:var(--bg-2); border:1px solid var(--border-lit);
+    padding:3px 9px; border-radius:100px; white-space:nowrap;
+  }
+  .inv-empty{ color:var(--text-faint); font-family:var(--mono); font-size:12px; padding:10px 2px;}
+
+  /* ---------- Index (dropdowns) ---------- */
+  .accordion{ display:flex; flex-direction:column; gap:10px; }
+  .acc-item{ border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--bg-1); }
+  .acc-head{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:14px 16px; cursor:pointer; user-select:none;
+    font-family:var(--sans); font-weight:700; font-size:14px;
+  }
+  .acc-head .chev{ font-family:var(--mono); color:var(--text-faint); font-size:12px; transition:transform .18s ease; }
+  .acc-item.open .chev{ transform:rotate(180deg); }
+  .acc-body{ display:none; padding:0 16px 14px; }
+  .acc-item.open .acc-body{ display:block; }
+  .rank-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:9px 4px; border-bottom:1px solid var(--border); gap:10px; flex-wrap:wrap;
+  }
+  .rank-row:last-child{ border-bottom:none; }
+  .rank-row .rname{ font-family:var(--display); font-weight:700; font-size:15px; }
+  .rank-row .rrng{ font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+
+  /* ---------- Items / crafting ---------- */
+  .item-cards{ display:flex; flex-direction:column; gap:14px; }
+  .item-card{
+    border:1px solid var(--border);
+    background:var(--bg-1);
+    border-radius:14px;
+    padding:16px;
+  }
+  .item-card.equipped{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .item-card .ihead{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; }
+  .item-card .iname{ font-family:var(--display); font-weight:700; font-size:18px; }
+  .item-card .idesc{ font-family:var(--mono); font-size:12px; color:var(--text-dim); margin:6px 0 10px; font-style:italic; }
+  .item-card .istats{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:10px; font-family:var(--mono); font-size:12px; }
+  .item-card .istats .stat{ color:var(--text-dim); }
+  .item-card .istats .stat b{ color:var(--text); }
+  .req-list{ display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
+  .req-row{
+    display:flex; justify-content:space-between; font-family:var(--mono); font-size:12px;
+    padding:5px 9px; border-radius:6px; background:var(--bg-2);
+  }
+  .req-row.ok{ color:var(--good); }
+  .req-row.short{ color:var(--bad); }
+  .badge-equipped{
+    font-family:var(--mono); font-size:10px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--accent); border:1px solid var(--accent); padding:3px 9px; border-radius:100px;
+  }
+  .badge-owned{
+    font-family:var(--mono); font-size:10px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--good); border:1px solid var(--good); padding:3px 9px; border-radius:100px;
+  }
+
+  /* ---------- Tier text styles ---------- */
+  .t-common{ color:#9CA3AF; }
+  .t-usual{ color:#B0AAA0; }
+  .t-decent{ color:#84CC16; }
+  .t-rare{ color:#22C55E; }
+  .t-unusual{ color:#0EA5E9; }
+  .t-good{ color:#3B82F6; }
+  .t-epic{ color:#A855F7; }
+  .t-pelicular{ color:#E879F9; }
+  .t-horizon{ color:#FB7185; }
+  .t-grandiose{ color:#F59E0B; }
+  .t-zenith{ background:linear-gradient(90deg,#FFD700,#FFF6D0,#FFD700); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .t-unworldly{ background:linear-gradient(90deg,#22D3EE,#E879F9,#22D3EE); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .t-colossal{ background:linear-gradient(90deg,#4338CA,#0B0B1F,#4338CA); -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:0 0 18px rgba(99,102,241,0.5); }
+  .t-infinite{ background:linear-gradient(90deg,#ff0055,#ffaa00,#00ff9d,#00aaff,#aa00ff,#ff0055); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation:hueflow 4s linear infinite; }
+  .t-insanity{ font-family:var(--display); background:linear-gradient(90deg,#ff003c,#1a0008,#ff003c); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation:hueflow 1.4s linear infinite, jitter .12s steps(2) infinite; text-shadow:0 0 20px rgba(255,0,60,0.6); }
+  .t-impossible{ font-family:var(--display); font-weight:900; background:linear-gradient(90deg,#ff0055,#ff9900,#ffee00,#33ff77,#00e5ff,#7c5cff,#ff5ca8,#ff0055); background-size:400% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation:hueflow 2.2s linear infinite; text-shadow:0 0 30px rgba(255,255,255,0.35); letter-spacing:0.01em; }
+
+  @keyframes hueflow{ from{ background-position:0% 50%;} to{ background-position:300% 50%; } }
+  @keyframes jitter{ 0%{ transform:translate(0,0); } 50%{ transform:translate(1px,-1px); } 100%{ transform:translate(-1px,1px); } }
+
+  .v-weird{ font-style:normal; filter:saturate(1.3) hue-rotate(8deg); }
+  .v-odd{ font-style:italic; filter:saturate(1.5) hue-rotate(-10deg); }
+  .v-rainbow{
+    background:linear-gradient(90deg,#ff0055,#ff9900,#ffee00,#33ff77,#00e5ff,#7c5cff,#ff5ca8,#ff0055) !important;
+    background-size:400% 100%; -webkit-background-clip:text; background-clip:text; color:transparent !important;
+    animation:hueflow 2s linear infinite;
+  }
+  .v-grayscale{
+    background:none !important; -webkit-background-clip:unset; color:#cfcfcf !important;
+    filter:grayscale(1); font-family:var(--mono); letter-spacing:0.02em;
+  }
+
+  .glow-epic{ text-shadow:0 0 22px rgba(168,85,247,0.45); }
+  .glow-pelicular{ text-shadow:0 0 24px rgba(232,121,249,0.5); }
+  .glow-horizon{ text-shadow:0 0 24px rgba(251,113,133,0.5); }
+  .glow-grandiose{ text-shadow:0 0 24px rgba(245,158,11,0.55); }
+  .glow-zenith{ text-shadow:0 0 28px rgba(255,215,0,0.55); }
+  .glow-unworldly{ text-shadow:0 0 28px rgba(232,121,249,0.5); }
+
+  .flash-bg{ position:fixed; inset:0; pointer-events:none; z-index:5; opacity:0; }
+  .flash-bg.go{ animation:flashfade 0.6s ease-out; }
+  @keyframes flashfade{ 0%{opacity:0.55;} 100%{opacity:0;} }
+
+  /* ---------- Bottom nav ---------- */
+  .bottom-nav{
+    position:fixed;
+    left:0; right:0; bottom:0;
+    height:var(--navh);
+    background:rgba(15,13,22,0.92);
+    backdrop-filter:blur(14px);
+    border-top:1px solid var(--border);
+    display:flex;
+    z-index:20;
+  }
+  .nav-btn{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:3px;
+    background:none;
+    border:none;
+    color:var(--text-faint);
+    cursor:pointer;
+    font-family:var(--sans);
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:0.02em;
+    transition:color .15s ease;
+  }
+  .nav-btn .icon{ font-size:19px; line-height:1; }
+  .nav-btn.active{ color:var(--text); }
+  .nav-btn.active .icon{ filter:drop-shadow(0 0 6px rgba(124,92,255,0.7)); }
+  .nav-btn:active{ transform:scale(0.96); }
+
+  footer.foot{
+    text-align:center;
+    color:var(--text-faint);
+    font-family:var(--mono);
+    font-size:11px;
+    margin-top:20px;
+    padding-top:16px;
+    border-top:1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<div class="flash-bg" id="flashBg"></div>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <span class="eyebrow">beta release · be patient</span>
+      <h1>Juni's RNG Game</h1>
+    </div>
+    <div class="stat-strip">
+      <div class="s"><span class="label">Rolls</span><span class="val" id="statRolls">0</span></div>
+      <div class="s"><span class="label">Rolls/sec (offline)</span><span class="val" id="statRps">0</span></div>
+      <div class="s"><span class="label">Best rarity</span><span class="val" id="statBest">—</span></div>
+    </div>
+  </header>
+
+  <div id="offlineBanner"></div>
+
+  <!-- ROLL VIEW -->
+  <div class="view active" id="view-roll">
+    <div class="panel roll-panel">
+      <div class="axe-strip" id="axeStrip"></div>
+      <div class="world-tabs" id="worldTabs"></div>
+      <div class="area-select" id="areaSelect"></div>
+
+      <div class="stage" id="stage">
+        <div class="result-placeholder">Press roll to find your first item.</div>
+      </div>
+
+      <div class="roll-controls">
+        <button class="btn" id="rollBtn">ROLL</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="ptitle">Recent rolls <button class="btn small secondary" id="clearLog" style="float:right;">clear</button></h2>
+      <div class="log" id="log">
+        <div class="log-empty">No rolls yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INVENTORY VIEW -->
+  <div class="view" id="view-inventory">
+    <div class="panel">
+      <h2 class="ptitle">Inventory <span class="inv-summary" id="invSummary"></span></h2>
+      <div class="inv-list" id="invList">
+        <div class="inv-empty">Nothing collected yet. Go roll something.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INDEX VIEW -->
+  <div class="view" id="view-index">
+    <div class="panel">
+      <h2 class="ptitle">Rank index — World 1</h2>
+      <div class="accordion" id="indexAccordion"></div>
+    </div>
+  </div>
+
+  <!-- ITEMS VIEW -->
+  <div class="view" id="view-items">
+    <div class="panel">
+      <h2 class="ptitle">Craftable items</h2>
+      <div class="item-cards" id="itemCards"></div>
+    </div>
+  </div>
+
+  <footer class="foot">junis rng game · world 1 · v0.2 beta</footer>
+</div>
+
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-view="roll"><span class="icon">🎲</span>Roll</button>
+  <button class="nav-btn" data-view="inventory"><span class="icon">🎒</span>Inventory</button>
+  <button class="nav-btn" data-view="index"><span class="icon">📖</span>Index</button>
+  <button class="nav-btn" data-view="items"><span class="icon">🪓</span>Items</button>
+</nav>
+
+<script>
+/* ============================================================
+   DATA MODEL
+   ============================================================ */
+
+const TIERS = [
+  { key:'common',     label:'Common',     min:0,            max:1,            cls:'t-common' },
+  { key:'usual',       label:'Usual',       min:1,            max:250,          cls:'t-usual' },
+  { key:'decent',      label:'Decent',      min:250,          max:1000,         cls:'t-decent' },
+  { key:'rare',        label:'Rare',        min:1000,         max:7500,         cls:'t-rare' },
+  { key:'unusual',     label:'Unusual',     min:7500,         max:30000,        cls:'t-unusual' },
+  { key:'good',        label:'Good',        min:30000,        max:90000,        cls:'t-good' },
+  { key:'epic',        label:'Epic',        min:90000,        max:250000,       cls:'t-epic' },
+  { key:'pelicular',   label:'Pelicular',   min:250000,       max:1000000,      cls:'t-pelicular' },
+  { key:'horizon',     label:'Horizon',     min:1000000,      max:7500000,      cls:'t-horizon' },
+  { key:'grandiose',   label:'Grandiose',   min:7500000,      max:30000000,     cls:'t-grandiose' },
+  { key:'zenith',      label:'Zenith',      min:30000000,     max:100000000,    cls:'t-zenith' },
+  { key:'unworldly',   label:'Unworldly',   min:100000000,    max:1000000000,   cls:'t-unworldly' },
+  { key:'colossal',    label:'Colossal',    min:1000000000,   max:25000000000,  cls:'t-colossal' },
+  { key:'infinite',    label:'Infinite',    min:25000000000,  max:70000000000,  cls:'t-infinite' },
+  { key:'insanity',    label:'Insanity',    min:70000000000,  max:500000000000, cls:'t-insanity' },
+  { key:'impossible',  label:'Impossible',  min:500000000000, max:Infinity,     cls:'t-impossible' },
+];
+
+function tierFor(rng){
+  for(const t of TIERS){
+    if(rng > t.min && rng <= t.max) return t;
+  }
+  if(rng <= 1) return TIERS[0];
+  return TIERS[TIERS.length-1];
+}
+
+const VARIANT_CHAIN = [
+  { key:'weird',     label:'Weird',     rng:15, mult:15, cls:'v-weird' },
+  { key:'odd',       label:'Odd',       rng:20, mult:20, cls:'v-odd' },
+  { key:'rainbow',   label:'Rainbow',   rng:10, mult:10, cls:'v-rainbow' },
+  { key:'grayscale', label:'Grayscale', rng:25, mult:25, cls:'v-grayscale' },
+];
+
+function rollVariant(){
+  let current = null;
+  let totalMult = 1;
+  for(const v of VARIANT_CHAIN){
+    if(Math.random() < 1/v.rng){
+      current = v;
+      totalMult *= v.mult;
+    } else {
+      break;
+    }
+  }
+  return current ? { ...current, totalMult } : null;
+}
+
+const WORLD1 = {
+  key:'world1',
+  label:'World 1',
+  global: [
+    { name:'Destiny', rng:1770000000000 },
+  ],
+  areas:[
+    {
+      key:'natural', label:'Natural',
+      ranks:[
+        { name:'Dirt', rng:1, mutations:[{name:'Dirtiverse', rng:50000000000}] },
+        { name:'Blade of Grass', rng:4 },
+        { name:'Rock', rng:6 },
+        { name:'Flower', rng:10 },
+        { name:'Plant', rng:25 },
+        { name:'Water', rng:50 },
+        { name:'Crystal', rng:100, mutations:[{name:'Apocalypse Crystal', rng:6660000000}] },
+        { name:'Silver', rng:250 },
+        { name:'Wood', rng:500 },
+        { name:'Creature', rng:1000 },
+        { name:'Disaster', rng:6000 },
+        { name:'Fire', rng:15000, mutations:[{name:'Plasmaspark', rng:17500000}] },
+        { name:'Life', rng:75000, mutations:[{name:'Corruption', rng:250000}] },
+        { name:'Sporebloom', rng:1000000 },
+        { name:'Ruins', rng:5000000, mutations:[{name:'La Ville Perdue', rng:100000000000}] },
+        { name:'Leviathan', rng:30000000 },
+        { name:'Lunar', rng:75000000, mutations:[{name:'Lunar Oblivion', rng:3250000000}] },
+        { name:'Moon', rng:400000000 },
+        { name:'Universal', rng:725000000000 },
+      ]
+    },
+    {
+      key:'wasteland', label:'Wasteland',
+      ranks:[
+        { name:'Pollution', rng:1 },
+        { name:'Broken Device', rng:5, mutations:[{name:'Electronic', rng:2500}] },
+        { name:'Ruincrystal', rng:75 },
+        { name:'Corruption Fragment', rng:315, mutations:[{name:'Doomcrystal', rng:666000000}] },
+        { name:'Junk Producer', rng:750 },
+        { name:'Fragments', rng:5000 },
+        { name:'Unfunctional Tool', rng:12500 },
+        { name:'Slop', rng:50000, mutations:[{name:'Goop Producer', rng:750000}] },
+        { name:'Beyond Recognition Object', rng:175000 },
+        { name:'Decayal Device', rng:2000000 },
+        { name:'Destroyed Thing', rng:8000000 },
+        { name:'Entropy', rng:50000000, mutations:[{name:'Destruction', rng:7000000000}] },
+        { name:'Garbage Compacter', rng:200000000 },
+        { name:'Obliterator', rng:750000000 },
+      ]
+    },
+    {
+      key:'dreamland', label:'Dreamland',
+      ranks:[
+        { name:'Dreamstone', rng:1 },
+        { name:'Star', rng:15 },
+        { name:'Cloud', rng:80 },
+        { name:'Swirl', rng:500 },
+        { name:'Illusion Crystal', rng:3000 },
+        { name:'imsorrythereisntmoretiersandwhateverbutthisisabetareleaseBEPATIENT!', rng:Infinity },
+      ]
+    },
+  ]
+};
+
+const WORLDS = [WORLD1];
+
+/* ---------- Craftable items (axes) ---------- */
+// requirement keys match inventory item names within the 'Natural'/'Wasteland' areas (base rank names, no-variant items)
+const AXES = {
+  default: {
+    key:'default', name:'Default Axe',
+    desc:'Nothing special. It just chops.',
+    stats:{ luckMult:1, bulk:1, rps:0 },
+    requires:[],
+    free:true,
+  },
+  crude: {
+    key:'crude', name:'Crude Axe',
+    desc:'Your first axe. Happy?',
+    stats:{ luckMult:1.5, bulk:2, rps:1.1 }, // +1 multi roll means bulk 1(default) + 1 = 2
+    requires:[
+      { name:'Dirt', area:'Natural', amount:25 },
+      { name:'Rock', area:'Natural', amount:6 },
+      { name:'Blade of Grass', area:'Natural', amount:15 },
+      { name:'Crystal', area:'Natural', amount:1 },
+    ],
+  },
+  destroyer: {
+    key:'destroyer', name:'Destructive Destroyed Destroyer',
+    desc:'...an axe thats destructive, yet is destroyed? Ironic..',
+    stats:{ luckMult:4, bulk:5, rps:3 }, // base bulk 1 + 4
+    requires:[
+      { name:'Pollution', area:'Wasteland', amount:5000 },
+      { name:'Crystal', area:'Natural', amount:25 },
+      { name:'Ruincrystal', area:'Wasteland', amount:100 },
+      { name:'Junk Producer', area:'Wasteland', amount:3 },
+      { name:'Fragments', area:'Wasteland', amount:1 },
+    ],
+  },
+  disaster: {
+    key:'disaster', name:'Disaster Bringer',
+    desc:'Self explanatory name, lots of rolls BUT your luck is less!',
+    stats:{ luckMult:0.5, bulk:8, rps:10 }, // base bulk 1 + 7
+    requires:[
+      { name:'Disaster', area:'Natural', amount:10 },
+      { name:'Unfunctional Tool', area:'Wasteland', amount:3 },
+      { name:'Slop', area:'Wasteland', amount:1 },
+    ],
+  },
+};
+const AXE_ORDER = ['default','crude','destroyer','disaster'];
+
+/* ============================================================
+   STATE
+   ============================================================ */
+let state = {
+  worldIdx: 0,
+  areaIdx: 0,
+  rolls: 0,
+  best: null,
+  log: [],
+  inventory: {},      // key -> {name, areaLabel, count, ...}
+  ownedAxes: ['default'],
+  equippedAxe: 'default',
+  lastSeenAt: Date.now(),
+};
+
+const MAX_OFFLINE_SECONDS = 7 * 24 * 60 * 60; // 7 day cap
+
+function currentAxe(){
+  return AXES[state.equippedAxe] || AXES.default;
+}
+
+/* ============================================================
+   INDEXEDDB PERSISTENCE
+   ============================================================ */
+const DB_NAME = 'junis-rng-db';
+const DB_VERSION = 1;
+const STORE_META = 'meta';
+const STORE_INV  = 'inventory';
+let dbPromise = null;
+
+function openDB(){
+  if(dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e)=>{
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META, { keyPath:'id' });
+      if(!db.objectStoreNames.contains(STORE_INV)) db.createObjectStore(STORE_INV, { keyPath:'key' });
+    };
+    req.onsuccess = (e)=> resolve(e.target.result);
+    req.onerror = (e)=>{ console.error('IndexedDB open failed', e); reject(e); };
+  });
+  return dbPromise;
+}
+
+async function dbSaveMeta(){
+  try{
+    const db = await openDB();
+    const tx = db.transaction(STORE_META, 'readwrite');
+    tx.objectStore(STORE_META).put({
+      id:'state',
+      rolls: state.rolls,
+      best: state.best,
+      worldIdx: state.worldIdx,
+      areaIdx: state.areaIdx,
+      ownedAxes: state.ownedAxes,
+      equippedAxe: state.equippedAxe,
+      lastSeenAt: state.lastSeenAt,
+    });
+  }catch(err){ console.error('Failed to save meta', err); }
+}
+
+async function dbSaveInvItem(item){
+  try{
+    const db = await openDB();
+    const tx = db.transaction(STORE_INV, 'readwrite');
+    tx.objectStore(STORE_INV).put(item);
+  }catch(err){ console.error('Failed to save inventory item', err); }
+}
+
+async function dbLoadAll(){
+  try{
+    const db = await openDB();
+    const metaTx = db.transaction(STORE_META, 'readonly');
+    const metaReq = metaTx.objectStore(STORE_META).get('state');
+    const meta = await new Promise((res,rej)=>{
+      metaReq.onsuccess = ()=> res(metaReq.result);
+      metaReq.onerror = (e)=> rej(e);
+    });
+    if(meta){
+      state.rolls = meta.rolls || 0;
+      state.best = meta.best || null;
+      state.worldIdx = meta.worldIdx || 0;
+      state.areaIdx = meta.areaIdx || 0;
+      state.ownedAxes = meta.ownedAxes && meta.ownedAxes.length ? meta.ownedAxes : ['default'];
+      state.equippedAxe = meta.equippedAxe || 'default';
+      state.lastSeenAt = meta.lastSeenAt || Date.now();
+    }
+
+    const invTx = db.transaction(STORE_INV, 'readonly');
+    const invReq = invTx.objectStore(STORE_INV).getAll();
+    const items = await new Promise((res,rej)=>{
+      invReq.onsuccess = ()=> res(invReq.result);
+      invReq.onerror = (e)=> rej(e);
+    });
+    state.inventory = {};
+    for(const it of items) state.inventory[it.key] = it;
+  }catch(err){
+    console.error('Failed to load saved data, starting fresh', err);
+  }
+}
+
+function invKey(areaLabel, name, variantKey){
+  return `${areaLabel}|${name}|${variantKey || 'none'}`;
+}
+
+function addToInventory(result, count){
+  count = count || 1;
+  const key = invKey(result.areaLabel, result.name, result.variant ? result.variant.key : null);
+  const existing = state.inventory[key];
+  if(existing){
+    existing.count += count;
+    existing.lastRng = result.finalRng;
+    state.inventory[key] = existing;
+    dbSaveInvItem(existing);
+  } else {
+    const item = {
+      key,
+      name: result.name,
+      areaLabel: result.areaLabel,
+      baseRng: result.baseRng,
+      lastRng: result.finalRng,
+      tierKey: result.tier.key,
+      tierLabel: result.tier.label,
+      tierCls: result.tier.cls,
+      variant: result.variant ? { key:result.variant.key, label:result.variant.label, cls:result.variant.cls, totalMult:result.variant.totalMult } : null,
+      count: count,
+      firstAt: Date.now(),
+    };
+    state.inventory[key] = item;
+    dbSaveInvItem(item);
+  }
+}
+
+function getOwnedCount(areaLabel, name){
+  const key = invKey(areaLabel, name, null);
+  return state.inventory[key] ? state.inventory[key].count : 0;
+}
+
+/* ============================================================
+   ROLLING LOGIC
+   ============================================================ */
+
+function rollOnceForArea(world, area, luckMult){
+  const pool = [];
+  for(const r of area.ranks){
+    pool.push({ name:r.name, rng:r.rng });
+    if(r.mutations) for(const m of r.mutations) pool.push({ name:m.name, rng:m.rng });
+  }
+  for(const g of world.global) pool.push({ name:g.name, rng:g.rng });
+
+  let winner = null;
+  for(const item of pool){
+    if(item.rng === Infinity){
+      if(Math.random() < 0.0005 * luckMult){
+        if(!winner || item.rng > winner.rng) winner = item;
+      }
+      continue;
+    }
+    const effectiveChance = luckMult / item.rng;
+    if(Math.random() < effectiveChance){
+      if(!winner || item.rng > winner.rng) winner = item;
+    }
+  }
+  if(!winner) winner = pool.reduce((a,b)=> a.rng < b.rng ? a : b);
+
+  const variant = rollVariant();
+  const finalRng = variant ? winner.rng * variant.totalMult : winner.rng;
+  const tier = tierFor(finalRng);
+
+  return { name:winner.name, baseRng:winner.rng, finalRng, tier, variant, areaLabel:area.label };
+}
+
+function rollOnce(){
+  const world = WORLDS[state.worldIdx];
+  const area = world.areas[state.areaIdx];
+  const luckMult = currentAxe().stats.luckMult;
+  return rollOnceForArea(world, area, luckMult);
+}
+
+/* ============================================================
+   RENDERING HELPERS
+   ============================================================ */
+
+function fmtRng(n){
+  if(n === Infinity) return '∞';
+  if(n < 1) return '1';
+  return Math.round(n).toLocaleString();
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function fmtDuration(seconds){
+  seconds = Math.floor(seconds);
+  const d = Math.floor(seconds / 86400); seconds -= d*86400;
+  const h = Math.floor(seconds / 3600); seconds -= h*3600;
+  const m = Math.floor(seconds / 60); seconds -= m*60;
+  const parts = [];
+  if(d) parts.push(d+'d');
+  if(h) parts.push(h+'h');
+  if(m) parts.push(m+'m');
+  if(!d && !h) parts.push(seconds+'s');
+  return parts.join(' ') || '0s';
+}
+
+function tierGlowColor(key){
+  const map = {
+    pelicular:'rgba(232,121,249,0.5)', horizon:'rgba(251,113,133,0.5)', grandiose:'rgba(245,158,11,0.5)',
+    zenith:'rgba(255,215,0,0.55)', unworldly:'rgba(34,211,238,0.5)', colossal:'rgba(67,56,202,0.6)',
+    infinite:'rgba(255,0,150,0.5)', insanity:'rgba(255,0,60,0.6)', impossible:'rgba(255,255,255,0.6)',
+  };
+  return map[key] || 'rgba(124,92,255,0.4)';
+}
+
+/* ============================================================
+   RENDERING: ROLL VIEW
+   ============================================================ */
+
+function renderAxeStrip(){
+  const axe = currentAxe();
+  const el = document.getElementById('axeStrip');
+  el.innerHTML = `
+    <span class="aname">🪓 ${axe.name}</span>
+    <span class="astats">luck ×${axe.stats.luckMult} · bulk ${axe.stats.bulk} · ${axe.stats.rps} rolls/sec offline</span>
+  `;
+}
+
+function renderStage(result, count){
+  const stage = document.getElementById('stage');
+  const glowCls = ['epic','pelicular','horizon','grandiose','zenith','unworldly'].includes(result.tier.key) ? `glow-${result.tier.key}` : '';
+  const variantCls = result.variant ? result.variant.cls : '';
+
+  stage.innerHTML = `
+    <div class="result-tier">${result.areaLabel} · ${result.tier.label}</div>
+    <div class="result-name ${result.tier.cls} ${variantCls} ${glowCls}">${escapeHtml(result.name)}</div>
+    <div class="result-rng">1 in ${fmtRng(result.finalRng)}</div>
+    ${result.variant ? `<div class="result-variant">✦ ${result.variant.label} variant (×${result.variant.totalMult})</div>` : ''}
+    ${count && count > 1 ? `<div class="multi-note">shown: rarest of ${count} rolls (bulk)</div>` : ''}
+  `;
+
+  if(['pelicular','horizon','grandiose','zenith','unworldly','colossal','infinite','insanity','impossible'].includes(result.tier.key)){
+    const flash = document.getElementById('flashBg');
+    flash.style.background = `radial-gradient(circle at 50% 40%, ${tierGlowColor(result.tier.key)}, transparent 70%)`;
+    flash.classList.remove('go');
+    void flash.offsetWidth;
+    flash.classList.add('go');
+  }
+}
+
+function pushLog(result){
+  state.log.unshift(result);
+  if(state.log.length > 40) state.log.pop();
+  renderLog();
+}
+
+function renderLog(){
+  const log = document.getElementById('log');
+  if(state.log.length === 0){
+    log.innerHTML = `<div class="log-empty">No rolls yet.</div>`;
+    return;
+  }
+  log.innerHTML = state.log.map(r => `
+    <div class="log-row">
+      <span class="lname ${r.tier.cls}">${escapeHtml(r.name)}${r.variant ? ' ✦' : ''}</span>
+      <span class="lrng">1/${fmtRng(r.finalRng)}</span>
+    </div>
+  `).join('');
+}
+
+function updateStatStrip(){
+  document.getElementById('statRolls').textContent = state.rolls.toLocaleString();
+  document.getElementById('statRps').textContent = currentAxe().stats.rps;
+  document.getElementById('statBest').textContent = state.best ? state.best.tier.label : '—';
+}
+
+function renderWorldTabs(){
+  const el = document.getElementById('worldTabs');
+  el.innerHTML = WORLDS.map((w,i) => `<button class="world-tab ${i===state.worldIdx?'active':''}" data-idx="${i}">${w.label}</button>`).join('');
+  el.querySelectorAll('.world-tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.worldIdx = parseInt(btn.dataset.idx);
+      state.areaIdx = 0;
+      renderWorldTabs();
+      renderAreaSelect();
+      dbSaveMeta();
+    });
+  });
+}
+
+function renderAreaSelect(){
+  const world = WORLDS[state.worldIdx];
+  const el = document.getElementById('areaSelect');
+  el.innerHTML = world.areas.map((a,i) => `<button class="area-btn ${i===state.areaIdx?'active':''}" data-idx="${i}">${a.label}</button>`).join('');
+  el.querySelectorAll('.area-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.areaIdx = parseInt(btn.dataset.idx);
+      renderAreaSelect();
+      dbSaveMeta();
+    });
+  });
+}
+
+/* ============================================================
+   RENDERING: INVENTORY VIEW
+   ============================================================ */
+
+function renderInventory(){
+  const list = document.getElementById('invList');
+  const summary = document.getElementById('invSummary');
+  const items = Object.values(state.inventory);
+
+  if(items.length === 0){
+    list.innerHTML = `<div class="inv-empty">Nothing collected yet. Go roll something.</div>`;
+    summary.textContent = '';
+    return;
+  }
+
+  items.sort((a,b)=> b.lastRng - a.lastRng);
+  const totalCount = items.reduce((s,i)=> s + i.count, 0);
+  summary.textContent = `${items.length} unique · ${totalCount.toLocaleString()} total`;
+
+  list.innerHTML = items.map(it => {
+    const variantCls = it.variant ? it.variant.cls : '';
+    const variantTxt = it.variant ? ` · ${it.variant.label}` : '';
+    return `
+      <div class="inv-row">
+        <div>
+          <div class="iname ${it.tierCls} ${variantCls}">${escapeHtml(it.name)}${it.variant ? ' ✦' : ''}</div>
+          <div class="imeta">${it.areaLabel} · 1/${fmtRng(it.lastRng)} · ${it.tierLabel}${variantTxt}</div>
+        </div>
+        <span class="icount">×${it.count.toLocaleString()}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ============================================================
+   RENDERING: INDEX VIEW (dropdowns / accordion)
+   ============================================================ */
+
+function buildIndexAccordion(){
+  const el = document.getElementById('indexAccordion');
+  let html = '';
+
+  html += `
+    <div class="acc-item" data-acc="global">
+      <div class="acc-head"><span>Global — spawns everywhere</span><span class="chev">▾</span></div>
+      <div class="acc-body">
+        ${WORLD1.global.map(g=>{
+          const t = tierFor(g.rng);
+          return `<div class="rank-row"><span class="rname ${t.cls}">${g.name}</span><span class="rrng">1/${fmtRng(g.rng)} · ${t.label}</span></div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  for(const area of WORLD1.areas){
+    let rowsHtml = '';
+    for(const r of area.ranks){
+      const t = tierFor(r.rng);
+      rowsHtml += `<div class="rank-row"><span class="rname ${t.cls}">${r.name}</span><span class="rrng">1/${fmtRng(r.rng)} · ${t.label}</span></div>`;
+      if(r.mutations){
+        for(const m of r.mutations){
+          const mt = tierFor(m.rng);
+          rowsHtml += `<div class="rank-row" style="padding-left:16px; opacity:0.9;"><span class="rname ${mt.cls}" style="font-size:13px;">↳ ${m.name}</span><span class="rrng">1/${fmtRng(m.rng)} · ${mt.label}</span></div>`;
+        }
+      }
+    }
+    html += `
+      <div class="acc-item" data-acc="${area.key}">
+        <div class="acc-head"><span>${area.label}</span><span class="chev">▾</span></div>
+        <div class="acc-body">${rowsHtml}</div>
+      </div>
+    `;
+  }
+
+  el.innerHTML = html;
+  el.querySelectorAll('.acc-head').forEach(head=>{
+    head.addEventListener('click', ()=>{
+      head.parentElement.classList.toggle('open');
+    });
+  });
+}
+
+/* ============================================================
+   RENDERING: ITEMS VIEW (crafting)
+   ============================================================ */
+
+function renderItemCards(){
+  const el = document.getElementById('itemCards');
+  el.innerHTML = AXE_ORDER.map(key=>{
+    const axe = AXES[key];
+    const owned = state.ownedAxes.includes(key);
+    const equipped = state.equippedAxe === key;
+
+    let reqHtml = '';
+    let canCraft = true;
+    if(axe.free){
+      reqHtml = `<div class="req-row ok">Free · auto-equipped at start</div>`;
+    } else {
+      reqHtml = axe.requires.map(req=>{
+        const have = getOwnedCount(req.area, req.name);
+        const ok = have >= req.amount;
+        if(!ok) canCraft = false;
+        return `<div class="req-row ${ok?'ok':'short'}">${req.name} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
+      }).join('');
+    }
+
+    const statsHtml = `
+      <div class="istats">
+        <span class="stat">luck <b>×${axe.stats.luckMult}</b></span>
+        <span class="stat">bulk <b>${axe.stats.bulk}</b></span>
+        <span class="stat">rolls/sec offline <b>${axe.stats.rps}</b></span>
+      </div>
+    `;
+
+    let actionHtml = '';
+    if(equipped){
+      actionHtml = `<span class="badge-equipped">Equipped</span>`;
+    } else if(owned){
+      actionHtml = `<button class="btn small" data-equip="${key}">Equip</button>`;
+    } else if(axe.free){
+      actionHtml = '';
+    } else {
+      actionHtml = `<button class="btn small ${canCraft?'':'secondary'}" data-craft="${key}" ${canCraft?'':'disabled'}>Craft</button>`;
+    }
+
+    return `
+      <div class="item-card ${equipped?'equipped':''}">
+        <div class="ihead">
+          <span class="iname">${axe.name}</span>
+          ${owned && !equipped ? '<span class="badge-owned">Owned</span>' : ''}
+        </div>
+        <div class="idesc">${axe.desc}</div>
+        ${statsHtml}
+        ${!axe.free ? `<div class="req-list">${reqHtml}</div>` : ''}
+        <div style="text-align:right;">${actionHtml}</div>
+      </div>
+    `;
+  }).join('');
+
+  el.querySelectorAll('[data-craft]').forEach(btn=>{
+    btn.addEventListener('click', ()=> craftAxe(btn.dataset.craft));
+  });
+  el.querySelectorAll('[data-equip]').forEach(btn=>{
+    btn.addEventListener('click', ()=> equipAxe(btn.dataset.equip));
+  });
+}
+
+function craftAxe(key){
+  const axe = AXES[key];
+  if(!axe || axe.free || state.ownedAxes.includes(key)) return;
+  // verify and consume
+  for(const req of axe.requires){
+    if(getOwnedCount(req.area, req.name) < req.amount) return;
+  }
+  for(const req of axe.requires){
+    const k = invKey(req.area, req.name, null);
+    state.inventory[k].count -= req.amount;
+    dbSaveInvItem(state.inventory[k]);
+  }
+  state.ownedAxes.push(key);
+  state.equippedAxe = key;
+  dbSaveMeta();
+  renderItemCards();
+  renderInventory();
+  renderAxeStrip();
+  updateStatStrip();
+}
+
+function equipAxe(key){
+  if(!state.ownedAxes.includes(key)) return;
+  state.equippedAxe = key;
+  dbSaveMeta();
+  renderItemCards();
+  renderAxeStrip();
+  updateStatStrip();
+}
+
+/* ============================================================
+   NAV / VIEW SWITCHING
+   ============================================================ */
+
+function showView(name){
+  document.querySelectorAll('.view').forEach(v=> v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b=> b.classList.toggle('active', b.dataset.view === name));
+}
+
+document.querySelectorAll('.nav-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=> showView(btn.dataset.view));
+});
+
+/* ============================================================
+   ROLLING (manual, with bulk from axe)
+   ============================================================ */
+
+function doRoll(){
+  const bulk = currentAxe().stats.bulk;
+  let best = null;
+  const results = [];
+  for(let i=0;i<bulk;i++){
+    const r = rollOnce();
+    results.push(r);
+    if(!best || r.finalRng > best.finalRng) best = r;
+  }
+  state.rolls += bulk;
+
+  // log + inventory: record every roll's item (grouped) but push only the best to the visible log for readability,
+  // except if bulk small, log them all
+  for(const r of results){
+    addToInventory(r, 1);
+  }
+  pushLog(best);
+  renderStage(best, bulk);
+  renderInventory();
+
+  if(!state.best || best.finalRng > state.best.finalRng) state.best = best;
+  updateStatStrip();
+  dbSaveMeta();
+}
+
+document.getElementById('rollBtn').addEventListener('click', doRoll);
+
+document.getElementById('clearLog').addEventListener('click', ()=>{
+  state.log = [];
+  renderLog();
+});
+
+/* ============================================================
+   OFFLINE AUTOROLL
+   ============================================================ */
+
+function resolveOfflineProgress(){
+  const rps = currentAxe().stats.rps;
+  if(rps <= 0) return null;
+
+  const now = Date.now();
+  let elapsedSeconds = (now - state.lastSeenAt) / 1000;
+  if(elapsedSeconds < 5) return null; // not worth reporting tiny gaps (e.g. tab switch)
+
+  elapsedSeconds = Math.min(elapsedSeconds, MAX_OFFLINE_SECONDS);
+  const totalRolls = Math.floor(elapsedSeconds * rps);
+  if(totalRolls <= 0) return null;
+
+  // Simulate offline rolls efficiently: for very large totals, sample a representative
+  // subset and extrapolate counts, but always compute a real "best find" via direct rolls
+  // up to a sane cap, then statistically extrapolate the rest for common/low items.
+  const world = WORLDS[state.worldIdx];
+  const area = world.areas[state.areaIdx];
+  const luckMult = currentAxe().stats.luckMult;
+
+  const DIRECT_CAP = 20000; // roll this many for real to get accurate best-find + distribution
+  const directCount = Math.min(totalRolls, DIRECT_CAP);
+  const remaining = totalRolls - directCount;
+
+  const counts = {}; // invKey -> {result sample, count}
+  let bestFind = null;
+
+  for(let i=0;i<directCount;i++){
+    const r = rollOnceForArea(world, area, luckMult);
+    const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
+    if(!counts[k]) counts[k] = { result:r, count:0 };
+    counts[k].count += 1;
+    if(!bestFind || r.finalRng > bestFind.finalRng) bestFind = r;
+  }
+
+  // extrapolate remaining rolls proportionally across observed distribution
+  if(remaining > 0 && directCount > 0){
+    const scale = remaining / directCount;
+    for(const k in counts){
+      counts[k].count += Math.round(counts[k].count * scale);
+    }
+  }
+
+  // apply to inventory
+  for(const k in counts){
+    addToInventory(counts[k].result, counts[k].count);
+  }
+
+  if(!state.best || (bestFind && bestFind.finalRng > state.best.finalRng)) state.best = bestFind;
+  state.rolls += totalRolls;
+
+  return {
+    seconds: elapsedSeconds,
+    totalRolls,
+    bestFind,
+    topItems: Object.values(counts).sort((a,b)=> b.count - a.count).slice(0,6),
+    capped: (now - state.lastSeenAt)/1000 > MAX_OFFLINE_SECONDS,
+  };
+}
+
+function renderOfflineBanner(report){
+  const el = document.getElementById('offlineBanner');
+  if(!report){ el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div class="offline-banner">
+      <h3>Welcome back 👋</h3>
+      <p>Your ${escapeHtml(currentAxe().name)} kept swinging while you were away — ${fmtDuration(report.seconds)}${report.capped ? ' (capped at 7d)' : ''}, ${report.totalRolls.toLocaleString()} rolls.</p>
+      <div class="offline-summary">
+        ${report.topItems.map(t=>{
+          const r = t.result;
+          return `<div class="offline-row"><span class="${r.tier.cls}">${escapeHtml(r.name)}${r.variant?' ✦':''}</span><span>×${t.count.toLocaleString()}</span></div>`;
+        }).join('')}
+      </div>
+      ${report.bestFind ? `<p>Best find: <span class="${report.bestFind.tier.cls}">${escapeHtml(report.bestFind.name)}</span> (1/${fmtRng(report.bestFind.finalRng)})</p>` : ''}
+      <button class="btn small" id="dismissOffline">Nice</button>
+    </div>
+  `;
+  document.getElementById('dismissOffline').addEventListener('click', ()=>{ el.innerHTML=''; });
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+async function init(){
+  await dbLoadAll();
+
+  const report = resolveOfflineProgress();
+  state.lastSeenAt = Date.now();
+  dbSaveMeta();
+
+  renderAxeStrip();
+  renderWorldTabs();
+  renderAreaSelect();
+  buildIndexAccordion();
+  renderLog();
+  renderInventory();
+  renderItemCards();
+  updateStatStrip();
+  renderOfflineBanner(report);
+}
+init();
+
+// persist "last seen" periodically and on unload so offline time is measured accurately
+window.addEventListener('beforeunload', ()=>{
+  state.lastSeenAt = Date.now();
+  dbSaveMeta();
+});
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'hidden'){
+    state.lastSeenAt = Date.now();
+    dbSaveMeta();
+  } else {
+    const report = resolveOfflineProgress();
+    state.lastSeenAt = Date.now();
+    dbSaveMeta();
+    if(report){
+      renderInventory();
+      updateStatStrip();
+      renderOfflineBanner(report);
+    }
+  }
+});
+
+</script>
+</body>
+</html>
