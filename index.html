@@ -733,7 +733,43 @@ const WORLD1 = {
   ]
 };
 
-const WORLDS = [WORLD1];
+const SUBWORLD1 = {
+  key:'subworld1',
+  label:'Subworld 1',
+  global: [],
+  areas:[
+    {
+      key:'fridge', label:'The Fridge',
+      ranks:[
+        { name:'Fridge-ium', rng:1 },
+        { name:'Water', rng:80000 },
+        { name:'Cheese', rng:200000 },
+        { name:'Leftover Burger', rng:800000 },
+        { name:'Fruits', rng:2850000 },
+        { name:'Eggs', rng:59610000 },
+        { name:'A Cat', rng:300000000 },
+        { name:'PIZZA', rng:9300000000 },
+        { name:'Orange', rng:70000000000, mutations:[{name:'Universe Sized Apple Made For Destroying Universes Without Orange', rng:200000000000}] },
+        { name:'Fish', rng:6900000000000 },
+      ]
+    },
+    {
+      key:'scaryland', label:'Scary Land',
+      ranks:[
+        { name:'SCARY', rng:1.000666 },
+        { name:'GHOST', rng:66 },
+        { name:'Mosquito', rng:700 },
+        { name:'A', rng:5000 },
+        { name:'Loser', rng:10660 },
+        { name:'You Not Get This', rng:66666 },
+        { name:'Not So Epic', rng:100000, mutations:[{name:'So Epic!!!', rng:10000000000}] },
+        { name:'The Probably Rarest Thing Ever', rng:10000000 },
+      ]
+    },
+  ]
+};
+
+const WORLDS = [WORLD1, SUBWORLD1];
 
 /* ---------- Craftable items (axes) ---------- */
 const AXES = {
@@ -782,7 +818,7 @@ const AXES = {
     desc:'Darker then 0,0,0 in HEX?',
     stats:{ luckMult:6.66, bulk:6, rps:15 },
     bonus:'Offline: every second, 1/666 chance to add 6 rolls at ×66 luck.',
-    offlineBonus:{ chancePerSecond:1/666, bonusRolls:6, bonusLuckMult:66 },
+    offlineBonus:[{ intervalSeconds:1, chancePerInterval:1/666, minRolls:6, maxRolls:6, bonusLuckMult:66 }],
     requires:[
       { name:'Corruption', area:'Natural', amount:1 },
       { name:'Corruption Fragment', area:'Wasteland', amount:320 },
@@ -791,8 +827,37 @@ const AXES = {
       { name:'Silver', area:'Natural', amount:50 },
     ],
   },
+  foodeater: {
+    key:'foodeater', name:'Food Eater',
+    desc:'*chew*',
+    stats:{ luckMult:15, bulk:7, rps:20 },
+    bonus:'Offline: every second, 1/20 chance to add 50 rolls at ×50 luck. On roll click: 1/70 chance to do 100 extra rolls at ×10 luck.',
+    offlineBonus:[{ intervalSeconds:1, chancePerInterval:1/20, minRolls:50, maxRolls:50, bonusLuckMult:50 }],
+    clickBonus:[{ oneIn:70, rolls:100, luckMult:10 }],
+    requires:[
+      { name:'Leftover Burger', area:'The Fridge', amount:3 },
+      { name:'Water', area:'The Fridge', amount:20 },
+      { name:'Fruits', area:'The Fridge', amount:1 },
+    ],
+  },
+  dreamersprism: {
+    key:'dreamersprism', name:"Dreamer's Prism",
+    desc:'A shard of something that was never fully awake.',
+    stats:{ luckMult:10, bulk:9, rps:27 },
+    bonus:'Offline: every minute, 1 roll at ×5000 luck; every second, 1/900 chance to add 1k–2.5k rolls at ×25 luck. On roll click: 1/120 chance for 1 extra roll at ×1500 luck.',
+    offlineBonus:[
+      { intervalSeconds:60, chancePerInterval:1, minRolls:1, maxRolls:1, bonusLuckMult:5000 },
+      { intervalSeconds:1, chancePerInterval:1/900, minRolls:1000, maxRolls:2500, bonusLuckMult:25 },
+    ],
+    clickBonus:[{ oneIn:120, rolls:1, luckMult:1500 }],
+    requires:[
+      { name:'Pearl', area:'Dreamland', amount:8 },
+      { name:'Rainbow Fragment', area:'Dreamland', amount:250 },
+      { name:'Heavenly Mist', area:'Dreamland', amount:5 },
+    ],
+  },
 };
-const AXE_ORDER = ['default','crude','destroyer','disaster','dark'];
+const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism'];
 
 /* ============================================================
    STATE
@@ -1120,6 +1185,9 @@ function renderWorldTabs(){
       state.areaIdx = 0;
       renderWorldTabs();
       renderAreaSelect();
+      buildIndexAccordion();
+      const titleEl = document.querySelector('.ptitle');
+      if(titleEl) titleEl.textContent = `Rank index — ${WORLDS[state.worldIdx].label}`;
       dbSaveMeta();
     });
   });
@@ -1178,21 +1246,24 @@ function renderInventory(){
 
 function buildIndexAccordion(){
   const el = document.getElementById('indexAccordion');
+  const world = WORLDS[state.worldIdx];
   let html = '';
 
-  html += `
-    <div class="acc-item" data-acc="global">
-      <div class="acc-head"><span>Global — spawns everywhere</span><span class="chev">▾</span></div>
-      <div class="acc-body">
-        ${WORLD1.global.map(g=>{
-          const t = tierFor(g.rng);
-          return `<div class="rank-row"><span class="rname ${t.cls}">${g.name}</span><span class="rrng">1/${fmtRng(g.rng)} · ${t.label}</span></div>`;
-        }).join('')}
+  if(world.global && world.global.length){
+    html += `
+      <div class="acc-item" data-acc="global">
+        <div class="acc-head"><span>Global — spawns everywhere</span><span class="chev">▾</span></div>
+        <div class="acc-body">
+          ${world.global.map(g=>{
+            const t = tierFor(g.rng);
+            return `<div class="rank-row"><span class="rname ${t.cls}">${g.name}</span><span class="rrng">1/${fmtRng(g.rng)} · ${t.label}</span></div>`;
+          }).join('')}
+        </div>
       </div>
-    </div>
-  `;
+    `;
+  }
 
-  for(const area of WORLD1.areas){
+  for(const area of world.areas){
     let rowsHtml = '';
     for(const r of area.ranks){
       const t = tierFor(r.rng);
@@ -1345,7 +1416,8 @@ function refreshLiveViews(){
    ============================================================ */
 
 function doRoll(){
-  const bulk = currentAxe().stats.bulk;
+  const axe = currentAxe();
+  const bulk = axe.stats.bulk;
   let best = null;
   const results = [];
   for(let i=0;i<bulk;i++){
@@ -1355,11 +1427,32 @@ function doRoll(){
   }
   state.rolls += bulk;
 
+  // Click-triggered bonus rolls (e.g. Food Eater, Dreamers Prism)
+  let clickBonusFired = 0;
+  if(axe.clickBonus){
+    const rules = Array.isArray(axe.clickBonus) ? axe.clickBonus : [axe.clickBonus];
+    const world = WORLDS[state.worldIdx];
+    const area = world.areas[state.areaIdx];
+    for(const rule of rules){
+      const chance = rule.chance != null ? rule.chance : (1 / (rule.oneIn || 1));
+      if(Math.random() < chance){
+        const rollCount = rule.rolls || 1;
+        for(let i=0;i<rollCount;i++){
+          const r = rollOnceForArea(world, area, rule.luckMult);
+          results.push(r);
+          clickBonusFired++;
+          if(!best || r.finalRng > best.finalRng) best = r;
+        }
+      }
+    }
+  }
+  state.rolls += clickBonusFired;
+
   for(const r of results){
     addToInventory(r, 1);
   }
   pushLog(best);
-  renderStage(best, bulk);
+  renderStage(best, bulk + clickBonusFired);
   renderInventory();
   refreshLiveViews();
 
@@ -1485,101 +1578,111 @@ function createWorkerBlob() {
       // Bonus offline simulations (e.g. Dark Axe surge mechanics)
       let bonusRollsFired = 0;
       let bonusTriggers = 0;
-      if (offlineBonus && seconds > 0) {
-        const { chancePerSecond, bonusRolls, bonusLuckMult } = offlineBonus;
+      const bonusRules = offlineBonus ? (Array.isArray(offlineBonus) ? offlineBonus : [offlineBonus]) : [];
+      if (bonusRules.length && seconds > 0) {
+        for (const rule of bonusRules) {
+          const intervalSeconds = rule.intervalSeconds || 1;
+          const chancePerInterval = rule.chancePerInterval != null ? rule.chancePerInterval : (rule.chancePerSecond || 0);
+          const bonusLuckMult = rule.bonusLuckMult;
+          const minRolls = rule.minRolls != null ? rule.minRolls : (rule.bonusRolls || 1);
+          const maxRolls = rule.maxRolls != null ? rule.maxRolls : (rule.bonusRolls || 1);
 
-        // Find highest guaranteed for bonusLuckMult
-        let highestGuaranteedBonusRng = 0;
-        for (const item of pool) {
-          if (item.rng !== Infinity) {
-            const effectiveChance = bonusLuckMult / item.rng;
-            if (effectiveChance >= 1) {
-              if (item.rng > highestGuaranteedBonusRng) {
-                highestGuaranteedBonusRng = item.rng;
+          // Find highest guaranteed for this rule's luck
+          let highestGuaranteedBonusRng = 0;
+          for (const item of pool) {
+            if (item.rng !== Infinity) {
+              const effectiveChance = bonusLuckMult / item.rng;
+              if (effectiveChance >= 1) {
+                if (item.rng > highestGuaranteedBonusRng) {
+                  highestGuaranteedBonusRng = item.rng;
+                }
               }
             }
           }
-        }
 
-        for (let s = 0; s < seconds; s++) {
-          if (Math.random() < chancePerSecond) {
-            bonusTriggers++;
-            for (let j = 0; j < bonusRolls; j++) {
-              let normalWinner = null;
-              let bypassedWinner = null;
+          const intervalTicks = Math.floor(seconds / intervalSeconds);
 
-              for (const item of pool) {
-                if (item.rng === Infinity) {
-                  if (Math.random() < 0.0005 * bonusLuckMult) {
-                    if (!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
+          for (let s = 0; s < intervalTicks; s++) {
+            if (Math.random() < chancePerInterval) {
+              bonusTriggers++;
+              const rollsThisTrigger = minRolls === maxRolls ? minRolls : (minRolls + Math.floor(Math.random() * (maxRolls - minRolls + 1)));
+              for (let j = 0; j < rollsThisTrigger; j++) {
+                let normalWinner = null;
+                let bypassedWinner = null;
+
+                for (const item of pool) {
+                  if (item.rng === Infinity) {
+                    if (Math.random() < 0.0005 * bonusLuckMult) {
+                      if (!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
+                    }
+                    continue;
                   }
-                  continue;
-                }
 
-                const isSkipped = item.rng < highestGuaranteedBonusRng;
-                if (isSkipped) {
-                  if (Math.random() < 0.2) {
-                    if (!bypassedWinner || item.rng > bypassedWinner.rng) {
-                      bypassedWinner = item;
+                  const isSkipped = item.rng < highestGuaranteedBonusRng;
+                  if (isSkipped) {
+                    if (Math.random() < 0.2) {
+                      if (!bypassedWinner || item.rng > bypassedWinner.rng) {
+                        bypassedWinner = item;
+                      }
+                    }
+                  } else {
+                    const effectiveChance = bonusLuckMult / item.rng;
+                    if (Math.random() < effectiveChance) {
+                      if (!normalWinner || item.rng > normalWinner.rng) {
+                        normalWinner = item;
+                      }
                     }
                   }
-                } else {
-                  const effectiveChance = bonusLuckMult / item.rng;
-                  if (Math.random() < effectiveChance) {
-                    if (!normalWinner || item.rng > normalWinner.rng) {
-                      normalWinner = item;
-                    }
+                }
+
+                let winner = normalWinner;
+                if (bypassedWinner) {
+                  if (!winner || winner.rng <= highestGuaranteedBonusRng) {
+                    winner = bypassedWinner;
                   }
                 }
-              }
+                if (!winner) winner = pool[0];
 
-              let winner = normalWinner;
-              if (bypassedWinner) {
-                if (!winner || winner.rng <= highestGuaranteedBonusRng) {
-                  winner = bypassedWinner;
+                let variant = null;
+                let totalMult = 1;
+                for (const v of variantChain) {
+                  if (Math.random() < 1/v.rng) {
+                    variant = v;
+                    totalMult *= v.mult;
+                  } else {
+                    break;
+                  }
                 }
-              }
-              if (!winner) winner = pool[0];
-
-              let variant = null;
-              let totalMult = 1;
-              for (const v of variantChain) {
-                if (Math.random() < 1/v.rng) {
-                  variant = v;
-                  totalMult *= v.mult;
-                } else {
-                  break;
+                const finalRng = variant ? winner.rng * totalMult : winner.rng;
+                
+                let tier = null;
+                for (const t of TIERS) {
+                  if (finalRng > t.min && finalRng <= t.max) {
+                    tier = t;
+                    break;
+                  }
                 }
-              }
-              const finalRng = variant ? winner.rng * totalMult : winner.rng;
-              
-              let tier = null;
-              for (const t of TIERS) {
-                if (finalRng > t.min && finalRng <= t.max) {
-                  tier = t;
-                  break;
+                if (!tier) {
+                  tier = finalRng <= 1 ? TIERS[0] : TIERS[TIERS.length - 1];
                 }
-              }
-              if (!tier) {
-                tier = finalRng <= 1 ? TIERS[0] : TIERS[TIERS.length - 1];
-              }
 
-              const key = winner.name + '|' + (variant ? variant.key : 'none');
-              if (!counts[key]) {
-                counts[key] = {
-                  name: winner.name,
-                  baseRng: winner.rng,
-                  finalRng: finalRng,
-                  tier: tier,
-                  variant: variant ? { key: variant.key, label: variant.label, cls: variant.cls, totalMult } : null,
-                  count: 0
-                };
-              }
-              counts[key].count++;
-              bonusRollsFired++;
+                const key = winner.name + '|' + (variant ? variant.key : 'none');
+                if (!counts[key]) {
+                  counts[key] = {
+                    name: winner.name,
+                    baseRng: winner.rng,
+                    finalRng: finalRng,
+                    tier: tier,
+                    variant: variant ? { key: variant.key, label: variant.label, cls: variant.cls, totalMult } : null,
+                    count: 0
+                  };
+                }
+                counts[key].count++;
+                bonusRollsFired++;
 
-              if (!bestFind || finalRng > bestFind.finalRng) {
-                bestFind = counts[key];
+                if (!bestFind || finalRng > bestFind.finalRng) {
+                  bestFind = counts[key];
+                }
               }
             }
           }
@@ -1833,86 +1936,96 @@ async function resolveOfflineProgress(){
 
     let bonusRollsFired = 0;
     let bonusTriggers = 0;
-    if(axe.offlineBonus && wholeSeconds > 0){
-      const { chancePerSecond, bonusRolls, bonusLuckMult } = axe.offlineBonus;
-      const BONUS_SECOND_SIM_BUDGET = 5000;
-      const triggerCount = wholeSeconds <= BONUS_SECOND_SIM_BUDGET
-        ? (()=>{ let n=0; for(let s=0;s<wholeSeconds;s++){ if(Math.random()<chancePerSecond) n++; } return n; })()
-        : Math.round(wholeSeconds * chancePerSecond);
+    const bonusRules = axe.offlineBonus ? (Array.isArray(axe.offlineBonus) ? axe.offlineBonus : [axe.offlineBonus]) : [];
+    if(bonusRules.length && wholeSeconds > 0){
+      for(const rule of bonusRules){
+        const intervalSeconds = rule.intervalSeconds || 1;
+        const chancePerInterval = rule.chancePerInterval != null ? rule.chancePerInterval : (rule.chancePerSecond || 0);
+        const bonusLuckMult = rule.bonusLuckMult;
+        const minRolls = rule.minRolls != null ? rule.minRolls : (rule.bonusRolls || 1);
+        const maxRolls = rule.maxRolls != null ? rule.maxRolls : (rule.bonusRolls || 1);
 
-      let highestGuaranteedBonusRng = 0;
-      for(const item of pool) {
-        if(item.rng !== Infinity) {
-          const effectiveChance = bonusLuckMult / item.rng;
-          if(effectiveChance >= 1) {
-            if(item.rng > highestGuaranteedBonusRng) {
-              highestGuaranteedBonusRng = item.rng;
+        const intervalTicks = Math.floor(wholeSeconds / intervalSeconds);
+        const BONUS_SECOND_SIM_BUDGET = 5000;
+        const triggerCount = intervalTicks <= BONUS_SECOND_SIM_BUDGET
+          ? (()=>{ let n=0; for(let s=0;s<intervalTicks;s++){ if(Math.random()<chancePerInterval) n++; } return n; })()
+          : Math.round(intervalTicks * chancePerInterval);
+
+        let highestGuaranteedBonusRng = 0;
+        for(const item of pool) {
+          if(item.rng !== Infinity) {
+            const effectiveChance = bonusLuckMult / item.rng;
+            if(effectiveChance >= 1) {
+              if(item.rng > highestGuaranteedBonusRng) {
+                highestGuaranteedBonusRng = item.rng;
+              }
             }
           }
         }
-      }
 
-      for(let t=0;t<triggerCount;t++){
-        bonusTriggers++;
-        for(let j=0;j<bonusRolls;j++){
-          let normalWinner = null;
-          let bypassedWinner = null;
+        for(let t=0;t<triggerCount;t++){
+          bonusTriggers++;
+          const rollsThisTrigger = minRolls === maxRolls ? minRolls : (minRolls + Math.floor(Math.random() * (maxRolls - minRolls + 1)));
+          for(let j=0;j<rollsThisTrigger;j++){
+            let normalWinner = null;
+            let bypassedWinner = null;
 
-          for(const item of pool){
-            if(item.rng === Infinity){
-              if(Math.random() < 0.0005 * bonusLuckMult){
-                if(!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
+            for(const item of pool){
+              if(item.rng === Infinity){
+                if(Math.random() < 0.0005 * bonusLuckMult){
+                  if(!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
+                }
+                continue;
               }
-              continue;
-            }
 
-            const isSkipped = item.rng < highestGuaranteedBonusRng;
-            if(isSkipped) {
-              if(Math.random() < 0.2) {
-                if(!bypassedWinner || item.rng > bypassedWinner.rng) {
-                  bypassedWinner = item;
+              const isSkipped = item.rng < highestGuaranteedBonusRng;
+              if(isSkipped) {
+                if(Math.random() < 0.2) {
+                  if(!bypassedWinner || item.rng > bypassedWinner.rng) {
+                    bypassedWinner = item;
+                  }
+                }
+              } else {
+                const effectiveChance = bonusLuckMult / item.rng;
+                if(Math.random() < effectiveChance){
+                  if(!normalWinner || item.rng > normalWinner.rng) {
+                    normalWinner = item;
+                  }
                 }
               }
-            } else {
-              const effectiveChance = bonusLuckMult / item.rng;
-              if(Math.random() < effectiveChance){
-                if(!normalWinner || item.rng > normalWinner.rng) {
-                  normalWinner = item;
-                }
+            }
+
+            let winner = normalWinner;
+            if (bypassedWinner) {
+              if (!winner || winner.rng <= highestGuaranteedBonusRng) {
+                winner = bypassedWinner;
               }
             }
-          }
+            if(!winner) winner = pool.reduce((a,b)=> a.rng < b.rng ? a : b);
 
-          let winner = normalWinner;
-          if (bypassedWinner) {
-            if (!winner || winner.rng <= highestGuaranteedBonusRng) {
-              winner = bypassedWinner;
+            const k = invKey(area.label, winner.name, null);
+            if(!counts[k]) {
+              counts[k] = {
+                name: winner.name,
+                baseRng: winner.rng,
+                finalRng: winner.rng,
+                tier: tierFor(winner.rng),
+                variant: null,
+                count: 0
+              };
             }
-          }
-          if(!winner) winner = pool.reduce((a,b)=> a.rng < b.rng ? a : b);
-
-          const k = invKey(area.label, winner.name, null);
-          if(!counts[k]) {
-            counts[k] = {
-              name: winner.name,
-              baseRng: winner.rng,
-              finalRng: winner.rng,
-              tier: tierFor(winner.rng),
-              variant: null,
-              count: 0
-            };
-          }
-          counts[k].count += 1;
-          bonusRollsFired++;
-          if(!bestFind || winner.rng > bestFind.finalRng) {
-            bestFind = {
-              name: winner.name,
-              baseRng: winner.rng,
-              finalRng: winner.rng,
-              tier: tierFor(winner.rng),
-              variant: null,
-              areaLabel: area.label
-            };
+            counts[k].count += 1;
+            bonusRollsFired++;
+            if(!bestFind || winner.rng > bestFind.finalRng) {
+              bestFind = {
+                name: winner.name,
+                baseRng: winner.rng,
+                finalRng: winner.rng,
+                tier: tierFor(winner.rng),
+                variant: null,
+                areaLabel: area.label
+              };
+            }
           }
         }
       }
@@ -1969,7 +2082,7 @@ function renderOfflineBanner(report){
     <div class="offline-banner">
       <h3>Welcome back 👋</h3>
       <p>Your ${escapeHtml(currentAxe().name)} kept swinging while you were away — ${fmtDuration(report.seconds)}${report.capped ? ' (capped at 7d)' : ''}, ${report.totalRolls.toLocaleString()} rolls calculated.</p>
-      ${report.bonusTriggers > 0 ? `<p>Dark surge triggered <b>${report.bonusTriggers.toLocaleString()}×</b>, adding ${report.bonusRollsFired.toLocaleString()} rolls at ×66 luck.</p>` : ''}
+      ${report.bonusTriggers > 0 ? `<p>Bonus surges triggered <b>${report.bonusTriggers.toLocaleString()}×</b>, adding ${report.bonusRollsFired.toLocaleString()} rolls.</p>` : ''}
       <div class="offline-summary">
         ${report.topItems.map(t=>{
           const r = t.result;
@@ -1997,6 +2110,8 @@ async function init(){
   renderWorldTabs();
   renderAreaSelect();
   buildIndexAccordion();
+  const titleEl0 = document.querySelector('.ptitle');
+  if(titleEl0) titleEl0.textContent = `Rank index — ${WORLDS[state.worldIdx].label}`;
   renderLog();
   renderInventory();
   renderItemCards();
