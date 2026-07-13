@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -35,6 +36,7 @@
     font-family:var(--sans);
     min-height:100vh;
     overflow-x:hidden;
+    touch-action:manipulation;
   }
 
   body{
@@ -174,6 +176,7 @@
     margin-bottom:10px;
     word-break:break-word;
     max-width:100%;
+    display:inline-block;
   }
   .result-rng{ font-family:var(--mono); font-size:14px; color:var(--text-dim); margin-bottom:6px; }
   .result-tier{
@@ -281,7 +284,7 @@
     font-family:var(--mono); font-size:12px; animation:slideIn .25s ease;
   }
   @keyframes slideIn{ from{ opacity:0; transform:translateX(-6px);} to{opacity:1; transform:translateX(0);} }
-  .log-row .lname{ font-weight:700; }
+  .log-row .lname{ font-weight:700; display:inline-block; }
   .log-row .lrng{ color:var(--text-faint); font-size:11px; }
   .log-empty{ color:var(--text-faint); font-family:var(--mono); font-size:12px; padding:10px 2px;}
 
@@ -292,7 +295,7 @@
     display:flex; justify-content:space-between; align-items:center; gap:8px;
     padding:9px 10px; border-radius:8px; background:var(--bg-1); border:1px solid var(--border);
   }
-  .inv-row .iname{ font-family:var(--display); font-weight:700; font-size:14px; }
+  .inv-row .iname{ font-family:var(--display); font-weight:700; font-size:14px; display:inline-block; }
   .inv-row .imeta{ font-family:var(--mono); font-size:10px; color:var(--text-faint); margin-top:2px; }
   .inv-row .icount{
     font-family:var(--mono); font-size:12px; color:var(--text-dim);
@@ -318,7 +321,7 @@
     padding:9px 4px; border-bottom:1px solid var(--border); gap:10px; flex-wrap:wrap;
   }
   .rank-row:last-child{ border-bottom:none; }
-  .rank-row .rname{ font-family:var(--display); font-weight:700; font-size:15px; }
+  .rank-row .rname{ font-family:var(--display); font-weight:700; font-size:15px; display:inline-block; }
   .rank-row .rrng{ font-family:var(--mono); font-size:11px; color:var(--text-dim); }
 
   /* ---------- Items / crafting ---------- */
@@ -363,12 +366,12 @@
   .t-pelicular{ color:#E879F9; }
   .t-horizon{ color:#FB7185; }
   .t-grandiose{ color:#F59E0B; }
-  .t-zenith{ background:linear-gradient(90deg,#FFD700,#FFF6D0,#FFD700); -webkit-background-clip:text; background-clip:text; color:transparent; }
-  .t-unworldly{ background:linear-gradient(90deg,#22D3EE,#E879F9,#22D3EE); -webkit-background-clip:text; background-clip:text; color:transparent; }
-  .t-colossal{ background:linear-gradient(90deg,#4338CA,#0B0B1F,#4338CA); -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow:0 0 18px rgba(99,102,241,0.5); }
-  .t-infinite{ background:linear-gradient(90deg,#ff0055,#ffaa00,#00ff9d,#00aaff,#aa00ff,#ff0055); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation:hueflow 4s linear infinite; }
-  .t-insanity{ font-family:var(--display); background:linear-gradient(90deg,#ff003c,#1a0008,#ff003c); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation:hueflow 1.4s linear infinite, jitter .12s steps(2) infinite; text-shadow:0 0 20px rgba(255,0,60,0.6); }
-  .t-impossible{ font-family:var(--display); font-weight:900; background:linear-gradient(90deg,#ff0055,#ff9900,#ffee00,#33ff77,#00e5ff,#7c5cff,#ff5ca8,#ff0055); background-size:400% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation:hueflow 2.2s linear infinite; text-shadow:0 0 30px rgba(255,255,255,0.35); letter-spacing:0.01em; }
+  .t-zenith{ background:linear-gradient(90deg,#FFD700,#FFF6D0,#FFD700); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; }
+  .t-unworldly{ background:linear-gradient(90deg,#22D3EE,#E879F9,#22D3EE); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; }
+  .t-colossal{ background:linear-gradient(90deg,#4338CA,#0B0B1F,#4338CA); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; text-shadow:0 0 18px rgba(99,102,241,0.5); }
+  .t-infinite{ background:linear-gradient(90deg,#ff0055,#ffaa00,#00ff9d,#00aaff,#aa00ff,#ff0055); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:hueflow 4s linear infinite; }
+  .t-insanity{ font-family:var(--display); background:linear-gradient(90deg,#ff003c,#1a0008,#ff003c); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:hueflow 1.4s linear infinite, jitter .12s steps(2) infinite; text-shadow:0 0 20px rgba(255,0,60,0.6); }
+  .t-impossible{ font-family:var(--display); font-weight:900; background:linear-gradient(90deg,#ff0055,#ff9900,#ffee00,#33ff77,#00e5ff,#7c5cff,#ff5ca8,#ff0055); background-size:400% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:hueflow 2.2s linear infinite; text-shadow:0 0 30px rgba(255,255,255,0.35); letter-spacing:0.01em; }
 
   @keyframes hueflow{ from{ background-position:0% 50%;} to{ background-position:300% 50%; } }
   @keyframes jitter{ 0%{ transform:translate(0,0); } 50%{ transform:translate(1px,-1px); } 100%{ transform:translate(-1px,1px); } }
@@ -377,12 +380,22 @@
   .v-odd{ font-style:italic; filter:saturate(1.5) hue-rotate(-10deg); }
   .v-rainbow{
     background:linear-gradient(90deg,#ff0055,#ff9900,#ffee00,#33ff77,#00e5ff,#7c5cff,#ff5ca8,#ff0055) !important;
-    background-size:400% 100%; -webkit-background-clip:text; background-clip:text; color:transparent !important;
+    background-size:400% 100%;
+    -webkit-background-clip:text !important;
+    background-clip:text !important;
+    -webkit-text-fill-color:transparent !important;
+    color:transparent !important;
     animation:hueflow 2s linear infinite;
+    display:inline-block;
   }
   .v-grayscale{
-    background:none !important; -webkit-background-clip:unset; color:#cfcfcf !important;
+    background:none !important;
+    -webkit-background-clip:unset !important;
+    background-clip:unset !important;
+    -webkit-text-fill-color:initial !important;
+    color:#cfcfcf !important;
     filter:grayscale(1); font-family:var(--mono); letter-spacing:0.02em;
+    display:inline-block;
   }
 
   .glow-epic{ text-shadow:0 0 22px rgba(168,85,247,0.45); }
@@ -395,6 +408,62 @@
   .flash-bg{ position:fixed; inset:0; pointer-events:none; z-index:5; opacity:0; }
   .flash-bg.go{ animation:flashfade 0.6s ease-out; }
   @keyframes flashfade{ 0%{opacity:0.55;} 100%{opacity:0;} }
+
+  /* ---------- Simulation Modal ---------- */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(8, 7, 12, 0.94);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(6px);
+  }
+  .modal-content {
+    background: var(--panel);
+    border: 1px solid var(--border-lit);
+    padding: 32px 24px;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 440px;
+    text-align: center;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.8);
+  }
+  .modal-content h3 {
+    font-family: var(--display);
+    font-size: 20px;
+    margin-bottom: 12px;
+    background: linear-gradient(120deg, #fff, #b9a8ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .modal-content p {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+    line-height: 1.5;
+  }
+  .progress-bar-container {
+    background: var(--bg-0);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    height: 16px;
+    width: 100%;
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width 0.1s ease;
+  }
+  .sim-subtext {
+    font-size: 11px !important;
+    color: var(--text-faint) !important;
+  }
 
   /* ---------- Bottom nav ---------- */
   .bottom-nav{
@@ -443,6 +512,18 @@
 <body>
 
 <div class="flash-bg" id="flashBg"></div>
+
+<!-- SIMULATION LOADING MODAL -->
+<div id="simModal" class="modal-overlay" style="display:none;">
+  <div class="modal-content">
+    <h3>resolving simulations</h3>
+    <p id="simProgressText">starting parallel multi-threaded workers...</p>
+    <div class="progress-bar-container">
+      <div id="simProgressBar" class="progress-bar"></div>
+    </div>
+    <p class="sim-subtext">running 10 web workers concurrently @ 5k rolls/sec each</p>
+  </div>
+</div>
 
 <div class="wrap">
   <header class="top">
@@ -519,6 +600,15 @@
   <button class="nav-btn" data-view="items"><span class="icon">🪓</span>Items</button>
 </nav>
 
+<script>
+document.addEventListener('dblclick', (e)=>{ e.preventDefault(); }, { passive:false });
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e)=>{
+  const now = Date.now();
+  if(now - lastTouchEnd <= 300){ e.preventDefault(); }
+  lastTouchEnd = now;
+}, { passive:false });
+</script>
 <script>
 /* ============================================================
    DATA MODEL
@@ -639,7 +729,6 @@ const WORLD1 = {
 const WORLDS = [WORLD1];
 
 /* ---------- Craftable items (axes) ---------- */
-// requirement keys match inventory item names within the 'Natural'/'Wasteland' areas (base rank names, no-variant items)
 const AXES = {
   default: {
     key:'default', name:'Default Axe',
@@ -651,7 +740,7 @@ const AXES = {
   crude: {
     key:'crude', name:'Crude Axe',
     desc:'Your first axe. Happy?',
-    stats:{ luckMult:1.5, bulk:2, rps:1.1 }, // +1 multi roll means bulk 1(default) + 1 = 2
+    stats:{ luckMult:1.5, bulk:2, rps:1.1 },
     requires:[
       { name:'Dirt', area:'Natural', amount:25 },
       { name:'Rock', area:'Natural', amount:6 },
@@ -662,7 +751,7 @@ const AXES = {
   destroyer: {
     key:'destroyer', name:'Destructive Destroyed Destroyer',
     desc:'...an axe thats destructive, yet is destroyed? Ironic..',
-    stats:{ luckMult:4, bulk:5, rps:3 }, // base bulk 1 + 4
+    stats:{ luckMult:4, bulk:5, rps:3 },
     requires:[
       { name:'Pollution', area:'Wasteland', amount:5000 },
       { name:'Crystal', area:'Natural', amount:25 },
@@ -674,15 +763,29 @@ const AXES = {
   disaster: {
     key:'disaster', name:'Disaster Bringer',
     desc:'Self explanatory name, lots of rolls BUT your luck is less!',
-    stats:{ luckMult:0.5, bulk:8, rps:10 }, // base bulk 1 + 7
+    stats:{ luckMult:0.5, bulk:8, rps:10 },
     requires:[
       { name:'Disaster', area:'Natural', amount:10 },
       { name:'Unfunctional Tool', area:'Wasteland', amount:3 },
       { name:'Slop', area:'Wasteland', amount:1 },
     ],
   },
+  dark: {
+    key:'dark', name:'Dark Axe',
+    desc:'Darker then 0,0,0 in HEX?',
+    stats:{ luckMult:6.66, bulk:6, rps:15 },
+    bonus:'Offline: every second, 1/666 chance to add 6 rolls at ×66 luck.',
+    offlineBonus:{ chancePerSecond:1/666, bonusRolls:6, bonusLuckMult:66 },
+    requires:[
+      { name:'Corruption', area:'Natural', amount:1 },
+      { name:'Corruption Fragment', area:'Wasteland', amount:320 },
+      { name:'Fire', area:'Natural', amount:20 },
+      { name:'Rock', area:'Natural', amount:10, variant:'odd' },
+      { name:'Silver', area:'Natural', amount:50 },
+    ],
+  },
 };
-const AXE_ORDER = ['default','crude','destroyer','disaster'];
+const AXE_ORDER = ['default','crude','destroyer','disaster','dark'];
 
 /* ============================================================
    STATE
@@ -693,7 +796,7 @@ let state = {
   rolls: 0,
   best: null,
   log: [],
-  inventory: {},      // key -> {name, areaLabel, count, ...}
+  inventory: {},
   ownedAxes: ['default'],
   equippedAxe: 'default',
   lastSeenAt: Date.now(),
@@ -818,8 +921,8 @@ function addToInventory(result, count){
   }
 }
 
-function getOwnedCount(areaLabel, name){
-  const key = invKey(areaLabel, name, null);
+function getOwnedCount(areaLabel, name, variantKey){
+  const key = invKey(areaLabel, name, variantKey || null);
   return state.inventory[key] ? state.inventory[key].count : 0;
 }
 
@@ -951,7 +1054,7 @@ function renderLog(){
   }
   log.innerHTML = state.log.map(r => `
     <div class="log-row">
-      <span class="lname ${r.tier.cls}">${escapeHtml(r.name)}${r.variant ? ' ✦' : ''}</span>
+      <span class="lname ${r.tier.cls} ${r.variant ? r.variant.cls : ''}">${escapeHtml(r.name)}${r.variant ? ' ✦' : ''}</span>
       <span class="lrng">1/${fmtRng(r.finalRng)}</span>
     </div>
   `).join('');
@@ -1089,10 +1192,11 @@ function renderItemCards(){
       reqHtml = `<div class="req-row ok">Free · auto-equipped at start</div>`;
     } else {
       reqHtml = axe.requires.map(req=>{
-        const have = getOwnedCount(req.area, req.name);
+        const have = getOwnedCount(req.area, req.name, req.variant);
         const ok = have >= req.amount;
         if(!ok) canCraft = false;
-        return `<div class="req-row ${ok?'ok':'short'}">${req.name} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
+        const variantTag = req.variant ? ` (${req.variant})` : '';
+        return `<div class="req-row ${ok?'ok':'short'}">${req.name}${variantTag} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
       }).join('');
     }
 
@@ -1102,6 +1206,7 @@ function renderItemCards(){
         <span class="stat">bulk <b>${axe.stats.bulk}</b></span>
         <span class="stat">rolls/sec offline <b>${axe.stats.rps}</b></span>
       </div>
+      ${axe.bonus ? `<div class="istats" style="margin-top:-4px;"><span class="stat" style="color:var(--accent-2);">✦ ${axe.bonus}</span></div>` : ''}
     `;
 
     let actionHtml = '';
@@ -1142,10 +1247,10 @@ function craftAxe(key){
   if(!axe || axe.free || state.ownedAxes.includes(key)) return;
   // verify and consume
   for(const req of axe.requires){
-    if(getOwnedCount(req.area, req.name) < req.amount) return;
+    if(getOwnedCount(req.area, req.name, req.variant) < req.amount) return;
   }
   for(const req of axe.requires){
-    const k = invKey(req.area, req.name, null);
+    const k = invKey(req.area, req.name, req.variant || null);
     state.inventory[k].count -= req.amount;
     dbSaveInvItem(state.inventory[k]);
   }
@@ -1171,15 +1276,24 @@ function equipAxe(key){
    NAV / VIEW SWITCHING
    ============================================================ */
 
+let currentView = 'roll';
+
 function showView(name){
+  currentView = name;
   document.querySelectorAll('.view').forEach(v=> v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b=> b.classList.toggle('active', b.dataset.view === name));
+  refreshLiveViews();
 }
 
 document.querySelectorAll('.nav-btn').forEach(btn=>{
   btn.addEventListener('click', ()=> showView(btn.dataset.view));
 });
+
+function refreshLiveViews(){
+  if(currentView === 'items') renderItemCards();
+  if(currentView === 'inventory') renderInventory();
+}
 
 /* ============================================================
    ROLLING (manual, with bulk from axe)
@@ -1196,14 +1310,13 @@ function doRoll(){
   }
   state.rolls += bulk;
 
-  // log + inventory: record every roll's item (grouped) but push only the best to the visible log for readability,
-  // except if bulk small, log them all
   for(const r of results){
     addToInventory(r, 1);
   }
   pushLog(best);
   renderStage(best, bulk);
   renderInventory();
+  refreshLiveViews();
 
   if(!state.best || best.finalRng > state.best.finalRng) state.best = best;
   updateStatStrip();
@@ -1218,65 +1331,403 @@ document.getElementById('clearLog').addEventListener('click', ()=>{
 });
 
 /* ============================================================
-   OFFLINE AUTOROLL
+   PARALLEL WEB WORKER ENGINE FOR OFFLINE PROGRESS
    ============================================================ */
 
-function resolveOfflineProgress(){
-  const rps = currentAxe().stats.rps;
-  if(rps <= 0) return null;
+function createWorkerBlob() {
+  const workerCode = `
+    self.onmessage = function(e) {
+      const { rollsToRun, pool, luckMult, variantChain, offlineBonus, seconds, TIERS } = e.data;
+      const counts = {};
+      let bestFind = null;
+
+      // Simulation loop
+      for (let i = 0; i < rollsToRun; i++) {
+        let winner = null;
+        for (const item of pool) {
+          if (item.rng === Infinity) {
+            if (Math.random() < 0.0005 * luckMult) {
+              if (!winner || item.rng > winner.rng) winner = item;
+            }
+            continue;
+          }
+          const effectiveChance = luckMult / item.rng;
+          if (Math.random() < effectiveChance) {
+            if (!winner || item.rng > winner.rng) winner = item;
+          }
+        }
+        if (!winner) {
+          winner = pool[0];
+        }
+
+        // Roll variant
+        let variant = null;
+        let totalMult = 1;
+        for (const v of variantChain) {
+          if (Math.random() < 1/v.rng) {
+            variant = v;
+            totalMult *= v.mult;
+          } else {
+            break;
+          }
+        }
+
+        const finalRng = variant ? winner.rng * totalMult : winner.rng;
+        
+        let tier = null;
+        for (const t of TIERS) {
+          if (finalRng > t.min && finalRng <= t.max) {
+            tier = t;
+            break;
+          }
+        }
+        if (!tier) {
+          tier = finalRng <= 1 ? TIERS[0] : TIERS[TIERS.length - 1];
+        }
+
+        const key = winner.name + '|' + (variant ? variant.key : 'none');
+        if (!counts[key]) {
+          counts[key] = {
+            name: winner.name,
+            baseRng: winner.rng,
+            finalRng: finalRng,
+            tier: tier,
+            variant: variant ? { key: variant.key, label: variant.label, cls: variant.cls, totalMult } : null,
+            count: 0
+          };
+        }
+        counts[key].count++;
+
+        if (!bestFind || finalRng > bestFind.finalRng) {
+          bestFind = counts[key];
+        }
+      }
+
+      // Bonus offline simulations (e.g. Dark Axe surge mechanics)
+      let bonusRollsFired = 0;
+      let bonusTriggers = 0;
+      if (offlineBonus && seconds > 0) {
+        const { chancePerSecond, bonusRolls, bonusLuckMult } = offlineBonus;
+        for (let s = 0; s < seconds; s++) {
+          if (Math.random() < chancePerSecond) {
+            bonusTriggers++;
+            for (let j = 0; j < bonusRolls; j++) {
+              let winner = null;
+              for (const item of pool) {
+                if (item.rng === Infinity) {
+                  if (Math.random() < 0.0005 * bonusLuckMult) {
+                    if (!winner || item.rng > winner.rng) winner = item;
+                  }
+                  continue;
+                }
+                const effectiveChance = bonusLuckMult / item.rng;
+                if (Math.random() < effectiveChance) {
+                  if (!winner || item.rng > winner.rng) winner = item;
+                }
+              }
+              if (!winner) winner = pool[0];
+
+              let variant = null;
+              let totalMult = 1;
+              for (const v of variantChain) {
+                if (Math.random() < 1/v.rng) {
+                  variant = v;
+                  totalMult *= v.mult;
+                } else {
+                  break;
+                }
+              }
+              const finalRng = variant ? winner.rng * totalMult : winner.rng;
+              
+              let tier = null;
+              for (const t of TIERS) {
+                if (finalRng > t.min && finalRng <= t.max) {
+                  tier = t;
+                  break;
+                }
+              }
+              if (!tier) {
+                tier = finalRng <= 1 ? TIERS[0] : TIERS[TIERS.length - 1];
+              }
+
+              const key = winner.name + '|' + (variant ? variant.key : 'none');
+              if (!counts[key]) {
+                counts[key] = {
+                  name: winner.name,
+                  baseRng: winner.rng,
+                  finalRng: finalRng,
+                  tier: tier,
+                  variant: variant ? { key: variant.key, label: variant.label, cls: variant.cls, totalMult } : null,
+                  count: 0
+                };
+              }
+              counts[key].count++;
+              bonusRollsFired++;
+
+              if (!bestFind || finalRng > bestFind.finalRng) {
+                bestFind = counts[key];
+              }
+            }
+          }
+        }
+      }
+
+      self.postMessage({ counts, bestFind, bonusRollsFired, bonusTriggers });
+    };
+  `;
+  return new Blob([workerCode], { type: 'application/javascript' });
+}
+
+async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult, offlineBonus) {
+  return new Promise((resolve, reject) => {
+    const simModal = document.getElementById('simModal');
+    const progressBar = document.getElementById('simProgressBar');
+    const progressText = document.getElementById('simProgressText');
+
+    simModal.style.display = 'flex';
+    progressBar.style.width = '0%';
+    progressText.textContent = `initializing simulation setup...`;
+
+    const numWorkers = 10;
+    // Cap actual simulations to avoid excessive memory or freezing on extreme gaps
+    const SIMULATION_CEILING = 2000000;
+    const actualSimTotal = Math.min(totalRolls, SIMULATION_CEILING);
+    const extrapolationFactor = totalRolls > actualSimTotal ? totalRolls / actualSimTotal : 1;
+
+    const rollsPerWorker = Math.floor(actualSimTotal / numWorkers);
+    const secondsPerWorker = elapsedSeconds / numWorkers;
+
+    let workersFinished = 0;
+    const accumulatedCounts = {};
+    let absoluteBest = null;
+    let totalBonusRollsFired = 0;
+    let totalBonusTriggers = 0;
+
+    const workerBlob = createWorkerBlob();
+    const workerUrl = URL.createObjectURL(workerBlob);
+    const workers = [];
+
+    function cleanup() {
+      workers.forEach(w => w.terminate());
+      URL.revokeObjectURL(workerUrl);
+      simModal.style.display = 'none';
+    }
+
+    for (let i = 0; i < numWorkers; i++) {
+      let worker;
+      try {
+        worker = new Worker(workerUrl);
+      } catch (e) {
+        console.error('Failed to create Web Worker:', e);
+        cleanup();
+        reject(new Error('Web Workers blocked or not supported'));
+        return;
+      }
+
+      workers.push(worker);
+
+      worker.onmessage = function(event) {
+        const { counts, bestFind, bonusRollsFired, bonusTriggers } = event.data;
+
+        // Merge item findings
+        for (const key in counts) {
+          if (!accumulatedCounts[key]) {
+            accumulatedCounts[key] = { ...counts[key], count: 0 };
+          }
+          accumulatedCounts[key].count += counts[key].count;
+        }
+
+        // Evaluate top record
+        if (bestFind && (!absoluteBest || bestFind.finalRng > absoluteBest.finalRng)) {
+          absoluteBest = {
+            name: bestFind.name,
+            baseRng: bestFind.baseRng,
+            finalRng: bestFind.finalRng,
+            tier: bestFind.tier,
+            variant: bestFind.variant,
+            areaLabel: WORLDS[state.worldIdx].areas[state.areaIdx].label
+          };
+        }
+
+        totalBonusRollsFired += bonusRollsFired;
+        totalBonusTriggers += bonusTriggers;
+
+        workersFinished++;
+        const pct = Math.round((workersFinished / numWorkers) * 100);
+        progressBar.style.width = `${pct}%`;
+        progressText.textContent = `running threads: ${Math.round(actualSimTotal * (workersFinished / numWorkers)).toLocaleString()} / ${actualSimTotal.toLocaleString()} rolls completed`;
+
+        if (workersFinished === numWorkers) {
+          cleanup();
+
+          // Scale up findings if simulation ceiling took effect
+          if (extrapolationFactor > 1) {
+            for (const key in accumulatedCounts) {
+              accumulatedCounts[key].count = Math.round(accumulatedCounts[key].count * extrapolationFactor);
+            }
+            totalBonusRollsFired = Math.round(totalBonusRollsFired * extrapolationFactor);
+            totalBonusTriggers = Math.round(totalBonusTriggers * extrapolationFactor);
+          }
+
+          resolve({
+            counts: accumulatedCounts,
+            bestFind: absoluteBest,
+            bonusRollsFired: totalBonusRollsFired,
+            bonusTriggers: totalBonusTriggers
+          });
+        }
+      };
+
+      worker.onerror = function(err) {
+        console.error('Worker run error:', err);
+        cleanup();
+        reject(err);
+      };
+
+      worker.postMessage({
+        rollsToRun: rollsPerWorker,
+        pool: pool,
+        luckMult: luckMult,
+        variantChain: VARIANT_CHAIN,
+        offlineBonus: offlineBonus,
+        seconds: secondsPerWorker,
+        TIERS: TIERS
+      });
+    }
+  });
+}
+
+async function resolveOfflineProgress(){
+  const axe = currentAxe();
+  const rps = axe.stats.rps;
+  if(rps <= 0 && !axe.offlineBonus) return null;
 
   const now = Date.now();
   let elapsedSeconds = (now - state.lastSeenAt) / 1000;
-  if(elapsedSeconds < 5) return null; // not worth reporting tiny gaps (e.g. tab switch)
+  if(elapsedSeconds < 5) return null;
 
+  const capped = elapsedSeconds > MAX_OFFLINE_SECONDS;
   elapsedSeconds = Math.min(elapsedSeconds, MAX_OFFLINE_SECONDS);
+  const wholeSeconds = Math.floor(elapsedSeconds);
   const totalRolls = Math.floor(elapsedSeconds * rps);
-  if(totalRolls <= 0) return null;
 
-  // Simulate offline rolls efficiently: for very large totals, sample a representative
-  // subset and extrapolate counts, but always compute a real "best find" via direct rolls
-  // up to a sane cap, then statistically extrapolate the rest for common/low items.
   const world = WORLDS[state.worldIdx];
   const area = world.areas[state.areaIdx];
-  const luckMult = currentAxe().stats.luckMult;
+  const luckMult = axe.stats.luckMult;
 
-  const DIRECT_CAP = 20000; // roll this many for real to get accurate best-find + distribution
-  const directCount = Math.min(totalRolls, DIRECT_CAP);
-  const remaining = totalRolls - directCount;
+  if(totalRolls <= 0 && (!axe.offlineBonus || wholeSeconds <= 0)) return null;
 
-  const counts = {}; // invKey -> {result sample, count}
-  let bestFind = null;
+  // Formulate the pool items
+  const pool = [];
+  for(const r of area.ranks){
+    pool.push({ name:r.name, rng:r.rng });
+    if(r.mutations) for(const m of r.mutations) pool.push({ name:m.name, rng:m.rng });
+  }
+  for(const g of world.global) pool.push({ name:g.name, rng:g.rng });
 
-  for(let i=0;i<directCount;i++){
-    const r = rollOnceForArea(world, area, luckMult);
-    const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
-    if(!counts[k]) counts[k] = { result:r, count:0 };
-    counts[k].count += 1;
-    if(!bestFind || r.finalRng > bestFind.finalRng) bestFind = r;
+  let simResult;
+  try {
+    // Attempt fast concurrent worker simulation
+    simResult = await runOfflineSimulations(totalRolls, wholeSeconds, pool, luckMult, axe.offlineBonus);
+  } catch (err) {
+    console.warn('Worker sim execution failed, utilizing sync main thread fallback:', err);
+    // Strict budgeted fallback calculation so gameplay doesn't halt
+    const counts = {};
+    let bestFind = null;
+    const DIRECT_ROLL_BUDGET = 5000;
+    const directCount = Math.min(totalRolls, DIRECT_ROLL_BUDGET);
+    const remaining = totalRolls - directCount;
+
+    for(let i=0;i<directCount;i++){
+      const r = rollOnceForArea(world, area, luckMult);
+      const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
+      if(!counts[k]) counts[k] = { result:r, count:0 };
+      counts[k].count += 1;
+      if(!bestFind || r.finalRng > bestFind.finalRng) bestFind = r;
+    }
+
+    if(remaining > 0 && directCount > 0){
+      const scale = remaining / directCount;
+      for(const k in counts){
+        counts[k].count += Math.round(counts[k].count * scale);
+      }
+    }
+
+    let bonusRollsFired = 0;
+    let bonusTriggers = 0;
+    if(axe.offlineBonus && wholeSeconds > 0){
+      const { chancePerSecond, bonusRolls, bonusLuckMult } = axe.offlineBonus;
+      const BONUS_SECOND_SIM_BUDGET = 5000;
+      const triggerCount = wholeSeconds <= BONUS_SECOND_SIM_BUDGET
+        ? (()=>{ let n=0; for(let s=0;s<wholeSeconds;s++){ if(Math.random()<chancePerSecond) n++; } return n; })()
+        : Math.round(wholeSeconds * chancePerSecond);
+
+      for(let t=0;t<triggerCount;t++){
+        bonusTriggers++;
+        for(let j=0;j<bonusRolls;j++){
+          const r = rollOnceForArea(world, area, bonusLuckMult);
+          const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
+          if(!counts[k]) counts[k] = { result:r, count:0 };
+          counts[k].count += 1;
+          bonusRollsFired++;
+          if(!bestFind || r.finalRng > bestFind.finalRng) bestFind = r;
+        }
+      }
+    }
+
+    const fallbackCounts = {};
+    for(const k in counts) {
+      fallbackCounts[k] = {
+        name: counts[k].result.name,
+        baseRng: counts[k].result.baseRng,
+        finalRng: counts[k].result.finalRng,
+        tier: counts[k].result.tier,
+        variant: counts[k].result.variant,
+        count: counts[k].count
+      };
+    }
+
+    simResult = {
+      counts: fallbackCounts,
+      bestFind,
+      bonusRollsFired,
+      bonusTriggers
+    };
   }
 
-  // extrapolate remaining rolls proportionally across observed distribution
-  if(remaining > 0 && directCount > 0){
-    const scale = remaining / directCount;
-    for(const k in counts){
-      counts[k].count += Math.round(counts[k].count * scale);
+  // Finalize counts into global state inventory
+  const finalSummaryItems = [];
+  for(const k in simResult.counts){
+    const simItem = simResult.counts[k];
+    const r = {
+      name: simItem.name,
+      baseRng: simItem.baseRng,
+      finalRng: simItem.finalRng,
+      tier: simItem.tier,
+      variant: simItem.variant,
+      areaLabel: area.label
+    };
+    addToInventory(r, simItem.count);
+    finalSummaryItems.push({ result: r, count: simItem.count });
+  }
+
+  const grandTotalRolls = totalRolls + simResult.bonusRollsFired;
+  state.rolls += grandTotalRolls;
+
+  if(simResult.bestFind) {
+    if(!state.best || simResult.bestFind.finalRng > state.best.finalRng) {
+      state.best = simResult.bestFind;
     }
   }
 
-  // apply to inventory
-  for(const k in counts){
-    addToInventory(counts[k].result, counts[k].count);
-  }
-
-  if(!state.best || (bestFind && bestFind.finalRng > state.best.finalRng)) state.best = bestFind;
-  state.rolls += totalRolls;
-
   return {
     seconds: elapsedSeconds,
-    totalRolls,
-    bestFind,
-    topItems: Object.values(counts).sort((a,b)=> b.count - a.count).slice(0,6),
-    capped: (now - state.lastSeenAt)/1000 > MAX_OFFLINE_SECONDS,
+    totalRolls: grandTotalRolls,
+    bestFind: simResult.bestFind,
+    topItems: finalSummaryItems.sort((a,b)=> b.count - a.count).slice(0,6),
+    capped,
+    bonusTriggers: simResult.bonusTriggers,
+    bonusRollsFired: simResult.bonusRollsFired,
   };
 }
 
@@ -1286,14 +1737,15 @@ function renderOfflineBanner(report){
   el.innerHTML = `
     <div class="offline-banner">
       <h3>Welcome back 👋</h3>
-      <p>Your ${escapeHtml(currentAxe().name)} kept swinging while you were away — ${fmtDuration(report.seconds)}${report.capped ? ' (capped at 7d)' : ''}, ${report.totalRolls.toLocaleString()} rolls.</p>
+      <p>Your ${escapeHtml(currentAxe().name)} kept swinging while you were away — ${fmtDuration(report.seconds)}${report.capped ? ' (capped at 7d)' : ''}, ${report.totalRolls.toLocaleString()} rolls calculated.</p>
+      ${report.bonusTriggers > 0 ? `<p>Dark surge triggered <b>${report.bonusTriggers.toLocaleString()}×</b>, adding ${report.bonusRollsFired.toLocaleString()} rolls at ×66 luck.</p>` : ''}
       <div class="offline-summary">
         ${report.topItems.map(t=>{
           const r = t.result;
-          return `<div class="offline-row"><span class="${r.tier.cls}">${escapeHtml(r.name)}${r.variant?' ✦':''}</span><span>×${t.count.toLocaleString()}</span></div>`;
+          return `<div class="offline-row"><span class="${r.tier.cls} ${r.variant ? r.variant.cls : ''}">${escapeHtml(r.name)}${r.variant?' ✦':''}</span><span>×${t.count.toLocaleString()}</span></div>`;
         }).join('')}
       </div>
-      ${report.bestFind ? `<p>Best find: <span class="${report.bestFind.tier.cls}">${escapeHtml(report.bestFind.name)}</span> (1/${fmtRng(report.bestFind.finalRng)})</p>` : ''}
+      ${report.bestFind ? `<p>Best find: <span class="${report.bestFind.tier.cls} ${report.bestFind.variant ? report.bestFind.variant.cls : ''}">${escapeHtml(report.bestFind.name)}${report.bestFind.variant ? ' ✦' : ''}</span> (1/${fmtRng(report.bestFind.finalRng)})</p>` : ''}
       <button class="btn small" id="dismissOffline">Nice</button>
     </div>
   `;
@@ -1306,7 +1758,7 @@ function renderOfflineBanner(report){
 async function init(){
   await dbLoadAll();
 
-  const report = resolveOfflineProgress();
+  const report = await resolveOfflineProgress();
   state.lastSeenAt = Date.now();
   dbSaveMeta();
 
@@ -1322,17 +1774,16 @@ async function init(){
 }
 init();
 
-// persist "last seen" periodically and on unload so offline time is measured accurately
 window.addEventListener('beforeunload', ()=>{
   state.lastSeenAt = Date.now();
   dbSaveMeta();
 });
-document.addEventListener('visibilitychange', ()=>{
+document.addEventListener('visibilitychange', async ()=>{
   if(document.visibilityState === 'hidden'){
     state.lastSeenAt = Date.now();
     dbSaveMeta();
   } else {
-    const report = resolveOfflineProgress();
+    const report = await resolveOfflineProgress();
     state.lastSeenAt = Date.now();
     dbSaveMeta();
     if(report){
@@ -1346,3 +1797,5 @@ document.addEventListener('visibilitychange', ()=>{
 </script>
 </body>
 </html>
+
+```
