@@ -720,7 +720,14 @@ const WORLD1 = {
         { name:'Cloud', rng:80 },
         { name:'Swirl', rng:500 },
         { name:'Illusion Crystal', rng:3000 },
-        { name:'imsorrythereisntmoretiersandwhateverbutthisisabetareleaseBEPATIENT!', rng:Infinity },
+        { name:'Rainbow Fragment', rng:17000 },
+        { name:'Dream Powder', rng:56000, mutations:[{name:'Heavenly Mist', rng:1000000}] },
+        { name:'Sparkles', rng:128000 },
+        { name:'Pearl', rng:700000, mutations:[{name:'Pearlscence', rng:55555555}] },
+        { name:'Heavenly', rng:2500000, mutations:[{name:'Ascended', rng:125000000}] },
+        { name:'Aurora Borealis', rng:7500000, mutations:[{name:'Galactic Harmony', rng:700000000000}] },
+        { name:'Imaginary', rng:680000000, mutations:[{name:'Starglass', rng:20000000000}] },
+        { name:'Dreamcore', rng:700000000000 }
       ]
     },
   ]
@@ -763,7 +770,7 @@ const AXES = {
   disaster: {
     key:'disaster', name:'Disaster Bringer',
     desc:'Self explanatory name, lots of rolls BUT your luck is less!',
-    stats:{ luckMult:0.5, bulk:8, rps:10 },
+    stats:{ luckMult:0.85, bulk:8, rps:10 },
     requires:[
       { name:'Disaster', area:'Natural', amount:10 },
       { name:'Unfunctional Tool', area:'Wasteland', amount:3 },
@@ -938,19 +945,57 @@ function rollOnceForArea(world, area, luckMult){
   }
   for(const g of world.global) pool.push({ name:g.name, rng:g.rng });
 
-  let winner = null;
+  // 1. Identify the highest guaranteed RNG that luck would automatically roll
+  let highestGuaranteedRng = 0;
+  for(const item of pool) {
+    if(item.rng !== Infinity) {
+      const effectiveChance = luckMult / item.rng;
+      if(effectiveChance >= 1) {
+        if(item.rng > highestGuaranteedRng) {
+          highestGuaranteedRng = item.rng;
+        }
+      }
+    }
+  }
+
+  // 2. Perform rolling checks with 1/5 minimum fallback cap for skipped ranks
+  let normalWinner = null;
+  let bypassedWinner = null;
+
   for(const item of pool){
     if(item.rng === Infinity){
       if(Math.random() < 0.0005 * luckMult){
-        if(!winner || item.rng > winner.rng) winner = item;
+        if(!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
       }
       continue;
     }
-    const effectiveChance = luckMult / item.rng;
-    if(Math.random() < effectiveChance){
-      if(!winner || item.rng > winner.rng) winner = item;
+
+    const isSkipped = item.rng < highestGuaranteedRng;
+    if(isSkipped) {
+      // flat 1/5 (20%) roll rate if skipped by high luck
+      if(Math.random() < 0.2) {
+        if(!bypassedWinner || item.rng > bypassedWinner.rng) {
+          bypassedWinner = item;
+        }
+      }
+    } else {
+      const effectiveChance = luckMult / item.rng;
+      if(Math.random() < effectiveChance){
+        if(!normalWinner || item.rng > normalWinner.rng) {
+          normalWinner = item;
+        }
+      }
     }
   }
+
+  // Choose bypassed item if it won, unless normal roll picked up something rarer than the skipped threshold
+  let winner = normalWinner;
+  if (bypassedWinner) {
+    if (!winner || winner.rng <= highestGuaranteedRng) {
+      winner = bypassedWinner;
+    }
+  }
+
   if(!winner) winner = pool.reduce((a,b)=> a.rng < b.rng ? a : b);
 
   const variant = rollVariant();
@@ -1341,19 +1386,53 @@ function createWorkerBlob() {
       const counts = {};
       let bestFind = null;
 
+      // Find highest guaranteed item for skipped checks
+      let highestGuaranteedRng = 0;
+      for (const item of pool) {
+        if (item.rng !== Infinity) {
+          const effectiveChance = luckMult / item.rng;
+          if (effectiveChance >= 1) {
+            if (item.rng > highestGuaranteedRng) {
+              highestGuaranteedRng = item.rng;
+            }
+          }
+        }
+      }
+
       // Simulation loop
       for (let i = 0; i < rollsToRun; i++) {
-        let winner = null;
+        let normalWinner = null;
+        let bypassedWinner = null;
+
         for (const item of pool) {
           if (item.rng === Infinity) {
             if (Math.random() < 0.0005 * luckMult) {
-              if (!winner || item.rng > winner.rng) winner = item;
+              if (!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
             }
             continue;
           }
-          const effectiveChance = luckMult / item.rng;
-          if (Math.random() < effectiveChance) {
-            if (!winner || item.rng > winner.rng) winner = item;
+
+          const isSkipped = item.rng < highestGuaranteedRng;
+          if (isSkipped) {
+            if (Math.random() < 0.2) {
+              if (!bypassedWinner || item.rng > bypassedWinner.rng) {
+                bypassedWinner = item;
+              }
+            }
+          } else {
+            const effectiveChance = luckMult / item.rng;
+            if (Math.random() < effectiveChance) {
+              if (!normalWinner || item.rng > normalWinner.rng) {
+                normalWinner = item;
+              }
+            }
+          }
+        }
+
+        let winner = normalWinner;
+        if (bypassedWinner) {
+          if (!winner || winner.rng <= highestGuaranteedRng) {
+            winner = bypassedWinner;
           }
         }
         if (!winner) {
@@ -1408,21 +1487,56 @@ function createWorkerBlob() {
       let bonusTriggers = 0;
       if (offlineBonus && seconds > 0) {
         const { chancePerSecond, bonusRolls, bonusLuckMult } = offlineBonus;
+
+        // Find highest guaranteed for bonusLuckMult
+        let highestGuaranteedBonusRng = 0;
+        for (const item of pool) {
+          if (item.rng !== Infinity) {
+            const effectiveChance = bonusLuckMult / item.rng;
+            if (effectiveChance >= 1) {
+              if (item.rng > highestGuaranteedBonusRng) {
+                highestGuaranteedBonusRng = item.rng;
+              }
+            }
+          }
+        }
+
         for (let s = 0; s < seconds; s++) {
           if (Math.random() < chancePerSecond) {
             bonusTriggers++;
             for (let j = 0; j < bonusRolls; j++) {
-              let winner = null;
+              let normalWinner = null;
+              let bypassedWinner = null;
+
               for (const item of pool) {
                 if (item.rng === Infinity) {
                   if (Math.random() < 0.0005 * bonusLuckMult) {
-                    if (!winner || item.rng > winner.rng) winner = item;
+                    if (!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
                   }
                   continue;
                 }
-                const effectiveChance = bonusLuckMult / item.rng;
-                if (Math.random() < effectiveChance) {
-                  if (!winner || item.rng > winner.rng) winner = item;
+
+                const isSkipped = item.rng < highestGuaranteedBonusRng;
+                if (isSkipped) {
+                  if (Math.random() < 0.2) {
+                    if (!bypassedWinner || item.rng > bypassedWinner.rng) {
+                      bypassedWinner = item;
+                    }
+                  }
+                } else {
+                  const effectiveChance = bonusLuckMult / item.rng;
+                  if (Math.random() < effectiveChance) {
+                    if (!normalWinner || item.rng > normalWinner.rng) {
+                      normalWinner = item;
+                    }
+                  }
+                }
+              }
+
+              let winner = normalWinner;
+              if (bypassedWinner) {
+                if (!winner || winner.rng <= highestGuaranteedBonusRng) {
+                  winner = bypassedWinner;
                 }
               }
               if (!winner) winner = pool[0];
@@ -1489,7 +1603,6 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
     progressText.textContent = `initializing simulation setup...`;
 
     const numWorkers = 10;
-    // Cap actual simulations to avoid excessive memory or freezing on extreme gaps
     const SIMULATION_CEILING = 2000000;
     const actualSimTotal = Math.min(totalRolls, SIMULATION_CEILING);
     const extrapolationFactor = totalRolls > actualSimTotal ? totalRolls / actualSimTotal : 1;
@@ -1560,7 +1673,6 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
         if (workersFinished === numWorkers) {
           cleanup();
 
-          // Scale up findings if simulation ceiling took effect
           if (extrapolationFactor > 1) {
             for (const key in accumulatedCounts) {
               accumulatedCounts[key].count = Math.round(accumulatedCounts[key].count * extrapolationFactor);
@@ -1638,12 +1750,78 @@ async function resolveOfflineProgress(){
     const directCount = Math.min(totalRolls, DIRECT_ROLL_BUDGET);
     const remaining = totalRolls - directCount;
 
+    // Highest guaranteed item fallback calculation
+    let highestGuaranteedRng = 0;
+    for(const item of pool) {
+      if(item.rng !== Infinity) {
+        const effectiveChance = luckMult / item.rng;
+        if(effectiveChance >= 1) {
+          if(item.rng > highestGuaranteedRng) {
+            highestGuaranteedRng = item.rng;
+          }
+        }
+      }
+    }
+
     for(let i=0;i<directCount;i++){
-      const r = rollOnceForArea(world, area, luckMult);
-      const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
-      if(!counts[k]) counts[k] = { result:r, count:0 };
+      let normalWinner = null;
+      let bypassedWinner = null;
+
+      for(const item of pool){
+        if(item.rng === Infinity){
+          if(Math.random() < 0.0005 * luckMult){
+            if(!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
+          }
+          continue;
+        }
+
+        const isSkipped = item.rng < highestGuaranteedRng;
+        if(isSkipped) {
+          if(Math.random() < 0.2) {
+            if(!bypassedWinner || item.rng > bypassedWinner.rng) {
+              bypassedWinner = item;
+            }
+          }
+        } else {
+          const effectiveChance = luckMult / item.rng;
+          if(Math.random() < effectiveChance){
+            if(!normalWinner || item.rng > normalWinner.rng) {
+              normalWinner = item;
+            }
+          }
+        }
+      }
+
+      let winner = normalWinner;
+      if (bypassedWinner) {
+        if (!winner || winner.rng <= highestGuaranteedRng) {
+          winner = bypassedWinner;
+        }
+      }
+      if(!winner) winner = pool.reduce((a,b)=> a.rng < b.rng ? a : b);
+
+      const k = invKey(area.label, winner.name, null);
+      if(!counts[k]) {
+        counts[k] = {
+          name: winner.name,
+          baseRng: winner.rng,
+          finalRng: winner.rng,
+          tier: tierFor(winner.rng),
+          variant: null,
+          count: 0
+        };
+      }
       counts[k].count += 1;
-      if(!bestFind || r.finalRng > bestFind.finalRng) bestFind = r;
+      if(!bestFind || winner.rng > bestFind.finalRng) {
+        bestFind = {
+          name: winner.name,
+          baseRng: winner.rng,
+          finalRng: winner.rng,
+          tier: tierFor(winner.rng),
+          variant: null,
+          areaLabel: area.label
+        };
+      }
     }
 
     if(remaining > 0 && directCount > 0){
@@ -1662,33 +1840,86 @@ async function resolveOfflineProgress(){
         ? (()=>{ let n=0; for(let s=0;s<wholeSeconds;s++){ if(Math.random()<chancePerSecond) n++; } return n; })()
         : Math.round(wholeSeconds * chancePerSecond);
 
+      let highestGuaranteedBonusRng = 0;
+      for(const item of pool) {
+        if(item.rng !== Infinity) {
+          const effectiveChance = bonusLuckMult / item.rng;
+          if(effectiveChance >= 1) {
+            if(item.rng > highestGuaranteedBonusRng) {
+              highestGuaranteedBonusRng = item.rng;
+            }
+          }
+        }
+      }
+
       for(let t=0;t<triggerCount;t++){
         bonusTriggers++;
         for(let j=0;j<bonusRolls;j++){
-          const r = rollOnceForArea(world, area, bonusLuckMult);
-          const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
-          if(!counts[k]) counts[k] = { result:r, count:0 };
+          let normalWinner = null;
+          let bypassedWinner = null;
+
+          for(const item of pool){
+            if(item.rng === Infinity){
+              if(Math.random() < 0.0005 * bonusLuckMult){
+                if(!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
+              }
+              continue;
+            }
+
+            const isSkipped = item.rng < highestGuaranteedBonusRng;
+            if(isSkipped) {
+              if(Math.random() < 0.2) {
+                if(!bypassedWinner || item.rng > bypassedWinner.rng) {
+                  bypassedWinner = item;
+                }
+              }
+            } else {
+              const effectiveChance = bonusLuckMult / item.rng;
+              if(Math.random() < effectiveChance){
+                if(!normalWinner || item.rng > normalWinner.rng) {
+                  normalWinner = item;
+                }
+              }
+            }
+          }
+
+          let winner = normalWinner;
+          if (bypassedWinner) {
+            if (!winner || winner.rng <= highestGuaranteedBonusRng) {
+              winner = bypassedWinner;
+            }
+          }
+          if(!winner) winner = pool.reduce((a,b)=> a.rng < b.rng ? a : b);
+
+          const k = invKey(area.label, winner.name, null);
+          if(!counts[k]) {
+            counts[k] = {
+              name: winner.name,
+              baseRng: winner.rng,
+              finalRng: winner.rng,
+              tier: tierFor(winner.rng),
+              variant: null,
+              count: 0
+            };
+          }
           counts[k].count += 1;
           bonusRollsFired++;
-          if(!bestFind || r.finalRng > bestFind.finalRng) bestFind = r;
+          if(!bestFind || winner.rng > bestFind.finalRng) {
+            bestFind = {
+              name: winner.name,
+              baseRng: winner.rng,
+              finalRng: winner.rng,
+              tier: tierFor(winner.rng),
+              variant: null,
+              areaLabel: area.label
+            };
+          }
         }
       }
     }
 
-    const fallbackCounts = {};
-    for(const k in counts) {
-      fallbackCounts[k] = {
-        name: counts[k].result.name,
-        baseRng: counts[k].result.baseRng,
-        finalRng: counts[k].result.finalRng,
-        tier: counts[k].result.tier,
-        variant: counts[k].result.variant,
-        count: counts[k].count
-      };
-    }
-
     simResult = {
-      counts: fallbackCounts,
+      counts: counts,
       bestFind,
       bonusRollsFired,
       bonusTriggers
