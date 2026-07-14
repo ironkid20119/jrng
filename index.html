@@ -304,6 +304,22 @@
   }
   .inv-empty{ color:var(--text-faint); font-family:var(--mono); font-size:12px; padding:10px 2px;}
 
+  /* ---------- Inventory filters ---------- */
+  .inv-filters{
+    display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;
+  }
+  .inv-filters select{
+    flex:1 1 calc(50% - 4px); min-width:120px;
+    background:var(--bg-1); border:1px solid var(--border-lit); border-radius:8px;
+    color:var(--text); font-family:var(--mono); font-size:12px;
+    padding:7px 10px; appearance:none; cursor:pointer;
+  }
+  .inv-filters select:focus{ outline:none; border-color:var(--accent); }
+
+  /* ---------- Cheat banner ---------- */
+  .cheat-banner{ border-color:#ef4444 !important; }
+  .cheat-banner h3{ color:#ef4444; }
+
   /* ---------- Index (dropdowns) ---------- */
   .accordion{ display:flex; flex-direction:column; gap:10px; }
   .acc-item{ border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--bg-1); }
@@ -354,6 +370,28 @@
     font-family:var(--mono); font-size:10px; letter-spacing:0.08em; text-transform:uppercase;
     color:var(--good); border:1px solid var(--good); padding:3px 9px; border-radius:100px;
   }
+  .badge-pinned{
+    font-family:var(--mono); font-size:10px; letter-spacing:0.08em; text-transform:uppercase;
+    color:#f59e0b; border:1px solid #f59e0b; padding:3px 9px; border-radius:100px;
+  }
+  .item-card.pinned-card{ border-color:#f59e0b55; box-shadow:0 0 0 1px #f59e0b33 inset; }
+  .pinned-btn{ background:#f59e0b22 !important; border-color:#f59e0b !important; color:#f59e0b !important; }
+
+  .pinned-panel{
+    background:var(--surface-2); border:1px solid #f59e0b44; border-radius:10px;
+    padding:12px 14px; margin-bottom:4px;
+  }
+  .pinned-panel.empty{
+    font-family:var(--mono); font-size:12px; color:var(--text-dim); text-align:center; padding:10px;
+    border-style:dashed;
+  }
+  .pinned-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:14px; }
+  .pin-target{ font-family:var(--mono); font-size:12px; color:var(--accent-2); display:block; margin-bottom:4px; }
+  .buff-active{
+    font-family:var(--mono); font-size:12px; color:#22c55e; background:#22c55e18;
+    border:1px solid #22c55e44; border-radius:6px; padding:5px 10px; margin:6px 0;
+  }
+  .buff-active.ready{ color:#f59e0b; background:#f59e0b18; border-color:#f59e0b44; }
 
   /* ---------- Tier text styles ---------- */
   .t-common{ color:#9CA3AF; }
@@ -376,26 +414,28 @@
   @keyframes hueflow{ from{ background-position:0% 50%;} to{ background-position:300% 50%; } }
   @keyframes jitter{ 0%{ transform:translate(0,0); } 50%{ transform:translate(1px,-1px); } 100%{ transform:translate(-1px,1px); } }
 
-  .v-weird{ font-style:normal; filter:saturate(1.3) hue-rotate(8deg); }
-  .v-odd{ font-style:italic; filter:saturate(1.5) hue-rotate(-10deg); }
-  .v-rainbow{
-    background:linear-gradient(90deg,#ff0055,#ff9900,#ffee00,#33ff77,#00e5ff,#7c5cff,#ff5ca8,#ff0055) !important;
-    background-size:400% 100%;
-    -webkit-background-clip:text !important;
-    background-clip:text !important;
-    -webkit-text-fill-color:transparent !important;
-    color:transparent !important;
-    animation:hueflow 2s linear infinite;
-    display:inline-block;
+  /* Variant name rendering: tier color shows through at ~50%, variant tints on top */
+  .vwrap{ position:relative; display:inline-block; }
+  .vwrap .vlayer{
+    position:absolute; inset:0; display:inline-block;
+    pointer-events:none; opacity:0.52;
+    mix-blend-mode:screen;
   }
-  .v-grayscale{
-    background:none !important;
-    -webkit-background-clip:unset !important;
-    background-clip:unset !important;
-    -webkit-text-fill-color:initial !important;
-    color:#cfcfcf !important;
-    filter:grayscale(1); font-family:var(--mono); letter-spacing:0.02em;
-    display:inline-block;
+  .v-weird  .vlayer{ filter:saturate(1.4) hue-rotate(14deg); background:inherit; background-clip:text; -webkit-background-clip:text; }
+  .v-odd    .vlayer{ font-style:italic; filter:saturate(1.6) hue-rotate(-18deg); background:inherit; background-clip:text; -webkit-background-clip:text; }
+  .v-rainbow .vlayer{
+    background:linear-gradient(90deg,#ff0055,#ff9900,#ffee00,#33ff77,#00e5ff,#7c5cff,#ff5ca8,#ff0055);
+    background-size:400% 100%;
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent; color:transparent;
+    animation:hueflow 2s linear infinite;
+  }
+  .v-grayscale .vlayer{
+    background:none;
+    -webkit-text-fill-color:initial;
+    color:#d0d0d0;
+    filter:grayscale(0.7);
+    font-family:var(--mono); letter-spacing:0.02em;
   }
 
   .glow-epic{ text-shadow:0 0 22px rgba(168,85,247,0.45); }
@@ -568,6 +608,12 @@
   <div class="view" id="view-inventory">
     <div class="panel">
       <h2 class="ptitle">Inventory <span class="inv-summary" id="invSummary"></span></h2>
+      <div class="inv-filters" id="invFilters">
+        <select id="filterWorld"><option value="">All worlds</option></select>
+        <select id="filterArea"><option value="">All areas</option></select>
+        <select id="filterVariant"><option value="">All variants</option></select>
+        <select id="filterRank"><option value="">All ranks</option></select>
+      </div>
       <div class="inv-list" id="invList">
         <div class="inv-empty">Nothing collected yet. Go roll something.</div>
       </div>
@@ -586,11 +632,14 @@
   <div class="view" id="view-items">
     <div class="panel">
       <h2 class="ptitle">Craftable items</h2>
+      <div id="pinnedRecipePanel" style="margin-bottom:12px;"></div>
       <div class="item-cards" id="itemCards"></div>
+      <h2 class="ptitle" style="margin-top:18px;">Consumables</h2>
+      <div class="item-cards" id="consumableCards"></div>
     </div>
   </div>
 
-  <footer class="foot">junis rng game · world 1 · v0.2 beta</footer>
+  <footer class="foot">junis rng game · world 1 · v1 alpha</footer>
 </div>
 
 <nav class="bottom-nav">
@@ -855,8 +904,105 @@ const AXES = {
       { name:'Heavenly Mist', area:'Dreamland', amount:5 },
     ],
   },
+  glowaxe: {
+    key:'glowaxe', name:'GlowAxe',
+    desc:'Carved from light that refuses to fade.',
+    stats:{ luckMult:20, bulk:4, rps:15 },
+    bonus:'[Lightburst] Every hour offline: +5,000 rolls at ×2,500 luck. [Guidance] On click: 1/500 for +25 rolls at ×10,000 luck. [Sunrays] Every 75th click: +50 rolls at ×2,000 luck.',
+    offlineBonus:[
+      { intervalSeconds:3600, chancePerInterval:1, minRolls:5000, maxRolls:5000, bonusLuckMult:2500 },
+    ],
+    clickBonus:[
+      { oneIn:500, rolls:25, luckMult:10000 },
+    ],
+    sunrays:{ everyNClicks:75, rolls:50, luckMult:2000 },
+    // Rank value: 3×Leviathan(90M) + 3×Entropy(150M) + 10×Pearl(7M) + 5×Fruits(14.25M) + 10×Heavenly(25M) ≈ 286.25M > 280M ✓
+    requires:[
+      { name:'Leviathan',  area:'Natural',    amount:3  },
+      { name:'Entropy',    area:'Wasteland',  amount:3  },
+      { name:'Pearl',      area:'Dreamland',  amount:10 },
+      { name:'Fruits',     area:'The Fridge', amount:5  },
+      { name:'Heavenly',   area:'Dreamland',  amount:10 },
+    ],
+  },
+  silkinator: {
+    key:'silkinator', name:'Silkinator',
+    desc:'Spun from something that was never quite alive.',
+    stats:{ luckMult:2.5, bulk:39, rps:175 },
+    bonus:'[Spider Web] Offline every 5 mins: +5,000 rolls at ×3.5 luck. [Creepy Crawlies] Offline every sec: 1/1,111 for +11,111 rolls at ×11.11 luck.',
+    offlineBonus:[
+      { intervalSeconds:300, chancePerInterval:1, minRolls:5000, maxRolls:5000, bonusLuckMult:3.5 },
+      { intervalSeconds:1, chancePerInterval:1/1111, minRolls:11111, maxRolls:11111, bonusLuckMult:11.11 },
+    ],
+    // Rank value: 1×Moon(400M) + 1×Garbage Compacter(200M) + 3×Leviathan(90M) + 5×Aurora Borealis(37.5M) + 2×The Probably Rarest Thing Ever(20M) + 5×Leftover Burger(4M) + 10×Heavenly(25M) ≈ 776.5M > 775M ✓
+    requires:[
+      { name:'Moon',                        area:'Natural',    amount:1  },
+      { name:'Garbage Compacter',           area:'Wasteland',  amount:1  },
+      { name:'Leviathan',                   area:'Natural',    amount:3  },
+      { name:'Aurora Borealis',             area:'Dreamland',  amount:5  },
+      { name:'The Probably Rarest Thing Ever', area:'Scary Land', amount:2 },
+      { name:'Leftover Burger',             area:'The Fridge', amount:5  },
+      { name:'Heavenly',                    area:'Dreamland',  amount:10 },
+    ],
+  },
 };
-const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism'];
+const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism','glowaxe','silkinator'];
+
+const CONSUMABLES = {
+  pushpin: {
+    key:'pushpin', name:'Pushpin',
+    desc:'Stick it through your pinned recipe. The rarest thing you\'re missing gets a little closer.',
+    effect:'On use: the rarest unfinished material in your pinned recipe becomes ×2.5 easier to get in its home area, for 500 rolls.',
+    duration: 500,
+    requires:[
+      { name:'Crystal', area:'Natural', amount:25 },
+      { name:'Electronic', area:'Wasteland', amount:1 },
+    ],
+  },
+  gloves: {
+    key:'gloves', name:'Universal Recipe Gloves',
+    desc:'Reach across worlds. Not without a price, though.',
+    effect:'On use: the rarest unfinished material in your pinned recipe can drop in any area, at ×2 rarity, for 250 rolls.',
+    duration: 250,
+    requires:[
+      { name:'Illusion Crystal', area:'Dreamland', amount:12 },
+      { name:'Sparkles', area:'Dreamland', amount:1 },
+      { name:'Dream Powder', area:'Dreamland', amount:2 },
+    ],
+  },
+  bomb: {
+    key:'bomb', name:'Explosive Axe Bomb',
+    desc:'Not a toy. Takes an hour to arm, then goes off all at once.',
+    effect:'On use: charges for 1 hour. Once triggered after charging, fires 50,000 rolls in your current area at ×70 luck and ×1.5 mutation luck. Only one can be charging at a time.',
+    chargeSeconds: 3600,
+    rollCount: 50000,
+    luckMult: 70,
+    mutationLuckMult: 1.5,
+    requires:[
+      { name:'Fragments', area:'Wasteland', amount:70 },
+      { name:'Electronic', area:'Wasteland', amount:160 },
+      { name:'Unfunctional Tool', area:'Wasteland', amount:15 },
+      { name:'Decayal Device', area:'Wasteland', amount:1 },
+      { name:'Crystal', area:'Natural', amount:3000 },
+    ],
+  },
+  watergun: {
+    key:'watergun', name:'Sentient Watergun',
+    desc:"somehow... shoots water? and weirdly makes you be a bit faster.. ok!",
+    effect:'On use: AFK roll speed ×0.5 faster, stacks up to ×2.5 total (3 uses max). Each stack lasts 1 hour.',
+    maxStacks: 3,
+    stackMult: 0.5,
+    capMult: 2.5,
+    durationSeconds: 3600,
+    requires:[
+      { name:'Crystal',       area:'Natural',    amount:750 },
+      { name:'Electronic',    area:'Wasteland',  amount:17  },
+      { name:'Life',          area:'Natural',    amount:1   },
+      { name:'Water',         area:'The Fridge', amount:5   },
+    ],
+  },
+};
+const CONSUMABLE_ORDER = ['pushpin','gloves','bomb','watergun'];
 
 /* ============================================================
    STATE
@@ -871,6 +1017,13 @@ let state = {
   ownedAxes: ['default'],
   equippedAxe: 'default',
   lastSeenAt: Date.now(),
+  pinnedRecipe: null,       // { kind:'axe'|'consumable', key }
+  consumables: {},          // { pushpin: 2, gloves: 0, bomb: 1 }
+  activeBuffs: {},          // { pushpin: { rollsLeft }, gloves: { rollsLeft } }
+  bombCharge: null,         // { chargingUntil: timestamp }
+  clickCount: 0,
+  anticheatLockUntil: null,
+  wgunStacks: [],           // array of { expiresAt: timestamp }, max 3
 };
 
 const MAX_OFFLINE_SECONDS = 7 * 24 * 60 * 60; // 7 day cap
@@ -916,6 +1069,13 @@ async function dbSaveMeta(){
       ownedAxes: state.ownedAxes,
       equippedAxe: state.equippedAxe,
       lastSeenAt: state.lastSeenAt,
+      pinnedRecipe: state.pinnedRecipe,
+      consumables: state.consumables,
+      activeBuffs: state.activeBuffs,
+      bombCharge: state.bombCharge,
+      clickCount: state.clickCount,
+      anticheatLockUntil: state.anticheatLockUntil,
+      wgunStacks: state.wgunStacks,
     });
   }catch(err){ console.error('Failed to save meta', err); }
 }
@@ -945,6 +1105,13 @@ async function dbLoadAll(){
       state.ownedAxes = meta.ownedAxes && meta.ownedAxes.length ? meta.ownedAxes : ['default'];
       state.equippedAxe = meta.equippedAxe || 'default';
       state.lastSeenAt = meta.lastSeenAt || Date.now();
+      state.pinnedRecipe = meta.pinnedRecipe || null;
+      state.consumables = meta.consumables || {};
+      state.activeBuffs = meta.activeBuffs || {};
+      state.bombCharge = meta.bombCharge || null;
+      state.anticheatLockUntil = meta.anticheatLockUntil || null;
+      state.clickCount = meta.clickCount || 0;
+      state.wgunStacks = meta.wgunStacks || [];
     }
 
     const invTx = db.transaction(STORE_INV, 'readonly');
@@ -968,6 +1135,8 @@ function addToInventory(result, count){
   count = count || 1;
   const key = invKey(result.areaLabel, result.name, result.variant ? result.variant.key : null);
   const existing = state.inventory[key];
+  // Tier is always based on the BASE rng, not the variant-inflated finalRng
+  const baseTier = tierFor(result.baseRng);
   if(existing){
     existing.count += count;
     existing.lastRng = result.finalRng;
@@ -980,9 +1149,9 @@ function addToInventory(result, count){
       areaLabel: result.areaLabel,
       baseRng: result.baseRng,
       lastRng: result.finalRng,
-      tierKey: result.tier.key,
-      tierLabel: result.tier.label,
-      tierCls: result.tier.cls,
+      tierKey: baseTier.key,
+      tierLabel: baseTier.label,
+      tierCls: baseTier.cls,
       variant: result.variant ? { key:result.variant.key, label:result.variant.label, cls:result.variant.cls, totalMult:result.variant.totalMult } : null,
       count: count,
       firstAt: Date.now(),
@@ -998,25 +1167,116 @@ function getOwnedCount(areaLabel, name, variantKey){
 }
 
 /* ============================================================
+   RECIPE PINNING
+   ============================================================ */
+
+function getPinnableRecipe(kind, key){
+  if(kind === 'axe') return AXES[key];
+  if(kind === 'consumable') return CONSUMABLES[key];
+  return null;
+}
+
+function pinnedRecipeData(){
+  if(!state.pinnedRecipe) return null;
+  const recipe = getPinnableRecipe(state.pinnedRecipe.kind, state.pinnedRecipe.key);
+  if(!recipe || !recipe.requires) return null;
+  return recipe;
+}
+
+// The rarest material in the pinned recipe that the player hasn't fully gathered yet
+function rarestUnfinishedMaterial(){
+  const recipe = pinnedRecipeData();
+  if(!recipe) return null;
+  let rarest = null;
+  for(const req of recipe.requires){
+    const have = getOwnedCount(req.area, req.name, req.variant);
+    if(have >= req.amount) continue;
+    // Look up the material's base rng from the world data so we know how rare it is
+    const rng = findRankRng(req.area, req.name);
+    if(rng == null) continue;
+    if(!rarest || rng > rarest.rng){
+      rarest = { name:req.name, area:req.area, rng, variant:req.variant || null };
+    }
+  }
+  return rarest;
+}
+
+// Finds a rank or mutation's base rng by area label, searching across all worlds
+function findRankRng(areaLabel, name){
+  for(const world of WORLDS){
+    for(const area of world.areas){
+      if(area.label !== areaLabel) continue;
+      for(const r of area.ranks){
+        if(r.name === name) return r.rng;
+        if(r.mutations){
+          for(const m of r.mutations){
+            if(m.name === name) return m.rng;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function setPinnedRecipe(kind, key){
+  state.pinnedRecipe = { kind, key };
+  dbSaveMeta();
+}
+
+function clearPinnedRecipe(){
+  state.pinnedRecipe = null;
+  dbSaveMeta();
+}
+
+/* ============================================================
    ROLLING LOGIC
    ============================================================ */
 
-function rollOnceForArea(world, area, luckMult){
+function rollOnceForArea(world, area, luckMult, opts){
+  opts = opts || {};
+  const mutationLuckMult = opts.mutationLuckMult || 1;
+  const applyBuffs = opts.applyBuffs !== false; // default true
+
   const pool = [];
   for(const r of area.ranks){
-    pool.push({ name:r.name, rng:r.rng });
-    if(r.mutations) for(const m of r.mutations) pool.push({ name:m.name, rng:m.rng });
+    pool.push({ name:r.name, rng:r.rng, isMutation:false });
+    if(r.mutations) for(const m of r.mutations) pool.push({ name:m.name, rng:m.rng, isMutation:true });
   }
-  for(const g of world.global) pool.push({ name:g.name, rng:g.rng });
+  for(const g of world.global) pool.push({ name:g.name, rng:g.rng, isMutation:false });
+
+  // Active buff: Universal Recipe Gloves lets the pinned recipe's rarest missing
+  // material drop in any area (at double rarity), even if it's not native here.
+  const pushpinActive = applyBuffs && state.activeBuffs && state.activeBuffs.pushpin && state.activeBuffs.pushpin.rollsLeft > 0;
+  const glovesActive = applyBuffs && state.activeBuffs && state.activeBuffs.gloves && state.activeBuffs.gloves.rollsLeft > 0;
+  const buffTarget = (pushpinActive || glovesActive) ? rarestUnfinishedMaterial() : null;
+
+  if(glovesActive && buffTarget && buffTarget.area !== area.label){
+    const alreadyInPool = pool.some(p => p.name === buffTarget.name);
+    if(!alreadyInPool){
+      pool.push({ name:buffTarget.name, rng:buffTarget.rng * 2, isMutation:false, injectedAreaLabel:buffTarget.area });
+    }
+  }
+
+  // Per-item effective rng after buffs (e.g. Pushpin easing its target material)
+  function effectiveRng(item){
+    let rng = item.rng;
+    if(pushpinActive && buffTarget && buffTarget.area === area.label && buffTarget.name === item.name){
+      rng = rng / 2.5;
+    }
+    return rng;
+  }
 
   // 1. Identify the highest guaranteed RNG that luck would automatically roll
   let highestGuaranteedRng = 0;
   for(const item of pool) {
     if(item.rng !== Infinity) {
-      const effectiveChance = luckMult / item.rng;
+      const rng = effectiveRng(item);
+      const itemLuckMult = item.isMutation ? luckMult * mutationLuckMult : luckMult;
+      const effectiveChance = itemLuckMult / rng;
       if(effectiveChance >= 1) {
-        if(item.rng > highestGuaranteedRng) {
-          highestGuaranteedRng = item.rng;
+        if(rng > highestGuaranteedRng) {
+          highestGuaranteedRng = rng;
         }
       }
     }
@@ -1034,7 +1294,10 @@ function rollOnceForArea(world, area, luckMult){
       continue;
     }
 
-    const isSkipped = item.rng < highestGuaranteedRng;
+    const rng = effectiveRng(item);
+    const itemLuckMult = item.isMutation ? luckMult * mutationLuckMult : luckMult;
+
+    const isSkipped = rng < highestGuaranteedRng;
     if(isSkipped) {
       // flat 1/5 (20%) roll rate if skipped by high luck
       if(Math.random() < 0.2) {
@@ -1043,7 +1306,7 @@ function rollOnceForArea(world, area, luckMult){
         }
       }
     } else {
-      const effectiveChance = luckMult / item.rng;
+      const effectiveChance = itemLuckMult / rng;
       if(Math.random() < effectiveChance){
         if(!normalWinner || item.rng > normalWinner.rng) {
           normalWinner = item;
@@ -1079,6 +1342,15 @@ function rollOnce(){
 /* ============================================================
    RENDERING HELPERS
    ============================================================ */
+
+// Renders a rank name with tier color + 50% variant overlay (no full recolor)
+function rankNameHtml(name, tierCls, variant, extraCls){
+  extraCls = extraCls || '';
+  const text = escapeHtml(name);
+  if(!variant) return `<span class="${tierCls} ${extraCls}">${text}</span>`;
+  // vwrap carries variant class for CSS scoping; inner text has tier color; vlayer overlays variant
+  return `<span class="vwrap ${variant.cls} ${extraCls}"><span class="${tierCls}">${text}</span><span class="vlayer" aria-hidden="true">${text}</span></span>`;
+}
 
 function fmtRng(n){
   if(n === Infinity) return '∞';
@@ -1120,29 +1392,34 @@ function tierGlowColor(key){
 
 function renderAxeStrip(){
   const axe = currentAxe();
+  const stacks = wgunActiveStacks();
+  const rps = effectiveRps();
+  const rpsLabel = stacks > 0 ? `${rps.toFixed(1)} rolls/sec offline 💧×${stacks}` : `${axe.stats.rps} rolls/sec offline`;
   const el = document.getElementById('axeStrip');
   el.innerHTML = `
     <span class="aname">🪓 ${axe.name}</span>
-    <span class="astats">luck ×${axe.stats.luckMult} · bulk ${axe.stats.bulk} · ${axe.stats.rps} rolls/sec offline</span>
+    <span class="astats">luck ×${axe.stats.luckMult} · bulk ${axe.stats.bulk} · ${rpsLabel}</span>
   `;
 }
 
 function renderStage(result, count){
   const stage = document.getElementById('stage');
-  const glowCls = ['epic','pelicular','horizon','grandiose','zenith','unworldly'].includes(result.tier.key) ? `glow-${result.tier.key}` : '';
+  const baseTier = tierFor(result.baseRng);
+  const glowCls = ['epic','pelicular','horizon','grandiose','zenith','unworldly'].includes(baseTier.key) ? `glow-${baseTier.key}` : '';
   const variantCls = result.variant ? result.variant.cls : '';
+  const nameHtml = rankNameHtml(result.name, baseTier.cls, result.variant, glowCls);
 
   stage.innerHTML = `
-    <div class="result-tier">${result.areaLabel} · ${result.tier.label}</div>
-    <div class="result-name ${result.tier.cls} ${variantCls} ${glowCls}">${escapeHtml(result.name)}</div>
+    <div class="result-tier">${result.areaLabel} · ${baseTier.label}</div>
+    <div class="result-name">${nameHtml}</div>
     <div class="result-rng">1 in ${fmtRng(result.finalRng)}</div>
     ${result.variant ? `<div class="result-variant">✦ ${result.variant.label} variant (×${result.variant.totalMult})</div>` : ''}
     ${count && count > 1 ? `<div class="multi-note">shown: rarest of ${count} rolls (bulk)</div>` : ''}
   `;
 
-  if(['pelicular','horizon','grandiose','zenith','unworldly','colossal','infinite','insanity','impossible'].includes(result.tier.key)){
+  if(['pelicular','horizon','grandiose','zenith','unworldly','colossal','infinite','insanity','impossible'].includes(baseTier.key)){
     const flash = document.getElementById('flashBg');
-    flash.style.background = `radial-gradient(circle at 50% 40%, ${tierGlowColor(result.tier.key)}, transparent 70%)`;
+    flash.style.background = `radial-gradient(circle at 50% 40%, ${tierGlowColor(baseTier.key)}, transparent 70%)`;
     flash.classList.remove('go');
     void flash.offsetWidth;
     flash.classList.add('go');
@@ -1161,18 +1438,21 @@ function renderLog(){
     log.innerHTML = `<div class="log-empty">No rolls yet.</div>`;
     return;
   }
-  log.innerHTML = state.log.map(r => `
+  log.innerHTML = state.log.map(r => {
+    const baseTier = tierFor(r.baseRng);
+    const suffix = r.variant ? ' ✦' : '';
+    return `
     <div class="log-row">
-      <span class="lname ${r.tier.cls} ${r.variant ? r.variant.cls : ''}">${escapeHtml(r.name)}${r.variant ? ' ✦' : ''}</span>
+      <span class="lname">${rankNameHtml(r.name, baseTier.cls, r.variant)}${suffix}</span>
       <span class="lrng">1/${fmtRng(r.finalRng)}</span>
     </div>
-  `).join('');
+  `}).join('');
 }
 
 function updateStatStrip(){
   document.getElementById('statRolls').textContent = state.rolls.toLocaleString();
-  document.getElementById('statRps').textContent = currentAxe().stats.rps;
-  document.getElementById('statBest').textContent = state.best ? state.best.tier.label : '—';
+  document.getElementById('statRps').textContent = effectiveRps();
+  document.getElementById('statBest').textContent = state.best ? tierFor(state.best.baseRng).label : '—';
 }
 
 function renderWorldTabs(){
@@ -1212,31 +1492,87 @@ function renderAreaSelect(){
 function renderInventory(){
   const list = document.getElementById('invList');
   const summary = document.getElementById('invSummary');
-  const items = Object.values(state.inventory);
+  const allItems = Object.values(state.inventory);
+
+  // Build area→world lookup
+  const areaWorldMap = {};
+  for(const world of WORLDS){
+    for(const area of world.areas){
+      areaWorldMap[area.label] = world.label;
+    }
+  }
+
+  // Populate filter dropdowns (preserve current selection)
+  const fWorld = document.getElementById('filterWorld');
+  const fArea = document.getElementById('filterArea');
+  const fVariant = document.getElementById('filterVariant');
+  const fRank = document.getElementById('filterRank');
+  if(!fWorld) return;
+
+  const selWorld = fWorld.value;
+  const selArea = fArea.value;
+  const selVariant = fVariant.value;
+  const selRank = fRank.value;
+
+  const worlds = [...new Set(allItems.map(i => areaWorldMap[i.areaLabel] || '?').filter(Boolean))].sort();
+  const areas = [...new Set(allItems.map(i => i.areaLabel))].sort();
+  const variants = [...new Set(allItems.map(i => i.variant ? i.variant.label : '').filter(Boolean))].sort();
+  const ranks = [...new Set(allItems.map(i => i.name))].sort();
+
+  function rebuildSelect(el, values, placeholder){
+    const prev = el.value;
+    el.innerHTML = `<option value="">${placeholder}</option>` +
+      values.map(v => `<option value="${escapeHtml(v)}" ${v===prev?'selected':''}>${escapeHtml(v)}</option>`).join('');
+  }
+  rebuildSelect(fWorld, worlds, 'All worlds');
+  rebuildSelect(fArea, areas, 'All areas');
+  rebuildSelect(fVariant, variants, 'All variants');
+  rebuildSelect(fRank, ranks, 'All ranks');
+
+  // Restore selections
+  fWorld.value = selWorld;
+  fArea.value = selArea;
+  fVariant.value = selVariant;
+  fRank.value = selRank;
+
+  // Apply filters
+  let items = allItems;
+  if(fWorld.value) items = items.filter(i => (areaWorldMap[i.areaLabel] || '') === fWorld.value);
+  if(fArea.value) items = items.filter(i => i.areaLabel === fArea.value);
+  if(fVariant.value) items = items.filter(i => (i.variant ? i.variant.label : '') === fVariant.value);
+  if(fRank.value) items = items.filter(i => i.name === fRank.value);
+
+  const totalCount = allItems.reduce((s,i)=> s + i.count, 0);
+  summary.textContent = `${allItems.length} unique · ${totalCount.toLocaleString()} total`;
 
   if(items.length === 0){
-    list.innerHTML = `<div class="inv-empty">Nothing collected yet. Go roll something.</div>`;
-    summary.textContent = '';
+    list.innerHTML = `<div class="inv-empty">${allItems.length === 0 ? 'Nothing collected yet. Go roll something.' : 'No items match the current filters.'}</div>`;
     return;
   }
 
   items.sort((a,b)=> b.lastRng - a.lastRng);
-  const totalCount = items.reduce((s,i)=> s + i.count, 0);
-  summary.textContent = `${items.length} unique · ${totalCount.toLocaleString()} total`;
 
   list.innerHTML = items.map(it => {
-    const variantCls = it.variant ? it.variant.cls : '';
     const variantTxt = it.variant ? ` · ${it.variant.label}` : '';
+    const suffix = it.variant ? ' ✦' : '';
+    const nameEl = rankNameHtml(it.name, it.tierCls, it.variant);
     return `
       <div class="inv-row">
         <div>
-          <div class="iname ${it.tierCls} ${variantCls}">${escapeHtml(it.name)}${it.variant ? ' ✦' : ''}</div>
+          <div class="iname">${nameEl}${suffix}</div>
           <div class="imeta">${it.areaLabel} · 1/${fmtRng(it.lastRng)} · ${it.tierLabel}${variantTxt}</div>
         </div>
         <span class="icount">×${it.count.toLocaleString()}</span>
       </div>
     `;
   }).join('');
+}
+
+function setupInventoryFilters(){
+  ['filterWorld','filterArea','filterVariant','filterRank'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('change', renderInventory);
+  });
 }
 
 /* ============================================================
@@ -1295,11 +1631,13 @@ function buildIndexAccordion(){
    ============================================================ */
 
 function renderItemCards(){
+  renderPinnedRecipePanel();
   const el = document.getElementById('itemCards');
   el.innerHTML = AXE_ORDER.map(key=>{
     const axe = AXES[key];
     const owned = state.ownedAxes.includes(key);
     const equipped = state.equippedAxe === key;
+    const isPinned = state.pinnedRecipe && state.pinnedRecipe.kind === 'axe' && state.pinnedRecipe.key === key;
 
     let reqHtml = '';
     let canCraft = true;
@@ -1335,16 +1673,20 @@ function renderItemCards(){
       actionHtml = `<button class="btn small ${canCraft?'':'secondary'}" data-craft="${key}" ${canCraft?'':'disabled'}>Craft</button>`;
     }
 
+    const pinBtn = axe.free ? '' :
+      `<button class="btn small ${isPinned?'pinned-btn':'secondary'}" data-pin-axe="${key}" style="margin-right:6px;">${isPinned?'📌 Pinned':'📌 Pin'}</button>`;
+
     return `
-      <div class="item-card ${equipped?'equipped':''}">
+      <div class="item-card ${equipped?'equipped':''} ${isPinned?'pinned-card':''}">
         <div class="ihead">
           <span class="iname">${axe.name}</span>
           ${owned && !equipped ? '<span class="badge-owned">Owned</span>' : ''}
+          ${isPinned ? '<span class="badge-pinned">Pinned</span>' : ''}
         </div>
         <div class="idesc">${axe.desc}</div>
         ${statsHtml}
         ${!axe.free ? `<div class="req-list">${reqHtml}</div>` : ''}
-        <div style="text-align:right;">${actionHtml}</div>
+        <div style="text-align:right;">${pinBtn}${actionHtml}</div>
       </div>
     `;
   }).join('');
@@ -1354,6 +1696,56 @@ function renderItemCards(){
   });
   el.querySelectorAll('[data-equip]').forEach(btn=>{
     btn.addEventListener('click', ()=> equipAxe(btn.dataset.equip));
+  });
+  el.querySelectorAll('[data-pin-axe]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const k = btn.dataset.pinAxe;
+      if(state.pinnedRecipe && state.pinnedRecipe.kind === 'axe' && state.pinnedRecipe.key === k){
+        clearPinnedRecipe();
+      } else {
+        setPinnedRecipe('axe', k);
+      }
+      renderItemCards();
+      renderConsumableCards();
+    });
+  });
+}
+
+function renderPinnedRecipePanel(){
+  const el = document.getElementById('pinnedRecipePanel');
+  if(!el) return;
+  if(!state.pinnedRecipe){
+    el.innerHTML = `<div class="pinned-panel empty">📌 No recipe pinned — pin an axe or consumable to track progress and use Pushpin / Gloves.</div>`;
+    return;
+  }
+  const recipe = pinnedRecipeData();
+  if(!recipe){ el.innerHTML=''; return; }
+  const kind = state.pinnedRecipe.kind;
+  const label = (kind === 'axe' ? AXES[state.pinnedRecipe.key].name : CONSUMABLES[state.pinnedRecipe.key].name);
+  const target = rarestUnfinishedMaterial();
+  const targetHtml = target
+    ? `<span class="pin-target">🎯 Rarest missing: <b>${target.name}</b> (1/${fmtRng(target.rng)}) in ${target.area}</span>`
+    : `<span class="pin-target" style="color:var(--ok)">✅ All materials gathered!</span>`;
+
+  const reqRows = recipe.requires.map(req=>{
+    const have = getOwnedCount(req.area, req.name, req.variant);
+    const ok = have >= req.amount;
+    return `<div class="req-row ${ok?'ok':'short'}">${req.name} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="pinned-panel">
+      <div class="pinned-header">
+        <span>📌 Pinned: <b>${escapeHtml(label)}</b></span>
+        <button class="btn small secondary" id="unpinBtn">Unpin</button>
+      </div>
+      ${targetHtml}
+      <div class="req-list" style="margin-top:6px;">${reqRows}</div>
+    </div>`;
+  el.querySelector('#unpinBtn').addEventListener('click', ()=>{
+    clearPinnedRecipe();
+    renderItemCards();
+    renderConsumableCards();
   });
 }
 
@@ -1387,6 +1779,253 @@ function equipAxe(key){
   updateStatStrip();
 }
 
+function renderConsumableCards(){
+  const el = document.getElementById('consumableCards');
+  if(!el) return;
+  const now = Date.now();
+
+  el.innerHTML = CONSUMABLE_ORDER.map(key=>{
+    const item = CONSUMABLES[key];
+    const count = getConsumableCount(key);
+    const isPinned = state.pinnedRecipe && state.pinnedRecipe.kind === 'consumable' && state.pinnedRecipe.key === key;
+
+    let canCraft = true;
+    const reqHtml = item.requires.map(req=>{
+      const have = getOwnedCount(req.area, req.name, req.variant);
+      const ok = have >= req.amount;
+      if(!ok) canCraft = false;
+      return `<div class="req-row ${ok?'ok':'short'}">${req.name} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
+    }).join('');
+
+    // Buff / bomb / watergun status
+    let statusHtml = '';
+    if(key === 'pushpin' && state.activeBuffs && state.activeBuffs.pushpin){
+      statusHtml = `<div class="buff-active">⚡ Active: ${state.activeBuffs.pushpin.rollsLeft.toLocaleString()} rolls left</div>`;
+    }
+    if(key === 'gloves' && state.activeBuffs && state.activeBuffs.gloves){
+      statusHtml = `<div class="buff-active">⚡ Active: ${state.activeBuffs.gloves.rollsLeft.toLocaleString()} rolls left</div>`;
+    }
+    if(key === 'bomb'){
+      if(state.bombCharge){
+        const msLeft = state.bombCharge.chargingUntil - now;
+        if(msLeft > 0){
+          statusHtml = `<div class="buff-active">⏳ Charging: ${fmtDuration(Math.ceil(msLeft/1000))} left</div>`;
+        } else {
+          statusHtml = `<div class="buff-active ready">💥 READY — trigger to fire!</div>`;
+        }
+      }
+    }
+    if(key === 'watergun'){
+      const activeStacks = wgunActiveStacks();
+      if(activeStacks > 0){
+        const stackLines = state.wgunStacks.map((s,i)=>{
+          const msLeft = s.expiresAt - now;
+          return `<div>Stack ${i+1}: ${fmtDuration(Math.ceil(msLeft/1000))} left</div>`;
+        }).join('');
+        const curMult = Math.min(1 + activeStacks * 0.5, 2.5);
+        statusHtml = `<div class="buff-active">💧 ${activeStacks}/3 stacks active · ×${curMult.toFixed(1)} rps<br>${stackLines}</div>`;
+      }
+    }
+
+    // Action buttons
+    let actionHtml = '';
+    if(key === 'bomb' && state.bombCharge){
+      const msLeft = state.bombCharge.chargingUntil - now;
+      if(msLeft <= 0){
+        actionHtml = `<button class="btn small" data-trigger-bomb="1">💥 Trigger</button>`;
+      } else {
+        actionHtml = `<button class="btn small secondary" disabled>Charging…</button>`;
+      }
+    } else if(key === 'watergun'){
+      const activeStacks = wgunActiveStacks();
+      const atCap = activeStacks >= CONSUMABLES.watergun.maxStacks;
+      const useDisabled = count <= 0 || atCap;
+      const useTitle = count <= 0 ? 'None owned' : atCap ? 'Already at max stacks' : '';
+      actionHtml = `
+        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft</button>
+        <button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>
+      `;
+    } else {
+      const useDisabled = count <= 0 || !state.pinnedRecipe;
+      const useTitle = !state.pinnedRecipe ? 'Pin a recipe first' : (count <= 0 ? 'None owned' : '');
+      actionHtml = `
+        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft</button>
+        ${key !== 'bomb' || !state.bombCharge
+          ? `<button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>`
+          : ''}
+      `;
+    }
+
+    const pinBtn = `<button class="btn small ${isPinned?'pinned-btn':'secondary'}" data-pin-consumable="${key}" style="margin-right:6px;">${isPinned?'📌 Pinned':'📌 Pin'}</button>`;
+
+    return `
+      <div class="item-card ${isPinned?'pinned-card':''}">
+        <div class="ihead">
+          <span class="iname">${item.name}</span>
+          ${count > 0 ? `<span class="badge-owned">×${count}</span>` : ''}
+          ${isPinned ? '<span class="badge-pinned">Pinned</span>' : ''}
+        </div>
+        <div class="idesc">${item.desc}</div>
+        <div class="istats"><span class="stat" style="color:var(--accent-2);">✦ ${item.effect}</span></div>
+        ${statusHtml}
+        <div class="req-list">${reqHtml}</div>
+        <div style="text-align:right;">${pinBtn}${actionHtml}</div>
+      </div>
+    `;
+  }).join('');
+
+  el.querySelectorAll('[data-craft-consumable]').forEach(btn=>{
+    btn.addEventListener('click', ()=> craftConsumable(btn.dataset.craftConsumable));
+  });
+  el.querySelectorAll('[data-use-consumable]').forEach(btn=>{
+    btn.addEventListener('click', ()=> useConsumable(btn.dataset.useConsumable));
+  });
+  el.querySelectorAll('[data-trigger-bomb]').forEach(btn=>{
+    btn.addEventListener('click', ()=> triggerBomb());
+  });
+  el.querySelectorAll('[data-pin-consumable]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const k = btn.dataset.pinConsumable;
+      if(state.pinnedRecipe && state.pinnedRecipe.kind === 'consumable' && state.pinnedRecipe.key === k){
+        clearPinnedRecipe();
+      } else {
+        setPinnedRecipe('consumable', k);
+      }
+      renderItemCards();
+      renderConsumableCards();
+    });
+  });
+}
+
+function getConsumableCount(key){
+  return (state.consumables && state.consumables[key]) || 0;
+}
+
+function wgunActiveStacks(){
+  if(!state.wgunStacks) return 0;
+  const now = Date.now();
+  state.wgunStacks = state.wgunStacks.filter(s => s.expiresAt > now);
+  return state.wgunStacks.length;
+}
+
+// Effective RPS including watergun stacks: base * (1 + stacks * 0.5), capped at base * 2.5
+function effectiveRps(){
+  const base = currentAxe().stats.rps;
+  const stacks = wgunActiveStacks();
+  if(stacks === 0) return base;
+  const mult = Math.min(1 + stacks * CONSUMABLES.watergun.stackMult, CONSUMABLES.watergun.capMult);
+  return base * mult;
+}
+
+function craftConsumable(key){
+  const item = CONSUMABLES[key];
+  if(!item) return;
+  for(const req of item.requires){
+    if(getOwnedCount(req.area, req.name, req.variant) < req.amount) return;
+  }
+  for(const req of item.requires){
+    const k = invKey(req.area, req.name, req.variant || null);
+    state.inventory[k].count -= req.amount;
+    dbSaveInvItem(state.inventory[k]);
+  }
+  if(!state.consumables) state.consumables = {};
+  state.consumables[key] = (state.consumables[key] || 0) + 1;
+  dbSaveMeta();
+  renderConsumableCards();
+  renderInventory();
+}
+
+function useConsumable(key){
+  if(getConsumableCount(key) <= 0) return;
+
+  if(key === 'watergun'){
+    if(!state.wgunStacks) state.wgunStacks = [];
+    const now = Date.now();
+    state.wgunStacks = state.wgunStacks.filter(s => s.expiresAt > now);
+    if(state.wgunStacks.length >= CONSUMABLES.watergun.maxStacks){
+      alertUser('Already at max watergun stacks (×3)! Wait for one to expire first.');
+      return;
+    }
+    state.consumables.watergun--;
+    state.wgunStacks.push({ expiresAt: now + CONSUMABLES.watergun.durationSeconds * 1000 });
+    dbSaveMeta();
+    renderConsumableCards();
+    renderAxeStrip();
+    updateStatStrip();
+    return;
+  }
+
+  if(!state.pinnedRecipe){
+    alertUser('Pin a recipe first — this only works on your pinned axe or consumable.');
+    return;
+  }
+
+  if(key === 'pushpin' || key === 'gloves'){
+    const target = rarestUnfinishedMaterial();
+    if(!target){
+      alertUser('Your pinned recipe has nothing left to gather — no target to boost.');
+      return;
+    }
+    state.consumables[key]--;
+    if(!state.activeBuffs) state.activeBuffs = {};
+    state.activeBuffs[key] = { rollsLeft: CONSUMABLES[key].duration };
+    dbSaveMeta();
+    renderConsumableCards();
+  } else if(key === 'bomb'){
+    if(state.bombCharge){
+      alertUser('The bomb is already armed — only one can charge at a time.');
+      return;
+    }
+    state.consumables.bomb--;
+    state.bombCharge = { chargingUntil: Date.now() + CONSUMABLES.bomb.chargeSeconds * 1000 };
+    dbSaveMeta();
+    renderConsumableCards();
+  }
+}
+
+function alertUser(msg){
+  // Lightweight non-blocking notice using the offline banner slot
+  const el = document.getElementById('offlineBanner');
+  if(!el) { console.log(msg); return; }
+  el.innerHTML = `<div class="offline-banner"><p>${escapeHtml(msg)}</p><button class="btn small" id="dismissOffline">Got it</button></div>`;
+  document.getElementById('dismissOffline').addEventListener('click', ()=>{ el.innerHTML=''; });
+}
+
+function triggerBomb(){
+  if(!state.bombCharge) return;
+  if(Date.now() < state.bombCharge.chargingUntil) return;
+
+  const world = WORLDS[state.worldIdx];
+  const area = world.areas[state.areaIdx];
+  const axe = currentAxe();
+  const cfg = CONSUMABLES.bomb;
+
+  let best = null;
+  const counts = {};
+  for(let i=0;i<cfg.rollCount;i++){
+    const r = rollOnceForArea(world, area, cfg.luckMult, { mutationLuckMult: cfg.mutationLuckMult });
+    const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
+    if(!counts[k]) counts[k] = { result:r, count:0 };
+    counts[k].count++;
+    if(!best || r.finalRng > best.finalRng) best = r;
+  }
+  for(const k in counts){
+    addToInventory(counts[k].result, counts[k].count);
+  }
+  state.rolls += cfg.rollCount;
+  state.bombCharge = null;
+  if(best){
+    pushLog(best);
+    renderStage(best, cfg.rollCount);
+    if(!state.best || best.finalRng > state.best.finalRng) state.best = best;
+  }
+  renderInventory();
+  refreshLiveViews();
+  updateStatStrip();
+  renderConsumableCards();
+  dbSaveMeta();
+}
+
 /* ============================================================
    NAV / VIEW SWITCHING
    ============================================================ */
@@ -1406,7 +2045,7 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
 });
 
 function refreshLiveViews(){
-  if(currentView === 'items') renderItemCards();
+  if(currentView === 'items'){ renderItemCards(); renderConsumableCards(); }
   if(currentView === 'inventory') renderInventory();
 }
 
@@ -1425,8 +2064,10 @@ function doRoll(){
     if(!best || r.finalRng > best.finalRng) best = r;
   }
   state.rolls += bulk;
+  state.clickCount = (state.clickCount || 0) + 1;
+  tickActiveBuffs(bulk);
 
-  // Click-triggered bonus rolls (e.g. Food Eater, Dreamers Prism)
+  // Click-triggered bonus rolls (e.g. Food Eater, Dreamers Prism, GlowAxe Guidance)
   let clickBonusFired = 0;
   if(axe.clickBonus){
     const rules = Array.isArray(axe.clickBonus) ? axe.clickBonus : [axe.clickBonus];
@@ -1445,7 +2086,20 @@ function doRoll(){
       }
     }
   }
+
+  // Sunrays: every N clicks, add bonus rolls (e.g. GlowAxe every 75th click)
+  if(axe.sunrays && state.clickCount % axe.sunrays.everyNClicks === 0){
+    const world = WORLDS[state.worldIdx];
+    const area = world.areas[state.areaIdx];
+    for(let i=0;i<axe.sunrays.rolls;i++){
+      const r = rollOnceForArea(world, area, axe.sunrays.luckMult);
+      results.push(r);
+      clickBonusFired++;
+      if(!best || r.finalRng > best.finalRng) best = r;
+    }
+  }
   state.rolls += clickBonusFired;
+  if(clickBonusFired > 0) tickActiveBuffs(clickBonusFired);
 
   for(const r of results){
     addToInventory(r, 1);
@@ -1459,6 +2113,23 @@ function doRoll(){
   updateStatStrip();
   dbSaveMeta();
 }
+
+// Counts down rolls remaining on Pushpin / Universal Recipe Gloves buffs, clearing them at zero
+function tickActiveBuffs(rollCount){
+  if(!state.activeBuffs) return;
+  let changed = false;
+  for(const key of Object.keys(state.activeBuffs)){
+    const buff = state.activeBuffs[key];
+    if(!buff) continue;
+    buff.rollsLeft -= rollCount;
+    changed = true;
+    if(buff.rollsLeft <= 0){
+      delete state.activeBuffs[key];
+    }
+  }
+  if(changed) renderConsumableCards();
+}
+
 
 document.getElementById('rollBtn').addEventListener('click', doRoll);
 
@@ -1813,7 +2484,7 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
 
 async function resolveOfflineProgress(){
   const axe = currentAxe();
-  const rps = axe.stats.rps;
+  const rps = effectiveRps();
   if(rps <= 0 && !axe.offlineBonus) return null;
 
   const now = Date.now();
@@ -2074,6 +2745,20 @@ async function resolveOfflineProgress(){
   };
 }
 
+function renderCheatBanner(remainMs){
+  const el = document.getElementById('offlineBanner');
+  if(!el) return;
+  const timeStr = fmtDuration(Math.ceil(remainMs / 1000));
+  el.innerHTML = `
+    <div class="offline-banner cheat-banner">
+      <h3>⚠️ you dirty CHEATER!</h3>
+      <p>your axe has sensed a time change and you've lost access to idle rolling for <b>${timeStr}</b>!</p>
+      <button class="btn small secondary" id="dismissCheat">ok fine</button>
+    </div>
+  `;
+  document.getElementById('dismissCheat').addEventListener('click', ()=>{ el.innerHTML=''; });
+}
+
 function renderOfflineBanner(report){
   const el = document.getElementById('offlineBanner');
   if(!report){ el.innerHTML = ''; return; }
@@ -2085,10 +2770,16 @@ function renderOfflineBanner(report){
       <div class="offline-summary">
         ${report.topItems.map(t=>{
           const r = t.result;
-          return `<div class="offline-row"><span class="${r.tier.cls} ${r.variant ? r.variant.cls : ''}">${escapeHtml(r.name)}${r.variant?' ✦':''}</span><span>×${t.count.toLocaleString()}</span></div>`;
+          const baseTier = tierFor(r.baseRng);
+          const suffix = r.variant ? ' ✦' : '';
+          return `<div class="offline-row">${rankNameHtml(r.name, baseTier.cls, r.variant)}${suffix}<span>×${t.count.toLocaleString()}</span></div>`;
         }).join('')}
       </div>
-      ${report.bestFind ? `<p>Best find: <span class="${report.bestFind.tier.cls} ${report.bestFind.variant ? report.bestFind.variant.cls : ''}">${escapeHtml(report.bestFind.name)}${report.bestFind.variant ? ' ✦' : ''}</span> (1/${fmtRng(report.bestFind.finalRng)})</p>` : ''}
+      ${report.bestFind ? (()=>{
+        const bf = report.bestFind;
+        const bfTier = tierFor(bf.baseRng || bf.finalRng);
+        return `<p>Best find: ${rankNameHtml(bf.name, bfTier.cls, bf.variant)}${bf.variant?' ✦':''} (1/${fmtRng(bf.finalRng)})</p>`;
+      })() : ''}
       <button class="btn small" id="dismissOffline">Nice</button>
     </div>
   `;
@@ -2096,12 +2787,61 @@ function renderOfflineBanner(report){
 }
 
 /* ============================================================
+   ANTICHEAT — Cloudflare time verification
+   ============================================================ */
+
+async function fetchCloudflareTime(){
+  try {
+    const res = await fetch('https://cloudflare.com/cdn-cgi/trace', { cache:'no-store' });
+    const text = await res.text();
+    // Cloudflare trace includes "ts=<unix_timestamp_ms_float>" line
+    const match = text.match(/ts=(\d+(\.\d+)?)/);
+    if(match) return parseFloat(match[1]) * 1000; // convert to ms
+  } catch(e){ /* offline or blocked */ }
+  return null;
+}
+
+async function runAnticheat(){
+  const cfTime = await fetchCloudflareTime();
+  if(cfTime == null) return; // can't verify, allow through
+
+  const localTime = Date.now();
+  const skewMs = localTime - cfTime; // positive = local is ahead of real time
+
+  if(skewMs >= 60 * 1000){
+    // Player skipped time forward by at least 1 minute
+    const lockMs = skewMs;
+    state.anticheatLockUntil = cfTime + lockMs; // lock for as long as they skipped
+    dbSaveMeta();
+  }
+}
+
+function isAnticheatLocked(){
+  if(!state.anticheatLockUntil) return false;
+  return Date.now() < state.anticheatLockUntil;
+}
+
+function anticheatLockRemaining(){
+  if(!state.anticheatLockUntil) return 0;
+  return Math.max(0, state.anticheatLockUntil - Date.now());
+}
+/* ============================================================
    INIT
    ============================================================ */
 async function init(){
   await dbLoadAll();
 
-  const report = await resolveOfflineProgress();
+  // Run anticheat before offline progress
+  await runAnticheat();
+
+  let report = null;
+  if(isAnticheatLocked()){
+    const remainMs = anticheatLockRemaining();
+    renderCheatBanner(remainMs);
+  } else {
+    report = await resolveOfflineProgress();
+  }
+
   state.lastSeenAt = Date.now();
   dbSaveMeta();
 
@@ -2113,9 +2853,11 @@ async function init(){
   if(titleEl0) titleEl0.textContent = `Rank index — ${WORLDS[state.worldIdx].label}`;
   renderLog();
   renderInventory();
+  setupInventoryFilters();
   renderItemCards();
+  renderConsumableCards();
   updateStatStrip();
-  renderOfflineBanner(report);
+  if(report) renderOfflineBanner(report);
 }
 init();
 
@@ -2123,18 +2865,41 @@ window.addEventListener('beforeunload', ()=>{
   state.lastSeenAt = Date.now();
   dbSaveMeta();
 });
+
+// Live countdown for bomb charge timer
+setInterval(()=>{
+  if(currentView === 'items'){
+    if(state.bombCharge) renderConsumableCards();
+    if(state.wgunStacks && state.wgunStacks.length) renderConsumableCards();
+  }
+  // Expire old watergun stacks and update strip if changed
+  if(state.wgunStacks && state.wgunStacks.length){
+    const before = state.wgunStacks.length;
+    wgunActiveStacks(); // prunes expired stacks in-place
+    if(state.wgunStacks.length !== before){
+      dbSaveMeta();
+      renderAxeStrip();
+      updateStatStrip();
+    }
+  }
+}, 1000);
 document.addEventListener('visibilitychange', async ()=>{
   if(document.visibilityState === 'hidden'){
     state.lastSeenAt = Date.now();
     dbSaveMeta();
   } else {
-    const report = await resolveOfflineProgress();
-    state.lastSeenAt = Date.now();
-    dbSaveMeta();
-    if(report){
-      renderInventory();
-      updateStatStrip();
-      renderOfflineBanner(report);
+    await runAnticheat();
+    if(isAnticheatLocked()){
+      renderCheatBanner(anticheatLockRemaining());
+    } else {
+      const report = await resolveOfflineProgress();
+      state.lastSeenAt = Date.now();
+      dbSaveMeta();
+      if(report){
+        renderInventory();
+        updateStatStrip();
+        renderOfflineBanner(report);
+      }
     }
   }
 });
