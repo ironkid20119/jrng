@@ -410,6 +410,16 @@
   .t-infinite{ background:linear-gradient(90deg,#ff0055,#ffaa00,#00ff9d,#00aaff,#aa00ff,#ff0055); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:hueflow 4s linear infinite; }
   .t-insanity{ font-family:var(--display); background:linear-gradient(90deg,#ff003c,#1a0008,#ff003c); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:hueflow 1.4s linear infinite, jitter .12s steps(2) infinite; text-shadow:0 0 20px rgba(255,0,60,0.6); }
   .t-impossible{ font-family:var(--display); font-weight:900; background:linear-gradient(90deg,#ff0055,#ff9900,#ffee00,#33ff77,#00e5ff,#7c5cff,#ff5ca8,#ff0055); background-size:400% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:hueflow 2.2s linear infinite; text-shadow:0 0 30px rgba(255,255,255,0.35); letter-spacing:0.01em; }
+  .t-secret{
+    font-family:var(--display); font-weight:800;
+    background:linear-gradient(90deg,#4c0080,#a855f7,#1a0033,#a855f7,#4c0080);
+    background-size:300% 100%;
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent; color:transparent;
+    animation:hueflow 3s linear infinite, secretpulse 1.8s ease-in-out infinite;
+    letter-spacing:0.02em;
+  }
+  @keyframes secretpulse{ 0%,100%{ text-shadow:0 0 12px rgba(168,85,247,0.4);} 50%{ text-shadow:0 0 26px rgba(168,85,247,0.85);} }
 
   @keyframes hueflow{ from{ background-position:0% 50%;} to{ background-position:300% 50%; } }
   @keyframes jitter{ 0%{ transform:translate(0,0); } 50%{ transform:translate(1px,-1px); } 100%{ transform:translate(-1px,1px); } }
@@ -444,6 +454,8 @@
   .glow-grandiose{ text-shadow:0 0 24px rgba(245,158,11,0.55); }
   .glow-zenith{ text-shadow:0 0 28px rgba(255,215,0,0.55); }
   .glow-unworldly{ text-shadow:0 0 28px rgba(232,121,249,0.5); }
+  .glow-secret{ text-shadow:0 0 32px rgba(168,85,247,0.8); }
+  .secret-row{ background:rgba(168,85,247,0.08); border-radius:6px; }
 
   .flash-bg{ position:fixed; inset:0; pointer-events:none; z-index:5; opacity:0; }
   .flash-bg.go{ animation:flashfade 0.6s ease-out; }
@@ -682,6 +694,34 @@ const TIERS = [
   { key:'impossible',  label:'Impossible',  min:500000000000, max:Infinity,     cls:'t-impossible' },
 ];
 
+// Troll rolls: 1/5,000 chance on any Unworldly+ result to briefly show a DIFFERENT real rank
+// from the same area you're currently in — using its actual name and actual listed rarity —
+// for 3 seconds before snapping back to reveal what you truly got. Looks completely legitimate;
+// there's no way to tell it's fake until it flips. Purely cosmetic — never touches inventory,
+// log, or stats. The real result underneath is committed to state before this ever runs.
+const TROLL_CHANCE = 1 / 5000;
+const TROLL_TIER_KEYS = ['unworldly','colossal','infinite','insanity','impossible'];
+
+// Picks a real rank (or mutation) from the given area, excluding the actual roll's name so the
+// fake is always visibly different from the truth. Falls back to null if the area has nothing else.
+function rollTrollFake(area, excludeName){
+  const candidates = [];
+  for(const r of area.ranks){
+    if(r.name !== excludeName) candidates.push({ name:r.name, rng:r.rng, isMutation:false });
+    if(r.mutations){
+      for(const m of r.mutations){
+        if(m.name !== excludeName) candidates.push({ name:m.name, rng:m.rng, isMutation:true });
+      }
+    }
+  }
+  if(candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+// Increments on every doRoll; lets a pending troll reveal-timeout check if it's still current
+let rollGeneration = 0;
+const SECRET_TIER = { key:'secret', label:'Secret', min:-1, max:-1, cls:'t-secret' };
+
 function tierFor(rng){
   for(const t of TIERS){
     if(rng > t.min && rng <= t.max) return t;
@@ -709,6 +749,89 @@ function rollVariant(){
     }
   }
   return current ? { ...current, totalMult } : null;
+}
+
+/* ============================================================
+   SECRET RANKS
+   - Never appear in the rank index until discovered.
+   - Rarity always displays as "???" everywhere, even after being found.
+   - True rng, completely unaffected by luck multipliers or buffs.
+   - Each has its own bespoke unlock condition, checked once per manual roll.
+   ============================================================ */
+
+const SECRET_RANKS = [
+  {
+    key:'serpent_optics',
+    name:'Serpent Optics',
+    trueRng: 11111,
+    worldKey: 'subworld1', // must be in Subworld 1 (either area)
+    condition(world, area){
+      // Total rolled must contain "11" somewhere in its digits
+      if(!String(state.rolls).includes('11')) return false;
+      // The area's own common (first/lowest-rng rank) owned count must contain "11" in its digits
+      const common = area.ranks[0];
+      const commonCount = getOwnedCount(area.label, common.name, null);
+      if(!String(commonCount).includes('11')) return false;
+      // Local time must be xx:11
+      const now = new Date();
+      if(now.getMinutes() !== 11) return false;
+      return true;
+    },
+  },
+  {
+    key:'hot_potato',
+    name:'Hot Potato',
+    trueRng: 7777,
+    worldKey: 'world1', // must be in World 1, Natural area specifically
+    areaKey: 'natural',
+    condition(world, area){
+      // Total rolled must be odd
+      if(state.rolls % 2 === 0) return false;
+      // Current second must be a multiple of 7
+      const now = new Date();
+      if(now.getSeconds() % 7 !== 0) return false;
+      // Must currently be holding zero of the area's rarest OWNED item (i.e. haven't found the area's best yet)
+      // — keeps it from trivially firing for veteran players parked on the area
+      return true;
+    },
+  },
+];
+
+// Checks all secret rank conditions for the given world/area and returns a winning secret roll, or null.
+// Each eligible secret gets its own independent true-rng roll; if multiple hit, the rarest trueRng wins.
+function rollSecretForArea(world, area){
+  let winner = null;
+  for(const secret of SECRET_RANKS){
+    if(secret.worldKey && secret.worldKey !== world.key) continue;
+    if(secret.areaKey && secret.areaKey !== area.key) continue;
+    if(!secret.condition(world, area)) continue;
+    if(Math.random() < 1 / secret.trueRng){
+      if(!winner || secret.trueRng > winner.trueRng) winner = secret;
+    }
+  }
+  if(!winner) return null;
+  return {
+    name: winner.name,
+    baseRng: winner.trueRng,
+    finalRng: winner.trueRng,
+    tier: SECRET_TIER,
+    variant: null,
+    areaLabel: area.label,
+    isSecret: true,
+    secretKey: winner.key,
+  };
+}
+
+function isSecretDiscovered(key){
+  return !!(state.discoveredSecrets && state.discoveredSecrets[key]);
+}
+
+function markSecretDiscovered(key){
+  if(!state.discoveredSecrets) state.discoveredSecrets = {};
+  if(!state.discoveredSecrets[key]){
+    state.discoveredSecrets[key] = Date.now();
+    dbSaveMeta();
+  }
 }
 
 const WORLD1 = {
@@ -818,7 +941,119 @@ const SUBWORLD1 = {
   ]
 };
 
-const WORLDS = [WORLD1, SUBWORLD1];
+const WORLD0 = {
+  key:'world0',
+  label:'Fun',
+  global: [],
+  areas:[
+    {
+      // Rarity scales as 2^n for n = 0..40. Naming: "Tile {abbreviated 2^n}" (e.g. Tile 65k for 65536).
+      key:'2048', label:'2048',
+      ranks:[
+        { name:'Tile 1', rng:1 },
+        { name:'Tile 2', rng:2 },
+        { name:'Tile 4', rng:4 },
+        { name:'Tile 8', rng:8 },
+        { name:'Tile 16', rng:16 },
+        { name:'Tile 32', rng:32 },
+        { name:'Tile 64', rng:64 },
+        { name:'Tile 128', rng:128 },
+        { name:'Tile 256', rng:256 },
+        { name:'Tile 512', rng:512 },
+        { name:'Tile 1k', rng:1024 },
+        { name:'Tile 2k', rng:2048 },
+        { name:'Tile 4k', rng:4096 },
+        { name:'Tile 8k', rng:8192 },
+        { name:'Tile 16k', rng:16384 },
+        { name:'Tile 32k', rng:32768 },
+        { name:'Tile 65k', rng:65536 },
+        { name:'Tile 131k', rng:131072 },
+        { name:'Tile 262k', rng:262144 },
+        { name:'Tile 524k', rng:524288 },
+        { name:'Tile 1m', rng:1048576 },
+        { name:'Tile 2m', rng:2097152 },
+        { name:'Tile 4m', rng:4194304 },
+        { name:'Tile 8m', rng:8388608 },
+        { name:'Tile 16m', rng:16777216 },
+        { name:'Tile 33m', rng:33554432 },
+        { name:'Tile 67m', rng:67108864 },
+        { name:'Tile 134m', rng:134217728 },
+        { name:'Tile 268m', rng:268435456 },
+        { name:'Tile 536m', rng:536870912 },
+        { name:'Tile 1b', rng:1073741824 },
+        { name:'Tile 2b', rng:2147483648 },
+        { name:'Tile 4b', rng:4294967296 },
+        { name:'Tile 8b', rng:8589934592 },
+        { name:'Tile 17b', rng:17179869184 },
+        { name:'Tile 34b', rng:34359738368 },
+        { name:'Tile 68b', rng:68719476736 },
+        { name:'Tile 137b', rng:137438953472 },
+        { name:'Tile 274b', rng:274877906944 },
+        { name:'Tile 549b', rng:549755813888 },
+        { name:'Tile 1t', rng:1099511627776 },
+      ]
+    },
+    {
+      // Rarity scales as (2^n) * (n^1.5) * 1.75, where n is the letter's position in the alphabet (A=1..Z=26).
+      key:'abc', label:'ABC',
+      ranks:[
+        { name:'A', rng:4 },
+        { name:'B', rng:20 },
+        { name:'C', rng:73 },
+        { name:'D', rng:224 },
+        { name:'E', rng:626 },
+        { name:'F', rng:1646 },
+        { name:'G', rng:4149 },
+        { name:'H', rng:10137 },
+        { name:'I', rng:24192 },
+        { name:'J', rng:56668 },
+        { name:'K', rng:130755 },
+        { name:'L', rng:297968 },
+        { name:'M', rng:671959 },
+        { name:'N', rng:1501931 },
+        { name:'O', rng:3331385 },
+        { name:'P', rng:7340032 },
+        { name:'Q', rng:16077605 },
+        { name:'R', rng:35033758 },
+        { name:'S', rng:75986837 },
+        { name:'T', rng:164128105 },
+        { name:'U', rng:353180649 },
+        { name:'V', rng:757411639 },
+        { name:'W', rng:1619271615 },
+        { name:'X', rng:3452031954 },
+        { name:'Y', rng:7340032000 },
+        { name:'Z', rng:15569618022 },
+      ]
+    },
+    {
+      // Each rank is named after an actual game tier. Its rng is that tier's minimum threshold —
+      // except Usual, which uses 25 instead of its literal min of 1 (since Common already owns 0–1).
+      // Values are min+1 (not the raw min) so each rank actually resolves back to its own tier name
+      // via tierFor's exclusive-min/inclusive-max boundaries.
+      key:'tiers', label:'Tiers',
+      ranks:[
+        { name:'Common', rng:1 },
+        { name:'Usual', rng:25 },
+        { name:'Decent', rng:251 },
+        { name:'Rare', rng:1001 },
+        { name:'Unusual', rng:7501 },
+        { name:'Good', rng:30001 },
+        { name:'Epic', rng:90001 },
+        { name:'Pelicular', rng:250001 },
+        { name:'Horizon', rng:1000001 },
+        { name:'Grandiose', rng:7500001 },
+        { name:'Zenith', rng:30000001 },
+        { name:'Unworldly', rng:100000001 },
+        { name:'Colossal', rng:1000000001 },
+        { name:'Infinite', rng:25000000001 },
+        { name:'Insanity', rng:70000000001 },
+        { name:'Impossible', rng:500000000001 },
+      ]
+    },
+  ]
+};
+
+const WORLDS = [WORLD1, SUBWORLD1, WORLD0];
 
 /* ---------- Craftable items (axes) ---------- */
 const AXES = {
@@ -904,6 +1139,34 @@ const AXES = {
       { name:'Heavenly Mist', area:'Dreamland', amount:5 },
     ],
   },
+  emblem: {
+    key:'emblem', name:'Emblem of the Jackpot',
+    desc:'Every unfinished dream, one lucky pull closer.',
+    stats:{ luckMult:1.77, bulk:17, rps:77 },
+    bonus:'[Blessing] ×1.7 luck to every unfinished material in your pinned recipe. [Reach] Pinned materials can drop in any area, at ×5 rarity. [7 Leaf Clover] Offline every 7 min: +7 rolls at ×7,777 luck. [Big Wins] On roll: 1/777,777 for +777 rolls at ×777,777 luck. [Synergy Pushpin] While Pushpin is also active: an extra ×1.7 luck to the most COMMON unfinished material in your pinned recipe — stacks with Pushpin.',
+    offlineBonus:[
+      { intervalSeconds:420, chancePerInterval:1, minRolls:7, maxRolls:7, bonusLuckMult:7777 },
+    ],
+    clickBonus:[
+      { oneIn:777777, rolls:777, luckMult:777777 },
+    ],
+    // Innate always-on pinning synergy — handled directly in rollOnceForArea
+    blessingLuckMult: 1.7,
+    reachRarityMult: 5,
+    synergyPushpinLuckMult: 1.7,
+    // Rank value: 1×Pearlscence(55,555,555) + 2×Aurora Borealis(15,000,000) + 2×Heavenly(5,000,000)
+    //           + 3×Pearl(2,100,000) + 7×Rainbow Fragment(119,000) + 1×Illusion Crystal(3,000)
+    //           + 222×Dreamstone(222) = 77,777,777 exactly ✓
+    requires:[
+      { name:'Pearlscence',      area:'Dreamland', amount:1   },
+      { name:'Aurora Borealis',  area:'Dreamland', amount:2   },
+      { name:'Heavenly',         area:'Dreamland', amount:2   },
+      { name:'Pearl',            area:'Dreamland', amount:3   },
+      { name:'Rainbow Fragment', area:'Dreamland', amount:7   },
+      { name:'Illusion Crystal', area:'Dreamland', amount:1   },
+      { name:'Dreamstone',       area:'Dreamland', amount:222 },
+    ],
+  },
   glowaxe: {
     key:'glowaxe', name:'GlowAxe',
     desc:'Carved from light that refuses to fade.',
@@ -946,7 +1209,7 @@ const AXES = {
     ],
   },
 };
-const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism','glowaxe','silkinator'];
+const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','silkinator'];
 
 const CONSUMABLES = {
   pushpin: {
@@ -1024,6 +1287,7 @@ let state = {
   clickCount: 0,
   anticheatLockUntil: null,
   wgunStacks: [],           // array of { expiresAt: timestamp }, max 3
+  discoveredSecrets: {},    // { secretKey: firstDiscoveredAtTimestamp }
 };
 
 const MAX_OFFLINE_SECONDS = 7 * 24 * 60 * 60; // 7 day cap
@@ -1076,6 +1340,7 @@ async function dbSaveMeta(){
       clickCount: state.clickCount,
       anticheatLockUntil: state.anticheatLockUntil,
       wgunStacks: state.wgunStacks,
+      discoveredSecrets: state.discoveredSecrets,
     });
   }catch(err){ console.error('Failed to save meta', err); }
 }
@@ -1112,6 +1377,7 @@ async function dbLoadAll(){
       state.anticheatLockUntil = meta.anticheatLockUntil || null;
       state.clickCount = meta.clickCount || 0;
       state.wgunStacks = meta.wgunStacks || [];
+      state.discoveredSecrets = meta.discoveredSecrets || {};
     }
 
     const invTx = db.transaction(STORE_INV, 'readonly');
@@ -1135,8 +1401,8 @@ function addToInventory(result, count){
   count = count || 1;
   const key = invKey(result.areaLabel, result.name, result.variant ? result.variant.key : null);
   const existing = state.inventory[key];
-  // Tier is always based on the BASE rng, not the variant-inflated finalRng
-  const baseTier = tierFor(result.baseRng);
+  // Tier is always based on the BASE rng, not the variant-inflated finalRng — secrets use the fixed Secret tier
+  const baseTier = result.isSecret ? SECRET_TIER : tierFor(result.baseRng);
   if(existing){
     existing.count += count;
     existing.lastRng = result.finalRng;
@@ -1155,6 +1421,7 @@ function addToInventory(result, count){
       variant: result.variant ? { key:result.variant.key, label:result.variant.label, cls:result.variant.cls, totalMult:result.variant.totalMult } : null,
       count: count,
       firstAt: Date.now(),
+      isSecret: !!result.isSecret,
     };
     state.inventory[key] = item;
     dbSaveInvItem(item);
@@ -1185,20 +1452,31 @@ function pinnedRecipeData(){
 
 // The rarest material in the pinned recipe that the player hasn't fully gathered yet
 function rarestUnfinishedMaterial(){
+  const list = allUnfinishedMaterials();
+  if(!list.length) return null;
+  return list.reduce((a,b)=> b.rng > a.rng ? b : a);
+}
+
+// The most common (lowest rng) material in the pinned recipe that the player hasn't fully gathered yet
+function mostCommonUnfinishedMaterial(){
+  const list = allUnfinishedMaterials();
+  if(!list.length) return null;
+  return list.reduce((a,b)=> b.rng < a.rng ? b : a);
+}
+
+// Every material in the pinned recipe that the player hasn't fully gathered yet
+function allUnfinishedMaterials(){
   const recipe = pinnedRecipeData();
-  if(!recipe) return null;
-  let rarest = null;
+  if(!recipe) return [];
+  const list = [];
   for(const req of recipe.requires){
     const have = getOwnedCount(req.area, req.name, req.variant);
     if(have >= req.amount) continue;
-    // Look up the material's base rng from the world data so we know how rare it is
     const rng = findRankRng(req.area, req.name);
     if(rng == null) continue;
-    if(!rarest || rng > rarest.rng){
-      rarest = { name:req.name, area:req.area, rng, variant:req.variant || null };
-    }
+    list.push({ name:req.name, area:req.area, rng, variant:req.variant || null });
   }
-  return rarest;
+  return list;
 }
 
 // Finds a rank or mutation's base rng by area label, searching across all worlds
@@ -1258,7 +1536,24 @@ function rollOnceForArea(world, area, luckMult, opts){
     }
   }
 
-  // Per-item effective rng after buffs (e.g. Pushpin easing its target material)
+  // Emblem of the Jackpot — always-on innate synergy while equipped (not a timed consumable buff)
+  const equippedAxe = currentAxe();
+  const emblemActive = applyBuffs && equippedAxe.key === 'emblem';
+  const emblemUnfinished = emblemActive ? allUnfinishedMaterials() : [];
+  const emblemCommonTarget = (emblemActive && pushpinActive) ? mostCommonUnfinishedMaterial() : null;
+
+  // [Reach]: every unfinished pinned material can drop in any area, at ×5 rarity
+  if(emblemActive){
+    for(const mat of emblemUnfinished){
+      if(mat.area === area.label) continue; // already native here, no need to inject
+      const alreadyInPool = pool.some(p => p.name === mat.name);
+      if(!alreadyInPool){
+        pool.push({ name:mat.name, rng:mat.rng * equippedAxe.reachRarityMult, isMutation:false, injectedAreaLabel:mat.area });
+      }
+    }
+  }
+
+  // Per-item effective rng after buffs (Pushpin easing its target, Emblem's Blessing/Synergy Pushpin)
   function effectiveRng(item){
     let rng = item.rng;
     if(pushpinActive && buffTarget && buffTarget.area === area.label && buffTarget.name === item.name){
@@ -1267,12 +1562,25 @@ function rollOnceForArea(world, area, luckMult, opts){
     return rng;
   }
 
+  // Per-item effective luck after Emblem's Blessing (×1.7 to all unfinished pinned materials)
+  // and Synergy Pushpin (an extra ×1.7 to the most common unfinished material, stacking with Pushpin)
+  function effectiveLuckForItem(item, baseLuck){
+    let l = baseLuck;
+    if(emblemActive && emblemUnfinished.some(m => m.name === item.name)){
+      l *= equippedAxe.blessingLuckMult;
+      if(emblemCommonTarget && emblemCommonTarget.name === item.name){
+        l *= equippedAxe.synergyPushpinLuckMult;
+      }
+    }
+    return l;
+  }
+
   // 1. Identify the highest guaranteed RNG that luck would automatically roll
   let highestGuaranteedRng = 0;
   for(const item of pool) {
     if(item.rng !== Infinity) {
       const rng = effectiveRng(item);
-      const itemLuckMult = item.isMutation ? luckMult * mutationLuckMult : luckMult;
+      const itemLuckMult = effectiveLuckForItem(item, item.isMutation ? luckMult * mutationLuckMult : luckMult);
       const effectiveChance = itemLuckMult / rng;
       if(effectiveChance >= 1) {
         if(rng > highestGuaranteedRng) {
@@ -1295,7 +1603,7 @@ function rollOnceForArea(world, area, luckMult, opts){
     }
 
     const rng = effectiveRng(item);
-    const itemLuckMult = item.isMutation ? luckMult * mutationLuckMult : luckMult;
+    const itemLuckMult = effectiveLuckForItem(item, item.isMutation ? luckMult * mutationLuckMult : luckMult);
 
     const isSkipped = rng < highestGuaranteedRng;
     if(isSkipped) {
@@ -1335,6 +1643,14 @@ function rollOnceForArea(world, area, luckMult, opts){
 function rollOnce(){
   const world = WORLDS[state.worldIdx];
   const area = world.areas[state.areaIdx];
+
+  // Secret ranks are checked first — true rng, bypasses luck/buffs entirely, real-time clock gated
+  const secretHit = rollSecretForArea(world, area);
+  if(secretHit){
+    markSecretDiscovered(secretHit.secretKey);
+    return secretHit;
+  }
+
   const luckMult = currentAxe().stats.luckMult;
   return rollOnceForArea(world, area, luckMult);
 }
@@ -1356,6 +1672,11 @@ function fmtRng(n){
   if(n === Infinity) return '∞';
   if(n < 1) return '1';
   return Math.round(n).toLocaleString();
+}
+
+// Secret ranks always display "???" for rarity, regardless of context
+function fmtRngOrSecret(isSecret, n){
+  return isSecret ? '???' : fmtRng(n);
 }
 
 function escapeHtml(s){
@@ -1402,24 +1723,47 @@ function renderAxeStrip(){
   `;
 }
 
-function renderStage(result, count){
+function renderStage(result, count, trollOverride){
   const stage = document.getElementById('stage');
-  const baseTier = tierFor(result.baseRng);
-  const glowCls = ['epic','pelicular','horizon','grandiose','zenith','unworldly'].includes(baseTier.key) ? `glow-${baseTier.key}` : '';
-  const variantCls = result.variant ? result.variant.cls : '';
+  const baseTier = result.isSecret ? SECRET_TIER : tierFor(result.baseRng);
+  const glowCls = result.isSecret ? 'glow-secret' : (['epic','pelicular','horizon','grandiose','zenith','unworldly'].includes(baseTier.key) ? `glow-${baseTier.key}` : '');
+
+  if(trollOverride){
+    // Cosmetic-only fake display, styled identically to a real result so it's indistinguishable
+    // for the full 3 seconds. The real result underneath is already committed in state/inventory/log.
+    const fakeTier = tierFor(trollOverride.rng);
+    const fakeGlow = ['epic','pelicular','horizon','grandiose','zenith','unworldly'].includes(fakeTier.key) ? `glow-${fakeTier.key}` : '';
+    const fakeNameHtml = rankNameHtml(trollOverride.name, fakeTier.cls, null, fakeGlow);
+    stage.innerHTML = `
+      <div class="result-tier">${result.areaLabel} · ${fakeTier.label}</div>
+      <div class="result-name">${fakeNameHtml}</div>
+      <div class="result-rng">1 in ${fmtRng(trollOverride.rng)}</div>
+      ${count && count > 1 ? `<div class="multi-note">shown: rarest of ${count} rolls (bulk)</div>` : ''}
+    `;
+    if(['pelicular','horizon','grandiose','zenith','unworldly','colossal','infinite','insanity','impossible'].includes(fakeTier.key)){
+      const flash = document.getElementById('flashBg');
+      flash.style.background = `radial-gradient(circle at 50% 40%, ${tierGlowColor(fakeTier.key)}, transparent 70%)`;
+      flash.classList.remove('go');
+      void flash.offsetWidth;
+      flash.classList.add('go');
+    }
+    return;
+  }
+
   const nameHtml = rankNameHtml(result.name, baseTier.cls, result.variant, glowCls);
 
   stage.innerHTML = `
     <div class="result-tier">${result.areaLabel} · ${baseTier.label}</div>
     <div class="result-name">${nameHtml}</div>
-    <div class="result-rng">1 in ${fmtRng(result.finalRng)}</div>
+    <div class="result-rng">${result.isSecret ? '1 in ???' : `1 in ${fmtRng(result.finalRng)}`}</div>
     ${result.variant ? `<div class="result-variant">✦ ${result.variant.label} variant (×${result.variant.totalMult})</div>` : ''}
+    ${result.isSecret ? `<div class="result-variant">🔒 Secret rank discovered!</div>` : ''}
     ${count && count > 1 ? `<div class="multi-note">shown: rarest of ${count} rolls (bulk)</div>` : ''}
   `;
 
-  if(['pelicular','horizon','grandiose','zenith','unworldly','colossal','infinite','insanity','impossible'].includes(baseTier.key)){
+  if(result.isSecret || ['pelicular','horizon','grandiose','zenith','unworldly','colossal','infinite','insanity','impossible'].includes(baseTier.key)){
     const flash = document.getElementById('flashBg');
-    flash.style.background = `radial-gradient(circle at 50% 40%, ${tierGlowColor(baseTier.key)}, transparent 70%)`;
+    flash.style.background = `radial-gradient(circle at 50% 40%, ${result.isSecret ? '#a855f7' : tierGlowColor(baseTier.key)}, transparent 70%)`;
     flash.classList.remove('go');
     void flash.offsetWidth;
     flash.classList.add('go');
@@ -1439,12 +1783,12 @@ function renderLog(){
     return;
   }
   log.innerHTML = state.log.map(r => {
-    const baseTier = tierFor(r.baseRng);
-    const suffix = r.variant ? ' ✦' : '';
+    const baseTier = r.isSecret ? SECRET_TIER : tierFor(r.baseRng);
+    const suffix = r.variant ? ' ✦' : (r.isSecret ? ' 🔒' : '');
     return `
     <div class="log-row">
       <span class="lname">${rankNameHtml(r.name, baseTier.cls, r.variant)}${suffix}</span>
-      <span class="lrng">1/${fmtRng(r.finalRng)}</span>
+      <span class="lrng">${fmtRngOrSecret(r.isSecret, r.finalRng)}</span>
     </div>
   `}).join('');
 }
@@ -1452,7 +1796,9 @@ function renderLog(){
 function updateStatStrip(){
   document.getElementById('statRolls').textContent = state.rolls.toLocaleString();
   document.getElementById('statRps').textContent = effectiveRps();
-  document.getElementById('statBest').textContent = state.best ? tierFor(state.best.baseRng).label : '—';
+  document.getElementById('statBest').textContent = state.best
+    ? (state.best.isSecret ? 'Secret ✦' : tierFor(state.best.baseRng).label)
+    : '—';
 }
 
 function renderWorldTabs(){
@@ -1550,17 +1896,21 @@ function renderInventory(){
     return;
   }
 
-  items.sort((a,b)=> b.lastRng - a.lastRng);
+  items.sort((a,b)=> {
+    if(a.isSecret && !b.isSecret) return -1;
+    if(!a.isSecret && b.isSecret) return 1;
+    return b.lastRng - a.lastRng;
+  });
 
   list.innerHTML = items.map(it => {
     const variantTxt = it.variant ? ` · ${it.variant.label}` : '';
-    const suffix = it.variant ? ' ✦' : '';
+    const suffix = it.variant ? ' ✦' : (it.isSecret ? ' 🔒' : '');
     const nameEl = rankNameHtml(it.name, it.tierCls, it.variant);
     return `
       <div class="inv-row">
         <div>
           <div class="iname">${nameEl}${suffix}</div>
-          <div class="imeta">${it.areaLabel} · 1/${fmtRng(it.lastRng)} · ${it.tierLabel}${variantTxt}</div>
+          <div class="imeta">${it.areaLabel} · ${fmtRngOrSecret(it.isSecret, it.lastRng)} · ${it.tierLabel}${variantTxt}</div>
         </div>
         <span class="icount">×${it.count.toLocaleString()}</span>
       </div>
@@ -1609,6 +1959,13 @@ function buildIndexAccordion(){
           rowsHtml += `<div class="rank-row" style="padding-left:16px; opacity:0.9;"><span class="rname ${mt.cls}" style="font-size:13px;">↳ ${m.name}</span><span class="rrng">1/${fmtRng(m.rng)} · ${mt.label}</span></div>`;
         }
       }
+    }
+    // Secret ranks tied to this world/area only appear once discovered — rarity always stays hidden
+    for(const secret of SECRET_RANKS){
+      if(secret.worldKey && secret.worldKey !== world.key) continue;
+      if(secret.areaKey && secret.areaKey !== area.key) continue;
+      if(!isSecretDiscovered(secret.key)) continue;
+      rowsHtml += `<div class="rank-row secret-row"><span class="rname t-secret">🔒 ${secret.name}</span><span class="rrng">??? · Secret</span></div>`;
     }
     html += `
       <div class="acc-item" data-acc="${area.key}">
@@ -2105,7 +2462,26 @@ function doRoll(){
     addToInventory(r, 1);
   }
   pushLog(best);
-  renderStage(best, bulk + clickBonusFired);
+
+  // Troll roll: 1/5,000 chance on an Unworldly+ result to fake you out for 3 seconds first,
+  // showing a different REAL rank from the same area with its actual listed rarity.
+  // Inventory, log, and stats above are already committed to the REAL result — this is display-only.
+  const bestTier = best.isSecret ? null : tierFor(best.baseRng);
+  const trollEligible = bestTier && TROLL_TIER_KEYS.includes(bestTier.key);
+  const trollArea = WORLDS[state.worldIdx].areas[state.areaIdx];
+  const fake = trollEligible && Math.random() < TROLL_CHANCE ? rollTrollFake(trollArea, best.name) : null;
+  if(fake){
+    rollGeneration++;
+    const myGeneration = rollGeneration;
+    renderStage(best, bulk + clickBonusFired, fake);
+    setTimeout(()=>{
+      if(myGeneration === rollGeneration) renderStage(best, bulk + clickBonusFired);
+    }, 3000);
+  } else {
+    rollGeneration++;
+    renderStage(best, bulk + clickBonusFired);
+  }
+
   renderInventory();
   refreshLiveViews();
 
