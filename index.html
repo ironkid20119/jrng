@@ -339,6 +339,7 @@
   .rank-row:last-child{ border-bottom:none; }
   .rank-row .rname{ font-family:var(--display); font-weight:700; font-size:15px; display:inline-block; }
   .rank-row .rrng{ font-family:var(--mono); font-size:11px; color:var(--text-dim); }
+  .rank-row .rank-src{ opacity:0.6; font-style:italic; }
 
   /* ---------- Items / crafting ---------- */
   .item-cards{ display:flex; flex-direction:column; gap:14px; }
@@ -580,7 +581,6 @@
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <span class="eyebrow">beta release · be patient</span>
       <h1>Juni's RNG Game</h1>
     </div>
     <div class="stat-strip">
@@ -1050,6 +1050,43 @@ const WORLD0 = {
         { name:'Impossible', rng:500000000001 },
       ]
     },
+    {
+      // "All" doesn't have its own fixed rank list — at roll-time it pulls from EVERY rank and
+      // mutation in EVERY other area of the game, all made x200 rarer (debuffMult). This is a
+      // PURE ODDS-TIME debuff: whatever gets caught reverts to its true listed rarity and is
+      // credited to its actual home area (same mechanism the "revert on catch" fix uses for
+      // Reach/Gloves), so it stacks onto the exact same inventory entry a normal roll of that
+      // item elsewhere would produce. `ranks` stays empty here — see rollOnceForArea's
+      // isUniversalPool handling for how the real pool gets built dynamically.
+      key:'all', label:'All', debuffMult:200, isUniversalPool:true,
+      ranks:[]
+    },
+    {
+      key:'placeholderland', label:'Placeholder Land',
+      ranks:[
+        { name:'Weird Fragment', rng:1 },
+        { name:'Goofy Gring', rng:25 },
+        { name:'H-ium', rng:169 },
+        { name:'☢️', rng:400 },
+        { name:'Canna Beans', rng:700 },
+        { name:'A Trillionth Of A J', rng:1000, mutations:[{name:'The Rest Of The J', rng:1000000000000000}] },
+        { name:'🥉', rng:2500, mutations:[{name:'🥈', rng:1000000}, {name:'🥇', rng:25000000000}] },
+        { name:'Toilet', rng:15000, mutations:[{name:'GOLDEN TOILET AWARD', rng:200000000}] },
+        { name:'Yummy Delicious Chocolate', rng:70000 },
+        { name:'1 lb of Hair (eww)', rng:100001 },
+        { name:'Air', rng:250000, mutations:[{name:'         ', rng:6900000000}] },
+        { name:'Granky', rng:5555555 },
+        { name:'Oumbaß', rng:12345678 },
+        { name:'Eel', rng:39916800 },
+        { name:'GLOVE', rng:52570000 },
+        { name:'This Rank Can Only Be Rolled On A Specific Minute Better Not Hope Its xx:59 LOSER 😂😂😂😂😂', rng:80000000 },
+        { name:'Comic Book', rng:100000000 },
+        { name:'ELECTRIC BLANKET!!!', rng:333222111 },
+        { name:'The Burger YOU Ate', rng:694200000 },
+        { name:"'Every Area Needs A Rare Ass Thing' Shut Up Bro", rng:250000000000 },
+        { name:'Botl Cap', rng:750000000000 },
+      ]
+    },
   ]
 };
 
@@ -1314,43 +1351,81 @@ function openDB(){
       if(!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META, { keyPath:'id' });
       if(!db.objectStoreNames.contains(STORE_INV)) db.createObjectStore(STORE_INV, { keyPath:'key' });
     };
-    req.onsuccess = (e)=> resolve(e.target.result);
-    req.onerror = (e)=>{ console.error('IndexedDB open failed', e); reject(e); };
+    req.onsuccess = (e)=>{
+      const db = e.target.result;
+      // If the connection ever closes (browser reclaiming it, another tab forcing a version
+      // change, etc.) the cached dbPromise would otherwise keep handing out a dead connection
+      // forever, and every future save would throw "database connection is closing" — silently
+      // breaking persistence until a full page reload. Invalidate the cache so the next
+      // openDB() call reopens a fresh connection instead.
+      db.onclose = ()=>{ dbPromise = null; };
+      db.onversionchange = ()=>{ db.close(); dbPromise = null; };
+      resolve(db);
+    };
+    req.onerror = (e)=>{ dbPromise = null; console.error('IndexedDB open failed', e); reject(e); };
   });
   return dbPromise;
 }
 
-async function dbSaveMeta(){
+// Runs a DB operation, and if it fails because the cached connection is stale/closing, clears
+// the cache and retries exactly once against a freshly-opened connection.
+async function withDbRetry(fn){
   try{
     const db = await openDB();
-    const tx = db.transaction(STORE_META, 'readwrite');
-    tx.objectStore(STORE_META).put({
-      id:'state',
-      rolls: state.rolls,
-      best: state.best,
-      worldIdx: state.worldIdx,
-      areaIdx: state.areaIdx,
-      ownedAxes: state.ownedAxes,
-      equippedAxe: state.equippedAxe,
-      lastSeenAt: state.lastSeenAt,
-      pinnedRecipe: state.pinnedRecipe,
-      consumables: state.consumables,
-      activeBuffs: state.activeBuffs,
-      bombCharge: state.bombCharge,
-      clickCount: state.clickCount,
-      anticheatLockUntil: state.anticheatLockUntil,
-      wgunStacks: state.wgunStacks,
-      discoveredSecrets: state.discoveredSecrets,
+    return await fn(db);
+  }catch(err){
+    const isStaleConnection = err && (err.name === 'InvalidStateError' || /closing/i.test(err.message || ''));
+    if(isStaleConnection){
+      dbPromise = null;
+      const db = await openDB();
+      return await fn(db);
+    }
+    throw err;
+  }
+}
+
+async function dbSaveMeta(){
+  try{
+    await withDbRetry(async (db)=>{
+      const tx = db.transaction(STORE_META, 'readwrite');
+      tx.objectStore(STORE_META).put({
+        id:'state',
+        rolls: state.rolls,
+        best: state.best,
+        worldIdx: state.worldIdx,
+        areaIdx: state.areaIdx,
+        ownedAxes: state.ownedAxes,
+        equippedAxe: state.equippedAxe,
+        lastSeenAt: state.lastSeenAt,
+        pinnedRecipe: state.pinnedRecipe,
+        consumables: state.consumables,
+        activeBuffs: state.activeBuffs,
+        bombCharge: state.bombCharge,
+        clickCount: state.clickCount,
+        anticheatLockUntil: state.anticheatLockUntil,
+        wgunStacks: state.wgunStacks,
+        discoveredSecrets: state.discoveredSecrets,
+      });
     });
   }catch(err){ console.error('Failed to save meta', err); }
 }
 
 async function dbSaveInvItem(item){
   try{
-    const db = await openDB();
-    const tx = db.transaction(STORE_INV, 'readwrite');
-    tx.objectStore(STORE_INV).put(item);
+    await withDbRetry(async (db)=>{
+      const tx = db.transaction(STORE_INV, 'readwrite');
+      tx.objectStore(STORE_INV).put(item);
+    });
   }catch(err){ console.error('Failed to save inventory item', err); }
+}
+
+async function dbDeleteInvItem(key){
+  try{
+    await withDbRetry(async (db)=>{
+      const tx = db.transaction(STORE_INV, 'readwrite');
+      tx.objectStore(STORE_INV).delete(key);
+    });
+  }catch(err){ console.error('Failed to delete inventory item', err); }
 }
 
 async function dbLoadAll(){
@@ -1388,9 +1463,96 @@ async function dbLoadAll(){
     });
     state.inventory = {};
     for(const it of items) state.inventory[it.key] = it;
+
+    // One-time migration: older versions of Reach/Gloves could store items under whichever
+    // area they were ROLLED in rather than their true home area, and at a debuffed rarity
+    // (e.g. "Aurora Borealis" filed under Wasteland at 37,500,000 instead of its real home,
+    // Dreamland, at 7,500,000). Detect and repair any such stale entries by merging their
+    // counts into the correct entry and deleting the mis-filed one.
+    await migrateMisattributedInventory();
   }catch(err){
     console.error('Failed to load saved data, starting fresh', err);
   }
+}
+
+async function migrateMisattributedInventory(){
+  const toDelete = [];
+  const toMerge = {}; // correctKey -> extra count to add
+
+  for(const key in state.inventory){
+    const it = state.inventory[key];
+    if(it.isSecret) continue; // secrets aren't tied to normal rank data, skip
+
+    const trueRng = findRankRng(it.areaLabel, it.name);
+    // If the item's name doesn't actually exist in its stored areaLabel, it was mis-filed —
+    // find its real home area across all worlds instead.
+    if(trueRng == null){
+      let realArea = null, realRng = null;
+      for(const world of WORLDS){
+        for(const area of world.areas){
+          for(const r of area.ranks){
+            if(r.name === it.name){ realArea = area.label; realRng = r.rng; break; }
+            if(r.mutations){
+              const m = r.mutations.find(mm => mm.name === it.name);
+              if(m){ realArea = area.label; realRng = m.rng; break; }
+            }
+          }
+          if(realArea) break;
+        }
+        if(realArea) break;
+      }
+      if(realArea){
+        const correctKey = invKey(realArea, it.name, it.variant ? it.variant.key : null);
+        toMerge[correctKey] = (toMerge[correctKey] || 0) + it.count;
+        toDelete.push(key);
+      }
+      continue;
+    }
+
+    // Item exists in its stored area, but was the rng itself corrupted by a stale debuff?
+    if(it.baseRng !== trueRng){
+      const correctKey = invKey(it.areaLabel, it.name, it.variant ? it.variant.key : null);
+      if(correctKey !== key){
+        toMerge[correctKey] = (toMerge[correctKey] || 0) + it.count;
+        toDelete.push(key);
+      } else {
+        // Same key, just needs its rng corrected in place
+        it.baseRng = trueRng;
+        const fixedTier = tierFor(trueRng);
+        it.tierKey = fixedTier.key; it.tierLabel = fixedTier.label; it.tierCls = fixedTier.cls;
+        dbSaveInvItem(it);
+      }
+    }
+  }
+
+  if(toDelete.length === 0) return;
+
+  for(const key of toDelete){
+    delete state.inventory[key];
+    dbDeleteInvItem(key);
+  }
+  for(const correctKey in toMerge){
+    const existing = state.inventory[correctKey];
+    if(existing){
+      existing.count += toMerge[correctKey];
+      dbSaveInvItem(existing);
+    } else {
+      // Reconstruct a minimal valid entry for the correct area/name
+      const [areaLabel, name, variantKey] = correctKey.split('|');
+      const rng = findRankRng(areaLabel, name);
+      if(rng != null){
+        const t = tierFor(rng);
+        const fresh = {
+          key: correctKey, name, areaLabel, baseRng: rng, lastRng: rng,
+          tierKey: t.key, tierLabel: t.label, tierCls: t.cls,
+          variant: null, count: toMerge[correctKey], firstAt: Date.now(), isSecret: false,
+        };
+        state.inventory[correctKey] = fresh;
+        dbSaveInvItem(fresh);
+      }
+    }
+  }
+  console.log(`Migrated ${toDelete.length} mis-attributed inventory entries.`);
 }
 
 function invKey(areaLabel, name, variantKey){
@@ -1493,6 +1655,13 @@ function findRankRng(areaLabel, name){
         }
       }
     }
+    // Global items are area-agnostic within their world — check if this areaLabel belongs
+    // to this world, and if so, also search its globals.
+    if(world.areas.some(a => a.label === areaLabel)){
+      for(const g of world.global){
+        if(g.name === name) return g.rng;
+      }
+    }
   }
   return null;
 }
@@ -1511,47 +1680,99 @@ function clearPinnedRecipe(){
    ROLLING LOGIC
    ============================================================ */
 
+// Builds the roll pool for a given area: normally just that area's own ranks/mutations, but for
+// isUniversalPool areas (like "All"), pulls from every OTHER area in the game instead. Always
+// applies the area's debuffMult (if any) to rarity for odds purposes — reverted on catch by
+// resolveRollWinner's use of findRankRng. Shared by rollOnceForArea, the offline worker sim, and
+// the offline fallback sim so all three paths stay consistent.
+function buildAreaPool(world, area){
+  const pool = [];
+  const areaDebuffMult = area.debuffMult || 1;
+
+  if(area.isUniversalPool){
+    for(const w of WORLDS){
+      for(const a of w.areas){
+        if(a.key === area.key) continue;
+        for(const r of a.ranks){
+          pool.push({ name:r.name, rng:r.rng * areaDebuffMult, isMutation:false, injectedAreaLabel:a.label });
+          if(r.mutations){
+            for(const m of r.mutations){
+              pool.push({ name:m.name, rng:m.rng * areaDebuffMult, isMutation:true, injectedAreaLabel:a.label });
+            }
+          }
+        }
+      }
+    }
+  } else {
+    for(const r of area.ranks){
+      pool.push({ name:r.name, rng:r.rng * areaDebuffMult, isMutation:false });
+      if(r.mutations) for(const m of r.mutations) pool.push({ name:m.name, rng:m.rng * areaDebuffMult, isMutation:true });
+    }
+  }
+  for(const g of world.global) pool.push({ name:g.name, rng:g.rng === Infinity ? Infinity : g.rng * areaDebuffMult, isMutation:false });
+
+  return pool;
+}
+
 function rollOnceForArea(world, area, luckMult, opts){
   opts = opts || {};
   const mutationLuckMult = opts.mutationLuckMult || 1;
   const applyBuffs = opts.applyBuffs !== false; // default true
 
-  const pool = [];
-  for(const r of area.ranks){
-    pool.push({ name:r.name, rng:r.rng, isMutation:false });
-    if(r.mutations) for(const m of r.mutations) pool.push({ name:m.name, rng:m.rng, isMutation:true });
-  }
-  for(const g of world.global) pool.push({ name:g.name, rng:g.rng, isMutation:false });
+  const pool = buildAreaPool(world, area);
 
-  // Active buff: Universal Recipe Gloves lets the pinned recipe's rarest missing
-  // material drop in any area (at double rarity), even if it's not native here.
+  // --- Unified "Reach" mechanic ---------------------------------------------------------
+  // Multiple sources can let pinned-recipe materials drop outside their home area (at some
+  // rarity penalty): Universal Recipe Gloves (consumable, ×2, targets only the rarest missing
+  // material) and Emblem of the Jackpot's innate [Reach] (always-on while equipped, ×5, targets
+  // EVERY unfinished material). Rather than each being its own bespoke pool-injection block,
+  // both funnel through the same reachSources list below so future reach effects don't need to
+  // duplicate this logic again.
+  const equippedAxe = currentAxe();
   const pushpinActive = applyBuffs && state.activeBuffs && state.activeBuffs.pushpin && state.activeBuffs.pushpin.rollsLeft > 0;
   const glovesActive = applyBuffs && state.activeBuffs && state.activeBuffs.gloves && state.activeBuffs.gloves.rollsLeft > 0;
-  const buffTarget = (pushpinActive || glovesActive) ? rarestUnfinishedMaterial() : null;
+  const emblemActive = applyBuffs && equippedAxe.key === 'emblem';
 
-  if(glovesActive && buffTarget && buffTarget.area !== area.label){
-    const alreadyInPool = pool.some(p => p.name === buffTarget.name);
-    if(!alreadyInPool){
-      pool.push({ name:buffTarget.name, rng:buffTarget.rng * 2, isMutation:false, injectedAreaLabel:buffTarget.area });
-    }
+  const reachSources = [];
+  if(glovesActive){
+    // Gloves only reaches for the single rarest unfinished material
+    const target = rarestUnfinishedMaterial();
+    if(target) reachSources.push({ materials:[target], rarityMult:2 });
+  }
+  if(emblemActive){
+    // Emblem's innate Reach covers every unfinished material at once
+    const mats = allUnfinishedMaterials();
+    if(mats.length) reachSources.push({ materials:mats, rarityMult:equippedAxe.reachRarityMult });
   }
 
-  // Emblem of the Jackpot — always-on innate synergy while equipped (not a timed consumable buff)
-  const equippedAxe = currentAxe();
-  const emblemActive = applyBuffs && equippedAxe.key === 'emblem';
-  const emblemUnfinished = emblemActive ? allUnfinishedMaterials() : [];
-  const emblemCommonTarget = (emblemActive && pushpinActive) ? mostCommonUnfinishedMaterial() : null;
-
-  // [Reach]: every unfinished pinned material can drop in any area, at ×5 rarity
-  if(emblemActive){
-    for(const mat of emblemUnfinished){
-      if(mat.area === area.label) continue; // already native here, no need to inject
-      const alreadyInPool = pool.some(p => p.name === mat.name);
-      if(!alreadyInPool){
-        pool.push({ name:mat.name, rng:mat.rng * equippedAxe.reachRarityMult, isMutation:false, injectedAreaLabel:mat.area });
+  // Inject each reach source's materials into the current area's pool if they're not already native here.
+  // If multiple sources want to reach the same material, the LOWEST rarity multiplier (most generous) wins.
+  const injectedRarity = {}; // name -> best (lowest) rarityMult seen so far
+  for(const source of reachSources){
+    for(const mat of source.materials){
+      if(mat.area === area.label) continue; // already native, no injection needed
+      if(injectedRarity[mat.name] == null || source.rarityMult < injectedRarity[mat.name]){
+        injectedRarity[mat.name] = source.rarityMult;
       }
     }
   }
+  for(const name in injectedRarity){
+    const alreadyInPool = pool.some(p => p.name === name);
+    if(alreadyInPool) continue;
+    // Find the material's home rng from whichever source listed it
+    let mat = null;
+    for(const source of reachSources){
+      mat = source.materials.find(m => m.name === name);
+      if(mat) break;
+    }
+    if(mat) pool.push({ name:mat.name, rng:mat.rng * injectedRarity[name], isMutation:false, injectedAreaLabel:mat.area });
+  }
+
+  // Pushpin's own rarity-easing effect still targets just the rarest unfinished material specifically
+  const buffTarget = pushpinActive ? rarestUnfinishedMaterial() : null;
+
+  const emblemUnfinished = emblemActive ? allUnfinishedMaterials() : [];
+  const emblemCommonTarget = (emblemActive && pushpinActive) ? mostCommonUnfinishedMaterial() : null;
 
   // Per-item effective rng after buffs (Pushpin easing its target, Emblem's Blessing/Synergy Pushpin)
   function effectiveRng(item){
@@ -1591,13 +1812,25 @@ function rollOnceForArea(world, area, luckMult, opts){
   }
 
   // 2. Perform rolling checks with 1/5 minimum fallback cap for skipped ranks
-  let normalWinner = null;
-  let bypassedWinner = null;
+  // Track ALL items that pass their check at the best (rarest) rng seen so far, not just the
+  // first one encountered — ties are broken with a genuine uniform 1/n pick at the end, rather
+  // than always favoring whichever happened to iterate first.
+  let normalWinners = [];   // all items tied for the best passing rng
+  let bypassedWinners = [];
+
+  // "All" area cap: no item's roll-time chance can ever EXCEED 1/3, no matter how much luck is
+  // thrown at it. This stops luck from trivializing astronomically rare items down in "All" —
+  // it's a CEILING on how good the odds can get, not a floor that boosts bad odds upward.
+  const maxRollChance = area.isUniversalPool ? (1/3) : 1;
 
   for(const item of pool){
     if(item.rng === Infinity){
       if(Math.random() < 0.0005 * luckMult){
-        if(!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
+        if(normalWinners.length === 0 || item.rng > normalWinners[0].rng){
+          normalWinners = [item];
+        } else if(item.rng === normalWinners[0].rng){
+          normalWinners.push(item);
+        }
       }
       continue;
     }
@@ -1609,35 +1842,59 @@ function rollOnceForArea(world, area, luckMult, opts){
     if(isSkipped) {
       // flat 1/5 (20%) roll rate if skipped by high luck
       if(Math.random() < 0.2) {
-        if(!bypassedWinner || item.rng > bypassedWinner.rng) {
-          bypassedWinner = item;
+        if(bypassedWinners.length === 0 || item.rng > bypassedWinners[0].rng){
+          bypassedWinners = [item];
+        } else if(item.rng === bypassedWinners[0].rng){
+          bypassedWinners.push(item);
         }
       }
     } else {
-      const effectiveChance = itemLuckMult / rng;
+      const effectiveChance = Math.min(itemLuckMult / rng, maxRollChance);
       if(Math.random() < effectiveChance){
-        if(!normalWinner || item.rng > normalWinner.rng) {
-          normalWinner = item;
+        if(normalWinners.length === 0 || item.rng > normalWinners[0].rng){
+          normalWinners = [item];
+        } else if(item.rng === normalWinners[0].rng){
+          normalWinners.push(item);
         }
       }
     }
   }
 
   // Choose bypassed item if it won, unless normal roll picked up something rarer than the skipped threshold
-  let winner = normalWinner;
-  if (bypassedWinner) {
-    if (!winner || winner.rng <= highestGuaranteedRng) {
-      winner = bypassedWinner;
+  let winnerPool = normalWinners;
+  if (bypassedWinners.length) {
+    if (winnerPool.length === 0 || winnerPool[0].rng <= highestGuaranteedRng) {
+      winnerPool = bypassedWinners;
     }
   }
 
-  if(!winner) winner = pool.reduce((a,b)=> a.rng < b.rng ? a : b);
+  let winner;
+  if(winnerPool.length === 0){
+    winner = pool.reduce((a,b)=> a.rng < b.rng ? a : b);
+  } else if(winnerPool.length === 1){
+    winner = winnerPool[0];
+  } else {
+    // Genuine tie: uniform 1/n pick among every item that tied for the winning rarity
+    winner = winnerPool[Math.floor(Math.random() * winnerPool.length)];
+  }
 
   const variant = rollVariant();
-  const finalRng = variant ? winner.rng * variant.totalMult : winner.rng;
+
+  // The winner's rng at this point may be a TEMPORARILY DEBUFFED value (e.g. Reach/Gloves
+  // injecting a cross-area material at ×2/×5 rarity, or a global rarity debuff like the "All"
+  // world's ×200). That debuff exists only to determine ODDS during the roll itself — once
+  // something is actually caught, it must always revert to its true original rng and be
+  // credited to its true home area, stacking onto the same inventory entry every other roll
+  // of that item would produce. We look up the pool item's TRUE rng/area from the game data
+  // rather than trusting whatever (possibly modified) values live on the pool object.
+  const trueRng = findRankRng(winner.injectedAreaLabel || area.label, winner.name);
+  const trueAreaLabel = winner.injectedAreaLabel || area.label;
+  const resolvedBaseRng = trueRng != null ? trueRng : winner.rng;
+
+  const finalRng = variant ? resolvedBaseRng * variant.totalMult : resolvedBaseRng;
   const tier = tierFor(finalRng);
 
-  return { name:winner.name, baseRng:winner.rng, finalRng, tier, variant, areaLabel:area.label };
+  return { name:winner.name, baseRng:resolvedBaseRng, finalRng, tier, variant, areaLabel:trueAreaLabel };
 }
 
 function rollOnce(){
@@ -1950,16 +2207,39 @@ function buildIndexAccordion(){
 
   for(const area of world.areas){
     let rowsHtml = '';
-    for(const r of area.ranks){
-      const t = tierFor(r.rng);
-      rowsHtml += `<div class="rank-row"><span class="rname ${t.cls}">${r.name}</span><span class="rrng">1/${fmtRng(r.rng)} · ${t.label}</span></div>`;
-      if(r.mutations){
-        for(const m of r.mutations){
-          const mt = tierFor(m.rng);
-          rowsHtml += `<div class="rank-row" style="padding-left:16px; opacity:0.9;"><span class="rname ${mt.cls}" style="font-size:13px;">↳ ${m.name}</span><span class="rrng">1/${fmtRng(m.rng)} · ${mt.label}</span></div>`;
+
+    if(area.isUniversalPool){
+      // "All" has no fixed rank list of its own — its contents are every rank/mutation from
+      // every OTHER area in the game. Show them here at their TRUE listed rarity (not the
+      // x200 roll-time debuff, which only affects odds — see buildAreaPool/rollOnceForArea).
+      for(const w of WORLDS){
+        for(const a of w.areas){
+          if(a.key === area.key) continue;
+          for(const r of a.ranks){
+            const t = tierFor(r.rng);
+            rowsHtml += `<div class="rank-row"><span class="rname ${t.cls}">${r.name}</span><span class="rrng">1/${fmtRng(r.rng)} · ${t.label} <span class="rank-src">(${a.label})</span></span></div>`;
+            if(r.mutations){
+              for(const m of r.mutations){
+                const mt = tierFor(m.rng);
+                rowsHtml += `<div class="rank-row" style="padding-left:16px; opacity:0.9;"><span class="rname ${mt.cls}" style="font-size:13px;">↳ ${m.name}</span><span class="rrng">1/${fmtRng(m.rng)} · ${mt.label} <span class="rank-src">(${a.label})</span></span></div>`;
+              }
+            }
+          }
+        }
+      }
+    } else {
+      for(const r of area.ranks){
+        const t = tierFor(r.rng);
+        rowsHtml += `<div class="rank-row"><span class="rname ${t.cls}">${r.name}</span><span class="rrng">1/${fmtRng(r.rng)} · ${t.label}</span></div>`;
+        if(r.mutations){
+          for(const m of r.mutations){
+            const mt = tierFor(m.rng);
+            rowsHtml += `<div class="rank-row" style="padding-left:16px; opacity:0.9;"><span class="rname ${mt.cls}" style="font-size:13px;">↳ ${m.name}</span><span class="rrng">1/${fmtRng(m.rng)} · ${mt.label}</span></div>`;
+          }
         }
       }
     }
+
     // Secret ranks tied to this world/area only appear once discovered — rarity always stays hidden
     for(const secret of SECRET_RANKS){
       if(secret.worldKey && secret.worldKey !== world.key) continue;
@@ -2521,7 +2801,7 @@ document.getElementById('clearLog').addEventListener('click', ()=>{
 function createWorkerBlob() {
   const workerCode = `
     self.onmessage = function(e) {
-      const { rollsToRun, pool, luckMult, variantChain, offlineBonus, seconds, TIERS } = e.data;
+      const { rollsToRun, pool, luckMult, variantChain, TIERS } = e.data;
       const counts = {};
       let bestFind = null;
 
@@ -2603,7 +2883,12 @@ function createWorkerBlob() {
           tier = finalRng <= 1 ? TIERS[0] : TIERS[TIERS.length - 1];
         }
 
-        const key = winner.name + '|' + (variant ? variant.key : 'none');
+        // Note: winner.rng here may be a temporarily debuffed/injected value (e.g. the "All"
+        // area's x200 debuff, or Reach-injected cross-area items). We carry winner.injectedAreaLabel
+        // through so the main thread can resolve true rng/true home area after merging, the same
+        // way rollOnceForArea already does for manual rolls — never trust rng/area from inside
+        // the worker as final truth.
+        const key = winner.name + '|' + (variant ? variant.key : 'none') + '|' + (winner.injectedAreaLabel || '');
         if (!counts[key]) {
           counts[key] = {
             name: winner.name,
@@ -2611,6 +2896,7 @@ function createWorkerBlob() {
             finalRng: finalRng,
             tier: tier,
             variant: variant ? { key: variant.key, label: variant.label, cls: variant.cls, totalMult } : null,
+            injectedAreaLabel: winner.injectedAreaLabel || null,
             count: 0
           };
         }
@@ -2621,124 +2907,129 @@ function createWorkerBlob() {
         }
       }
 
-      // Bonus offline simulations (e.g. Dark Axe surge mechanics)
-      let bonusRollsFired = 0;
-      let bonusTriggers = 0;
-      const bonusRules = offlineBonus ? (Array.isArray(offlineBonus) ? offlineBonus : [offlineBonus]) : [];
-      if (bonusRules.length && seconds > 0) {
-        for (const rule of bonusRules) {
-          const intervalSeconds = rule.intervalSeconds || 1;
-          const chancePerInterval = rule.chancePerInterval != null ? rule.chancePerInterval : (rule.chancePerSecond || 0);
-          const bonusLuckMult = rule.bonusLuckMult;
-          const minRolls = rule.minRolls != null ? rule.minRolls : (rule.bonusRolls || 1);
-          const maxRolls = rule.maxRolls != null ? rule.maxRolls : (rule.bonusRolls || 1);
-
-          // Find highest guaranteed for this rule's luck
-          let highestGuaranteedBonusRng = 0;
-          for (const item of pool) {
-            if (item.rng !== Infinity) {
-              const effectiveChance = bonusLuckMult / item.rng;
-              if (effectiveChance >= 1) {
-                if (item.rng > highestGuaranteedBonusRng) {
-                  highestGuaranteedBonusRng = item.rng;
-                }
-              }
-            }
-          }
-
-          const intervalTicks = Math.floor(seconds / intervalSeconds);
-
-          for (let s = 0; s < intervalTicks; s++) {
-            if (Math.random() < chancePerInterval) {
-              bonusTriggers++;
-              const rollsThisTrigger = minRolls === maxRolls ? minRolls : (minRolls + Math.floor(Math.random() * (maxRolls - minRolls + 1)));
-              for (let j = 0; j < rollsThisTrigger; j++) {
-                let normalWinner = null;
-                let bypassedWinner = null;
-
-                for (const item of pool) {
-                  if (item.rng === Infinity) {
-                    if (Math.random() < 0.0005 * bonusLuckMult) {
-                      if (!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
-                    }
-                    continue;
-                  }
-
-                  const isSkipped = item.rng < highestGuaranteedBonusRng;
-                  if (isSkipped) {
-                    if (Math.random() < 0.2) {
-                      if (!bypassedWinner || item.rng > bypassedWinner.rng) {
-                        bypassedWinner = item;
-                      }
-                    }
-                  } else {
-                    const effectiveChance = bonusLuckMult / item.rng;
-                    if (Math.random() < effectiveChance) {
-                      if (!normalWinner || item.rng > normalWinner.rng) {
-                        normalWinner = item;
-                      }
-                    }
-                  }
-                }
-
-                let winner = normalWinner;
-                if (bypassedWinner) {
-                  if (!winner || winner.rng <= highestGuaranteedBonusRng) {
-                    winner = bypassedWinner;
-                  }
-                }
-                if (!winner) winner = pool[0];
-
-                let variant = null;
-                let totalMult = 1;
-                for (const v of variantChain) {
-                  if (Math.random() < 1/v.rng) {
-                    variant = v;
-                    totalMult *= v.mult;
-                  } else {
-                    break;
-                  }
-                }
-                const finalRng = variant ? winner.rng * totalMult : winner.rng;
-                
-                let tier = null;
-                for (const t of TIERS) {
-                  if (finalRng > t.min && finalRng <= t.max) {
-                    tier = t;
-                    break;
-                  }
-                }
-                if (!tier) {
-                  tier = finalRng <= 1 ? TIERS[0] : TIERS[TIERS.length - 1];
-                }
-
-                const key = winner.name + '|' + (variant ? variant.key : 'none');
-                if (!counts[key]) {
-                  counts[key] = {
-                    name: winner.name,
-                    baseRng: winner.rng,
-                    finalRng: finalRng,
-                    tier: tier,
-                    variant: variant ? { key: variant.key, label: variant.label, cls: variant.cls, totalMult } : null,
-                    count: 0
-                  };
-                }
-                counts[key].count++;
-                bonusRollsFired++;
-
-                if (!bestFind || finalRng > bestFind.finalRng) {
-                  bestFind = counts[key];
-                }
-              }
-            }
-          }
-        }
-      }
-
-      self.postMessage({ counts, bestFind, bonusRollsFired, bonusTriggers });
+      // NOTE: Offline bonus triggers (e.g. Dark Axe surges, Emblem's 7 Leaf Clover) are
+      // intentionally NOT simulated here. Splitting elapsed time across N parallel workers and
+      // computing Math.floor(seconds / intervalSeconds) independently per chunk silently drops
+      // triggers whenever a chunk's slice is shorter than the bonus interval (e.g. a 7-minute
+      // interval over 42 minutes split into 10 workers gives each worker only ~4.2 minutes,
+      // which floors to zero triggers per chunk — losing all 6 real triggers). Bonus triggers are
+      // computed once on the main thread against the true total elapsed time instead.
+      self.postMessage({ counts, bestFind });
     };
   `;
   return new Blob([workerCode], { type: 'application/javascript' });
+}
+
+// Computes offline bonus rule triggers (Dark Axe surges, 7 Leaf Clover, etc.) against the TRUE
+// total elapsed seconds, exactly once. This must never be split across parallel worker chunks —
+// doing so causes Math.floor(chunkSeconds / intervalSeconds) to floor to zero whenever a chunk's
+// slice is shorter than the bonus interval, silently dropping real triggers (e.g. a 7-minute
+// interval axe left offline 42 minutes, split into 10 workers of ~4.2 min each, would compute
+// zero triggers per chunk instead of the correct 6 triggers total).
+function simulateOfflineBonusRules(offlineBonus, seconds, pool, variantChain, TIERS){
+  const counts = {};
+  let bestFind = null;
+  let bonusRollsFired = 0;
+  let bonusTriggers = 0;
+
+  const bonusRules = offlineBonus ? (Array.isArray(offlineBonus) ? offlineBonus : [offlineBonus]) : [];
+  if(!bonusRules.length || seconds <= 0){
+    return { counts, bestFind, bonusRollsFired, bonusTriggers };
+  }
+
+  for(const rule of bonusRules){
+    const intervalSeconds = rule.intervalSeconds || 1;
+    const chancePerInterval = rule.chancePerInterval != null ? rule.chancePerInterval : (rule.chancePerSecond || 0);
+    const bonusLuckMult = rule.bonusLuckMult;
+    const minRolls = rule.minRolls != null ? rule.minRolls : (rule.bonusRolls || 1);
+    const maxRolls = rule.maxRolls != null ? rule.maxRolls : (rule.bonusRolls || 1);
+
+    let highestGuaranteedBonusRng = 0;
+    for(const item of pool){
+      if(item.rng !== Infinity){
+        const effectiveChance = bonusLuckMult / item.rng;
+        if(effectiveChance >= 1 && item.rng > highestGuaranteedBonusRng){
+          highestGuaranteedBonusRng = item.rng;
+        }
+      }
+    }
+
+    const intervalTicks = Math.floor(seconds / intervalSeconds);
+
+    for(let s = 0; s < intervalTicks; s++){
+      if(Math.random() < chancePerInterval){
+        bonusTriggers++;
+        const rollsThisTrigger = minRolls === maxRolls ? minRolls : (minRolls + Math.floor(Math.random() * (maxRolls - minRolls + 1)));
+        for(let j = 0; j < rollsThisTrigger; j++){
+          let normalWinner = null;
+          let bypassedWinner = null;
+
+          for(const item of pool){
+            if(item.rng === Infinity){
+              if(Math.random() < 0.0005 * bonusLuckMult){
+                if(!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
+              }
+              continue;
+            }
+            const isSkipped = item.rng < highestGuaranteedBonusRng;
+            if(isSkipped){
+              if(Math.random() < 0.2){
+                if(!bypassedWinner || item.rng > bypassedWinner.rng) bypassedWinner = item;
+              }
+            } else {
+              const effectiveChance = bonusLuckMult / item.rng;
+              if(Math.random() < effectiveChance){
+                if(!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
+              }
+            }
+          }
+
+          let winner = normalWinner;
+          if(bypassedWinner){
+            if(!winner || winner.rng <= highestGuaranteedBonusRng) winner = bypassedWinner;
+          }
+          if(!winner) winner = pool[0];
+
+          let variant = null;
+          let totalMult = 1;
+          for(const v of variantChain){
+            if(Math.random() < 1/v.rng){
+              variant = v;
+              totalMult *= v.mult;
+            } else {
+              break;
+            }
+          }
+          const finalRng = variant ? winner.rng * totalMult : winner.rng;
+
+          let tier = null;
+          for(const t of TIERS){
+            if(finalRng > t.min && finalRng <= t.max){ tier = t; break; }
+          }
+          if(!tier) tier = finalRng <= 1 ? TIERS[0] : TIERS[TIERS.length - 1];
+
+          const key = winner.name + '|' + (variant ? variant.key : 'none') + '|' + (winner.injectedAreaLabel || '');
+          if(!counts[key]){
+            counts[key] = {
+              name: winner.name,
+              baseRng: winner.rng,
+              finalRng: finalRng,
+              tier: tier,
+              variant: variant ? { key:variant.key, label:variant.label, cls:variant.cls, totalMult } : null,
+              injectedAreaLabel: winner.injectedAreaLabel || null,
+              count: 0
+            };
+          }
+          counts[key].count++;
+          bonusRollsFired++;
+
+          if(!bestFind || finalRng > bestFind.finalRng) bestFind = counts[key];
+        }
+      }
+    }
+  }
+
+  return { counts, bestFind, bonusRollsFired, bonusTriggers };
 }
 
 async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult, offlineBonus) {
@@ -2757,13 +3048,10 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
     const extrapolationFactor = totalRolls > actualSimTotal ? totalRolls / actualSimTotal : 1;
 
     const rollsPerWorker = Math.floor(actualSimTotal / numWorkers);
-    const secondsPerWorker = elapsedSeconds / numWorkers;
 
     let workersFinished = 0;
     const accumulatedCounts = {};
     let absoluteBest = null;
-    let totalBonusRollsFired = 0;
-    let totalBonusTriggers = 0;
 
     const workerBlob = createWorkerBlob();
     const workerUrl = URL.createObjectURL(workerBlob);
@@ -2789,9 +3077,9 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
       workers.push(worker);
 
       worker.onmessage = function(event) {
-        const { counts, bestFind, bonusRollsFired, bonusTriggers } = event.data;
+        const { counts, bestFind } = event.data;
 
-        // Merge item findings
+        // Merge item findings (raw, still possibly debuffed/injected — resolved to truth below)
         for (const key in counts) {
           if (!accumulatedCounts[key]) {
             accumulatedCounts[key] = { ...counts[key], count: 0 };
@@ -2799,20 +3087,9 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
           accumulatedCounts[key].count += counts[key].count;
         }
 
-        // Evaluate top record
         if (bestFind && (!absoluteBest || bestFind.finalRng > absoluteBest.finalRng)) {
-          absoluteBest = {
-            name: bestFind.name,
-            baseRng: bestFind.baseRng,
-            finalRng: bestFind.finalRng,
-            tier: bestFind.tier,
-            variant: bestFind.variant,
-            areaLabel: WORLDS[state.worldIdx].areas[state.areaIdx].label
-          };
+          absoluteBest = { ...bestFind };
         }
-
-        totalBonusRollsFired += bonusRollsFired;
-        totalBonusTriggers += bonusTriggers;
 
         workersFinished++;
         const pct = Math.round((workersFinished / numWorkers) * 100);
@@ -2826,15 +3103,59 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
             for (const key in accumulatedCounts) {
               accumulatedCounts[key].count = Math.round(accumulatedCounts[key].count * extrapolationFactor);
             }
-            totalBonusRollsFired = Math.round(totalBonusRollsFired * extrapolationFactor);
-            totalBonusTriggers = Math.round(totalBonusTriggers * extrapolationFactor);
+          }
+
+          // Bonus triggers are computed once here, against the TRUE total elapsed time —
+          // never split across workers, so no interval ever gets fragmented into zero-trigger chunks.
+          const bonusResult = simulateOfflineBonusRules(offlineBonus, elapsedSeconds, pool, VARIANT_CHAIN, TIERS);
+          for (const key in bonusResult.counts) {
+            if (!accumulatedCounts[key]) {
+              accumulatedCounts[key] = { ...bonusResult.counts[key], count: 0 };
+            }
+            accumulatedCounts[key].count += bonusResult.counts[key].count;
+          }
+          if (bonusResult.bestFind && (!absoluteBest || bonusResult.bestFind.finalRng > absoluteBest.finalRng)) {
+            absoluteBest = { ...bonusResult.bestFind };
+          }
+
+          // Resolve every accumulated result back to its TRUE rng and TRUE home area, exactly
+          // like rollOnceForArea does for manual rolls. Debuffs/injections (All's x200, Reach,
+          // Gloves) only ever affect ODDS during simulation — never what's actually recorded.
+          const resolvedCounts = {};
+          for (const key in accumulatedCounts) {
+            const entry = accumulatedCounts[key];
+            const trueAreaLabel = entry.injectedAreaLabel || WORLDS[state.worldIdx].areas[state.areaIdx].label;
+            const trueRng = findRankRng(trueAreaLabel, entry.name);
+            const resolvedBaseRng = trueRng != null ? trueRng : entry.baseRng;
+            const resolvedFinalRng = entry.variant ? resolvedBaseRng * entry.variant.totalMult : resolvedBaseRng;
+            const resolvedTier = tierFor(resolvedFinalRng);
+            const resolvedKey = invKey(trueAreaLabel, entry.name, entry.variant ? entry.variant.key : null);
+            if(!resolvedCounts[resolvedKey]){
+              resolvedCounts[resolvedKey] = {
+                name: entry.name, baseRng: resolvedBaseRng, finalRng: resolvedFinalRng,
+                tier: resolvedTier, variant: entry.variant, areaLabel: trueAreaLabel, count: 0
+              };
+            }
+            resolvedCounts[resolvedKey].count += entry.count;
+          }
+
+          let resolvedBest = null;
+          if(absoluteBest){
+            const bfTrueArea = absoluteBest.injectedAreaLabel || WORLDS[state.worldIdx].areas[state.areaIdx].label;
+            const bfTrueRng = findRankRng(bfTrueArea, absoluteBest.name);
+            const bfBaseRng = bfTrueRng != null ? bfTrueRng : absoluteBest.baseRng;
+            const bfFinalRng = absoluteBest.variant ? bfBaseRng * absoluteBest.variant.totalMult : bfBaseRng;
+            resolvedBest = {
+              name: absoluteBest.name, baseRng: bfBaseRng, finalRng: bfFinalRng,
+              tier: tierFor(bfFinalRng), variant: absoluteBest.variant, areaLabel: bfTrueArea
+            };
           }
 
           resolve({
-            counts: accumulatedCounts,
-            bestFind: absoluteBest,
-            bonusRollsFired: totalBonusRollsFired,
-            bonusTriggers: totalBonusTriggers
+            counts: resolvedCounts,
+            bestFind: resolvedBest,
+            bonusRollsFired: bonusResult.bonusRollsFired,
+            bonusTriggers: bonusResult.bonusTriggers
           });
         }
       };
@@ -2850,8 +3171,6 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
         pool: pool,
         luckMult: luckMult,
         variantChain: VARIANT_CHAIN,
-        offlineBonus: offlineBonus,
-        seconds: secondsPerWorker,
         TIERS: TIERS
       });
     }
@@ -2878,13 +3197,8 @@ async function resolveOfflineProgress(){
 
   if(totalRolls <= 0 && (!axe.offlineBonus || wholeSeconds <= 0)) return null;
 
-  // Formulate the pool items
-  const pool = [];
-  for(const r of area.ranks){
-    pool.push({ name:r.name, rng:r.rng });
-    if(r.mutations) for(const m of r.mutations) pool.push({ name:m.name, rng:m.rng });
-  }
-  for(const g of world.global) pool.push({ name:g.name, rng:g.rng });
+  // Formulate the pool items (shared with rollOnceForArea so All's universal pool / debuffMult apply here too)
+  const pool = buildAreaPool(world, area);
 
   let simResult;
   try {
@@ -2949,26 +3263,33 @@ async function resolveOfflineProgress(){
       }
       if(!winner) winner = pool.reduce((a,b)=> a.rng < b.rng ? a : b);
 
-      const k = invKey(area.label, winner.name, null);
+      // Resolve the winner's TRUE rng and TRUE home area before recording — winner.rng here may
+      // be a temporarily debuffed/injected value (All's x200, Reach, Gloves), same as the worker path.
+      const trueAreaLabel = winner.injectedAreaLabel || area.label;
+      const trueRng = findRankRng(trueAreaLabel, winner.name);
+      const resolvedRng = trueRng != null ? trueRng : winner.rng;
+
+      const k = invKey(trueAreaLabel, winner.name, null);
       if(!counts[k]) {
         counts[k] = {
           name: winner.name,
-          baseRng: winner.rng,
-          finalRng: winner.rng,
-          tier: tierFor(winner.rng),
+          baseRng: resolvedRng,
+          finalRng: resolvedRng,
+          tier: tierFor(resolvedRng),
           variant: null,
+          areaLabel: trueAreaLabel,
           count: 0
         };
       }
       counts[k].count += 1;
-      if(!bestFind || winner.rng > bestFind.finalRng) {
+      if(!bestFind || resolvedRng > bestFind.finalRng) {
         bestFind = {
           name: winner.name,
-          baseRng: winner.rng,
-          finalRng: winner.rng,
-          tier: tierFor(winner.rng),
+          baseRng: resolvedRng,
+          finalRng: resolvedRng,
+          tier: tierFor(resolvedRng),
           variant: null,
-          areaLabel: area.label
+          areaLabel: trueAreaLabel
         };
       }
     }
@@ -2980,108 +3301,37 @@ async function resolveOfflineProgress(){
       }
     }
 
-    let bonusRollsFired = 0;
-    let bonusTriggers = 0;
-    const bonusRules = axe.offlineBonus ? (Array.isArray(axe.offlineBonus) ? axe.offlineBonus : [axe.offlineBonus]) : [];
-    if(bonusRules.length && wholeSeconds > 0){
-      for(const rule of bonusRules){
-        const intervalSeconds = rule.intervalSeconds || 1;
-        const chancePerInterval = rule.chancePerInterval != null ? rule.chancePerInterval : (rule.chancePerSecond || 0);
-        const bonusLuckMult = rule.bonusLuckMult;
-        const minRolls = rule.minRolls != null ? rule.minRolls : (rule.bonusRolls || 1);
-        const maxRolls = rule.maxRolls != null ? rule.maxRolls : (rule.bonusRolls || 1);
-
-        const intervalTicks = Math.floor(wholeSeconds / intervalSeconds);
-        const BONUS_SECOND_SIM_BUDGET = 5000;
-        const triggerCount = intervalTicks <= BONUS_SECOND_SIM_BUDGET
-          ? (()=>{ let n=0; for(let s=0;s<intervalTicks;s++){ if(Math.random()<chancePerInterval) n++; } return n; })()
-          : Math.round(intervalTicks * chancePerInterval);
-
-        let highestGuaranteedBonusRng = 0;
-        for(const item of pool) {
-          if(item.rng !== Infinity) {
-            const effectiveChance = bonusLuckMult / item.rng;
-            if(effectiveChance >= 1) {
-              if(item.rng > highestGuaranteedBonusRng) {
-                highestGuaranteedBonusRng = item.rng;
-              }
-            }
-          }
-        }
-
-        for(let t=0;t<triggerCount;t++){
-          bonusTriggers++;
-          const rollsThisTrigger = minRolls === maxRolls ? minRolls : (minRolls + Math.floor(Math.random() * (maxRolls - minRolls + 1)));
-          for(let j=0;j<rollsThisTrigger;j++){
-            let normalWinner = null;
-            let bypassedWinner = null;
-
-            for(const item of pool){
-              if(item.rng === Infinity){
-                if(Math.random() < 0.0005 * bonusLuckMult){
-                  if(!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
-                }
-                continue;
-              }
-
-              const isSkipped = item.rng < highestGuaranteedBonusRng;
-              if(isSkipped) {
-                if(Math.random() < 0.2) {
-                  if(!bypassedWinner || item.rng > bypassedWinner.rng) {
-                    bypassedWinner = item;
-                  }
-                }
-              } else {
-                const effectiveChance = bonusLuckMult / item.rng;
-                if(Math.random() < effectiveChance){
-                  if(!normalWinner || item.rng > normalWinner.rng) {
-                    normalWinner = item;
-                  }
-                }
-              }
-            }
-
-            let winner = normalWinner;
-            if (bypassedWinner) {
-              if (!winner || winner.rng <= highestGuaranteedBonusRng) {
-                winner = bypassedWinner;
-              }
-            }
-            if(!winner) winner = pool.reduce((a,b)=> a.rng < b.rng ? a : b);
-
-            const k = invKey(area.label, winner.name, null);
-            if(!counts[k]) {
-              counts[k] = {
-                name: winner.name,
-                baseRng: winner.rng,
-                finalRng: winner.rng,
-                tier: tierFor(winner.rng),
-                variant: null,
-                count: 0
-              };
-            }
-            counts[k].count += 1;
-            bonusRollsFired++;
-            if(!bestFind || winner.rng > bestFind.finalRng) {
-              bestFind = {
-                name: winner.name,
-                baseRng: winner.rng,
-                finalRng: winner.rng,
-                tier: tierFor(winner.rng),
-                variant: null,
-                areaLabel: area.label
-              };
-            }
-          }
-        }
+    // Bonus triggers computed once against the true total wholeSeconds — same shared function
+    // used by the worker path, so both paths can never diverge or reintroduce fragmentation bugs.
+    const bonusResult = simulateOfflineBonusRules(axe.offlineBonus, wholeSeconds, pool, VARIANT_CHAIN, TIERS);
+    for(const key in bonusResult.counts){
+      const bc = bonusResult.counts[key];
+      const trueAreaLabel = bc.injectedAreaLabel || area.label;
+      const trueRng = findRankRng(trueAreaLabel, bc.name);
+      const resolvedBaseRng = trueRng != null ? trueRng : bc.baseRng;
+      const resolvedFinalRng = bc.variant ? resolvedBaseRng * bc.variant.totalMult : resolvedBaseRng;
+      const k = invKey(trueAreaLabel, bc.name, bc.variant ? bc.variant.key : null);
+      if(!counts[k]){
+        counts[k] = { name:bc.name, baseRng:resolvedBaseRng, finalRng:resolvedFinalRng, tier:tierFor(resolvedFinalRng), variant:bc.variant, areaLabel:trueAreaLabel, count:0 };
       }
+      counts[k].count += bc.count;
+    }
+    if(bonusResult.bestFind && (!bestFind || bonusResult.bestFind.finalRng > bestFind.finalRng)){
+      const bfTrueArea = bonusResult.bestFind.injectedAreaLabel || area.label;
+      const bfTrueRng = findRankRng(bfTrueArea, bonusResult.bestFind.name);
+      const bfBaseRng = bfTrueRng != null ? bfTrueRng : bonusResult.bestFind.baseRng;
+      const bfFinalRng = bonusResult.bestFind.variant ? bfBaseRng * bonusResult.bestFind.variant.totalMult : bfBaseRng;
+      bestFind = {
+        name: bonusResult.bestFind.name, baseRng: bfBaseRng, finalRng: bfFinalRng,
+        tier: tierFor(bfFinalRng), variant: bonusResult.bestFind.variant, areaLabel: bfTrueArea
+      };
     }
 
     simResult = {
       counts: counts,
       bestFind,
-      bonusRollsFired,
-      bonusTriggers
+      bonusRollsFired: bonusResult.bonusRollsFired,
+      bonusTriggers: bonusResult.bonusTriggers
     };
   }
 
@@ -3095,7 +3345,7 @@ async function resolveOfflineProgress(){
       finalRng: simItem.finalRng,
       tier: simItem.tier,
       variant: simItem.variant,
-      areaLabel: area.label
+      areaLabel: simItem.areaLabel || area.label, // use the item's own resolved true area if present
     };
     addToInventory(r, simItem.count);
     finalSummaryItems.push({ result: r, count: simItem.count });
