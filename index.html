@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Juni's RNG Game</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Cinzel:wght@600;700;900&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Cinzel:wght@600;700;900&family=Playfair+Display:wght@600;700;800;900&family=Bebas+Neue&family=Caveat:wght@600;700&family=UnifrakturMaguntia&family=Press+Start+2P&family=Orbitron:wght@600;700;800;900&family=Pacifico&family=Rubik+Mono+One&family=Abril+Fatface&family=VT323&family=Righteous&display=swap');
 
   :root{
     --bg-0:#08070c;
@@ -457,6 +457,8 @@
   .glow-unworldly{ text-shadow:0 0 28px rgba(232,121,249,0.5); }
   .glow-secret{ text-shadow:0 0 32px rgba(168,85,247,0.8); }
   .secret-row{ background:rgba(168,85,247,0.08); border-radius:6px; }
+  .mystery-row{ background:rgba(255,255,255,0.03); border-radius:6px; }
+  .t-mystery{ color:var(--text-faint); font-family:var(--mono); letter-spacing:0.08em; }
 
   .flash-bg{ position:fixed; inset:0; pointer-events:none; z-index:5; opacity:0; }
   .flash-bg.go{ animation:flashfade 0.6s ease-out; }
@@ -728,6 +730,98 @@ function tierFor(rng){
   }
   if(rng <= 1) return TIERS[0];
   return TIERS[TIERS.length-1];
+}
+
+/* ============================================================
+   PER-RANK VISUAL IDENTITY
+   Every individual rank name gets its own deterministic color (or gradient, for tiers that
+   "deserve" one) and font, layered ON TOP of the shared tier-color system. Tier still tells you
+   the rarity bucket at a glance; this makes every rank within that bucket feel distinct instead
+   of every Zenith-tier item looking identical. Fully deterministic from the rank's own name, so
+   it's stable across sessions/devices without needing to store anything.
+   ============================================================ */
+
+// Small deterministic string hash (djb2-ish) — same rank name always produces the same hash,
+// so its color/font stay consistent everywhere it's displayed (stage, log, inventory, index).
+function hashRankName(name){
+  let h = 5381;
+  for(let i = 0; i < name.length; i++){
+    h = ((h << 5) + h + name.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+// Curated font profiles built from the loaded Google Fonts set. Each rank deterministically
+// picks one based on its name hash, so the same rank always renders in the same font.
+const RANK_FONT_PROFILES = [
+  { family:"'Playfair Display', serif", weight:800, style:'normal', spacing:'0' },
+  { family:"'Bebas Neue', sans-serif",   weight:400, style:'normal', spacing:'0.03em' },
+  { family:"'Caveat', cursive",          weight:700, style:'normal', spacing:'0.01em' },
+  { family:"'UnifrakturMaguntia', cursive", weight:400, style:'normal', spacing:'0' },
+  { family:"'Press Start 2P', monospace", weight:400, style:'normal', spacing:'-0.02em' },
+  { family:"'Orbitron', sans-serif",     weight:800, style:'normal', spacing:'0.02em' },
+  { family:"'Pacifico', cursive",        weight:400, style:'normal', spacing:'0' },
+  { family:"'Rubik Mono One', sans-serif", weight:400, style:'normal', spacing:'-0.01em' },
+  { family:"'Abril Fatface', serif",     weight:400, style:'normal', spacing:'0' },
+  { family:"'VT323', monospace",         weight:400, style:'normal', spacing:'0.03em' },
+  { family:"'Righteous', sans-serif",    weight:400, style:'normal', spacing:'0.01em' },
+  { family:"'Space Grotesk', sans-serif", weight:700, style:'italic', spacing:'0' },
+  { family:"'Cinzel', serif",            weight:900, style:'normal', spacing:'0.02em' },
+  { family:"'JetBrains Mono', monospace", weight:700, style:'normal', spacing:'0' },
+];
+
+// Tiers "rare enough to deserve" a gradient instead of a flat color, mirroring where the shared
+// tier system itself already starts using gradients (Zenith and up).
+const GRADIENT_WORTHY_TIERS = new Set(['zenith','unworldly','colossal','infinite','insanity','impossible']);
+
+// Returns { fontFamily, fontWeight, fontStyle, letterSpacing, colorCss, isGradient } for a rank,
+// deterministic from its name. colorCss is either a flat CSS color or a `linear-gradient(...)`
+// string ready to drop into background + -webkit-background-clip:text.
+function rankVisualIdentity(name, tierKey){
+  const hash = hashRankName(name);
+  const font = RANK_FONT_PROFILES[hash % RANK_FONT_PROFILES.length];
+
+  // Base hue from the hash, spread across the full wheel
+  const hue = hash % 360;
+  const wantsGradient = GRADIENT_WORTHY_TIERS.has(tierKey);
+
+  let colorCss, isGradient;
+  if(wantsGradient){
+    // 3-stop gradient using nearby hues for cohesion, offset by a second hash pass for variety
+    const hue2 = (hash >> 5) % 360;
+    const spread = 55 + (hash % 40); // 55-95 degree spread between stops
+    const hA = hue2;
+    const hB = (hue2 + spread) % 360;
+    const hC = (hue2 + spread * 2) % 360;
+    colorCss = `linear-gradient(90deg, hsl(${hA},85%,68%), hsl(${hB},90%,72%), hsl(${hC},85%,68%))`;
+    isGradient = true;
+  } else {
+    // Flat color, tuned for readability against the dark background
+    const sat = 55 + (hash % 30);   // 55-85%
+    const light = 62 + (hash % 18); // 62-80%
+    colorCss = `hsl(${hue}, ${sat}%, ${light}%)`;
+    isGradient = false;
+  }
+
+  return {
+    fontFamily: font.family,
+    fontWeight: font.weight,
+    fontStyle: font.style,
+    letterSpacing: font.spacing,
+    colorCss,
+    isGradient,
+  };
+}
+
+// Builds an inline `style` attribute string applying a rank's unique color/font. If the rank is
+// gradient-worthy, this includes background-clip text tricks; otherwise a flat color.
+function rankVisualStyleAttr(name, tierKey){
+  const v = rankVisualIdentity(name, tierKey);
+  const base = `font-family:${v.fontFamily}; font-weight:${v.fontWeight}; font-style:${v.fontStyle}; letter-spacing:${v.letterSpacing};`;
+  if(v.isGradient){
+    return `${base} background:${v.colorCss}; background-size:200% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:hueflow 3s linear infinite;`;
+  }
+  return `${base} color:${v.colorCss};`;
 }
 
 const VARIANT_CHAIN = [
@@ -1245,8 +1339,35 @@ const AXES = {
       { name:'Heavenly',                    area:'Dreamland',  amount:10 },
     ],
   },
+  rageaxe: {
+    key:'rageaxe', name:'Rage Axe',
+    desc:'wow! totally expensive and op, is it even WORTH??? STOP!!!! THIS IS SUCH AN ANGRY AXE!!! *scream.mp3*',
+    stats:{ luckMult:17.5, bulk:35, rps:325 },
+    bonus:'[Angriness] Offline every 5s: 1/50 for +700 rolls at ×13.33 luck. [Tableflip] On click: 1/25 for +300 rolls at ×20 luck. [Angst] Offline every hour: 1/5 for +100k rolls at ×6.5 luck. [Fist O\' Hurt] Every 3rd click: 1/150 for +5 rolls at ×1,750 luck. [Anger] Every 70th click: +600 rolls at ×3.33 luck (×1.25 mutation luck). [Slam] Every 20th click: +5 rolls at ×10,000 luck. [Frustration] Offline every hour: +7,500 rolls at ×125 luck. [Irritation] Each full day idle: +27.5% efficiency to every OTHER idle bonus on this axe (resets the moment you\'re active again).',
+    offlineBonus:[
+      { intervalSeconds:5, chancePerInterval:1/50, minRolls:700, maxRolls:700, bonusLuckMult:13.33, irritationScales:true },
+      { intervalSeconds:3600, chancePerInterval:1/5, minRolls:100000, maxRolls:100000, bonusLuckMult:6.5, irritationScales:true },
+      { intervalSeconds:3600, chancePerInterval:1, minRolls:7500, maxRolls:7500, bonusLuckMult:125, irritationScales:true },
+    ],
+    clickBonus:[
+      { oneIn:25, rolls:300, luckMult:20 },                                              // Tableflip: every click
+      { everyNClicks:3, oneIn:150, rolls:5, luckMult:1750 },                             // Fist O' Hurt: every 3rd click, still needs the roll
+      { everyNClicks:70, chance:1, rolls:600, luckMult:3.33, mutationLuckMult:1.25 },     // Anger: every 70th click, guaranteed
+      { everyNClicks:20, chance:1, rolls:5, luckMult:10000 },                            // Slam: every 20th click, guaranteed
+    ],
+    irritation:{ perDayPct:27.5, appliesToRps:true }, // rps also scales as an "idle bonus" per Irritation's wording
+    // Rank value: 5×Moon(2B) + 3×Obliterator(2.25B) + 5×Imaginary(3.4B) + 1×PIZZA(9.3B) + 100×The Probably Rarest Thing Ever(1B) = 17.95B > 15B ✓
+    // Spans all 5 areas of World 1 + Subworld 1: Natural, Wasteland, Dreamland, The Fridge, Scary Land
+    requires:[
+      { name:'Moon',                            area:'Natural',    amount:5   },
+      { name:'Obliterator',                     area:'Wasteland',  amount:3   },
+      { name:'Imaginary',                       area:'Dreamland',  amount:5   },
+      { name:'PIZZA',                           area:'The Fridge', amount:1   },
+      { name:'The Probably Rarest Thing Ever',  area:'Scary Land', amount:100 },
+    ],
+  },
 };
-const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','silkinator'];
+const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','silkinator','rageaxe'];
 
 const CONSUMABLES = {
   pushpin: {
@@ -1595,6 +1716,19 @@ function getOwnedCount(areaLabel, name, variantKey){
   return state.inventory[key] ? state.inventory[key].count : 0;
 }
 
+// Checks if a rank has EVER been caught in the given area, in ANY variant (plain, weird, odd,
+// rainbow, grayscale) or with any lastRng recorded — used to gate ultra-rare (1b+) Index entries
+// that stay fully hidden as "???" until the player has actually found them at least once.
+function hasEverFoundRank(areaLabel, name){
+  const plainKey = invKey(areaLabel, name, null);
+  if(state.inventory[plainKey] && state.inventory[plainKey].count > 0) return true;
+  for(const v of VARIANT_CHAIN){
+    const vKey = invKey(areaLabel, name, v.key);
+    if(state.inventory[vKey] && state.inventory[vKey].count > 0) return true;
+  }
+  return false;
+}
+
 /* ============================================================
    RECIPE PINNING
    ============================================================ */
@@ -1916,13 +2050,15 @@ function rollOnce(){
    RENDERING HELPERS
    ============================================================ */
 
-// Renders a rank name with tier color + 50% variant overlay (no full recolor)
-function rankNameHtml(name, tierCls, variant, extraCls){
+// Renders a rank name with: tier class (for glow/structural styling) + this rank's own unique
+// deterministic color/font (inline style, wins over the tier's flat color) + 50% variant overlay.
+function rankNameHtml(name, tierCls, variant, extraCls, tierKey){
   extraCls = extraCls || '';
   const text = escapeHtml(name);
-  if(!variant) return `<span class="${tierCls} ${extraCls}">${text}</span>`;
-  // vwrap carries variant class for CSS scoping; inner text has tier color; vlayer overlays variant
-  return `<span class="vwrap ${variant.cls} ${extraCls}"><span class="${tierCls}">${text}</span><span class="vlayer" aria-hidden="true">${text}</span></span>`;
+  const styleAttr = tierKey ? ` style="${rankVisualStyleAttr(name, tierKey)}"` : '';
+  if(!variant) return `<span class="${tierCls} ${extraCls}"${styleAttr}>${text}</span>`;
+  // vwrap carries variant class for CSS scoping; inner text has this rank's own color/font; vlayer overlays variant
+  return `<span class="vwrap ${variant.cls} ${extraCls}"><span class="${tierCls}"${styleAttr}>${text}</span><span class="vlayer" aria-hidden="true">${text}</span></span>`;
 }
 
 function fmtRng(n){
@@ -1990,7 +2126,7 @@ function renderStage(result, count, trollOverride){
     // for the full 3 seconds. The real result underneath is already committed in state/inventory/log.
     const fakeTier = tierFor(trollOverride.rng);
     const fakeGlow = ['epic','pelicular','horizon','grandiose','zenith','unworldly'].includes(fakeTier.key) ? `glow-${fakeTier.key}` : '';
-    const fakeNameHtml = rankNameHtml(trollOverride.name, fakeTier.cls, null, fakeGlow);
+    const fakeNameHtml = rankNameHtml(trollOverride.name, fakeTier.cls, null, fakeGlow, fakeTier.key);
     stage.innerHTML = `
       <div class="result-tier">${result.areaLabel} · ${fakeTier.label}</div>
       <div class="result-name">${fakeNameHtml}</div>
@@ -2007,7 +2143,7 @@ function renderStage(result, count, trollOverride){
     return;
   }
 
-  const nameHtml = rankNameHtml(result.name, baseTier.cls, result.variant, glowCls);
+  const nameHtml = rankNameHtml(result.name, baseTier.cls, result.variant, glowCls, result.isSecret ? null : baseTier.key);
 
   stage.innerHTML = `
     <div class="result-tier">${result.areaLabel} · ${baseTier.label}</div>
@@ -2044,7 +2180,7 @@ function renderLog(){
     const suffix = r.variant ? ' ✦' : (r.isSecret ? ' 🔒' : '');
     return `
     <div class="log-row">
-      <span class="lname">${rankNameHtml(r.name, baseTier.cls, r.variant)}${suffix}</span>
+      <span class="lname">${rankNameHtml(r.name, baseTier.cls, r.variant, '', r.isSecret ? null : baseTier.key)}${suffix}</span>
       <span class="lrng">${fmtRngOrSecret(r.isSecret, r.finalRng)}</span>
     </div>
   `}).join('');
@@ -2162,7 +2298,7 @@ function renderInventory(){
   list.innerHTML = items.map(it => {
     const variantTxt = it.variant ? ` · ${it.variant.label}` : '';
     const suffix = it.variant ? ' ✦' : (it.isSecret ? ' 🔒' : '');
-    const nameEl = rankNameHtml(it.name, it.tierCls, it.variant);
+    const nameEl = rankNameHtml(it.name, it.tierCls, it.variant, '', it.isSecret ? null : it.tierKey);
     return `
       <div class="inv-row">
         <div>
@@ -2186,6 +2322,38 @@ function setupInventoryFilters(){
    RENDERING: INDEX VIEW (dropdowns / accordion)
    ============================================================ */
 
+// Checks if a GLOBAL rank (spawns in every area of its world) has ever been found in ANY of
+// that world's areas — globals aren't tied to a single area's inventory key.
+function hasEverFoundGlobal(world, name){
+  for(const area of world.areas){
+    if(hasEverFoundRank(area.label, name)) return true;
+  }
+  return false;
+}
+
+// Ranks rarer than this stay fully hidden ("???" for name AND rarity) in the Index until the
+// player has actually caught one — a genuine secret-of-scale rather than a bespoke Secret Rank.
+const INDEX_MYSTERY_THRESHOLD = 1000000000; // 1/1b+
+
+// Renders a single Index row for a rank/mutation, applying the hide-until-found rule for 1b+
+// items and this rank's own unique deterministic color/font once revealed. `foundCheck` is a
+// zero-arg function returning whether this specific rank has been found (lets callers use
+// area-specific or world-wide global discovery checks as appropriate).
+function indexRankRowHtml(name, rng, isMutation, sourceTag, foundCheck){
+  const t = tierFor(rng);
+  const indent = isMutation ? ' style="padding-left:16px; opacity:0.9;"' : '';
+  const arrow = isMutation ? '↳ ' : '';
+  const fontSize = isMutation ? ' style="font-size:13px;"' : '';
+  const src = sourceTag ? ` <span class="rank-src">(${sourceTag})</span>` : '';
+
+  if(rng >= INDEX_MYSTERY_THRESHOLD && !foundCheck()){
+    return `<div class="rank-row mystery-row"${indent}><span class="rname t-mystery"${fontSize}>???</span><span class="rrng">??? · ???${src}</span></div>`;
+  }
+
+  const nameHtml = rankNameHtml(name, t.cls, null, '', t.key);
+  return `<div class="rank-row"${indent}><span${fontSize}>${arrow}${nameHtml}</span><span class="rrng">1/${fmtRng(rng)} · ${t.label}${src}</span></div>`;
+}
+
 function buildIndexAccordion(){
   const el = document.getElementById('indexAccordion');
   const world = WORLDS[state.worldIdx];
@@ -2196,10 +2364,7 @@ function buildIndexAccordion(){
       <div class="acc-item" data-acc="global">
         <div class="acc-head"><span>Global — spawns everywhere</span><span class="chev">▾</span></div>
         <div class="acc-body">
-          ${world.global.map(g=>{
-            const t = tierFor(g.rng);
-            return `<div class="rank-row"><span class="rname ${t.cls}">${g.name}</span><span class="rrng">1/${fmtRng(g.rng)} · ${t.label}</span></div>`;
-          }).join('')}
+          ${world.global.map(g => indexRankRowHtml(g.name, g.rng, false, null, () => hasEverFoundGlobal(world, g.name))).join('')}
         </div>
       </div>
     `;
@@ -2216,12 +2381,10 @@ function buildIndexAccordion(){
         for(const a of w.areas){
           if(a.key === area.key) continue;
           for(const r of a.ranks){
-            const t = tierFor(r.rng);
-            rowsHtml += `<div class="rank-row"><span class="rname ${t.cls}">${r.name}</span><span class="rrng">1/${fmtRng(r.rng)} · ${t.label} <span class="rank-src">(${a.label})</span></span></div>`;
+            rowsHtml += indexRankRowHtml(r.name, r.rng, false, a.label, () => hasEverFoundRank(a.label, r.name));
             if(r.mutations){
               for(const m of r.mutations){
-                const mt = tierFor(m.rng);
-                rowsHtml += `<div class="rank-row" style="padding-left:16px; opacity:0.9;"><span class="rname ${mt.cls}" style="font-size:13px;">↳ ${m.name}</span><span class="rrng">1/${fmtRng(m.rng)} · ${mt.label} <span class="rank-src">(${a.label})</span></span></div>`;
+                rowsHtml += indexRankRowHtml(m.name, m.rng, true, a.label, () => hasEverFoundRank(a.label, m.name));
               }
             }
           }
@@ -2229,12 +2392,10 @@ function buildIndexAccordion(){
       }
     } else {
       for(const r of area.ranks){
-        const t = tierFor(r.rng);
-        rowsHtml += `<div class="rank-row"><span class="rname ${t.cls}">${r.name}</span><span class="rrng">1/${fmtRng(r.rng)} · ${t.label}</span></div>`;
+        rowsHtml += indexRankRowHtml(r.name, r.rng, false, null, () => hasEverFoundRank(area.label, r.name));
         if(r.mutations){
           for(const m of r.mutations){
-            const mt = tierFor(m.rng);
-            rowsHtml += `<div class="rank-row" style="padding-left:16px; opacity:0.9;"><span class="rname ${mt.cls}" style="font-size:13px;">↳ ${m.name}</span><span class="rrng">1/${fmtRng(m.rng)} · ${mt.label}</span></div>`;
+            rowsHtml += indexRankRowHtml(m.name, m.rng, true, null, () => hasEverFoundRank(area.label, m.name));
           }
         }
       }
@@ -2554,6 +2715,17 @@ function effectiveRps(){
   return base * mult;
 }
 
+// [Irritation] (Rage Axe only): for every FULL day the player has been continuously idle, every
+// OTHER idle-related bonus on this axe (rps included) gets +27.5% efficiency. This is purely a
+// function of elapsed idle seconds, so "resets when active" needs no stored state at all — the
+// instant the player is active again, elapsed idle time is ~0 and the multiplier is naturally 1x.
+function irritationMultiplier(axe, idleSeconds){
+  if(!axe.irritation) return 1;
+  const fullDaysIdle = Math.floor(idleSeconds / 86400);
+  if(fullDaysIdle <= 0) return 1;
+  return 1 + (axe.irritation.perDayPct / 100) * fullDaysIdle;
+}
+
 function craftConsumable(key){
   const item = CONSUMABLES[key];
   if(!item) return;
@@ -2711,11 +2883,15 @@ function doRoll(){
     const world = WORLDS[state.worldIdx];
     const area = world.areas[state.areaIdx];
     for(const rule of rules){
+      // Some click bonuses only check on every Nth click (e.g. Rage Axe's Fist O' Hurt every
+      // 3rd click, Anger every 70th, Slam every 20th) — skip entirely if this isn't that click.
+      if(rule.everyNClicks && state.clickCount % rule.everyNClicks !== 0) continue;
+
       const chance = rule.chance != null ? rule.chance : (1 / (rule.oneIn || 1));
       if(Math.random() < chance){
         const rollCount = rule.rolls || 1;
         for(let i=0;i<rollCount;i++){
-          const r = rollOnceForArea(world, area, rule.luckMult);
+          const r = rollOnceForArea(world, area, rule.luckMult, { mutationLuckMult: rule.mutationLuckMult || 1 });
           results.push(r);
           clickBonusFired++;
           if(!best || r.finalRng > best.finalRng) best = r;
@@ -3189,7 +3365,11 @@ async function resolveOfflineProgress(){
   const capped = elapsedSeconds > MAX_OFFLINE_SECONDS;
   elapsedSeconds = Math.min(elapsedSeconds, MAX_OFFLINE_SECONDS);
   const wholeSeconds = Math.floor(elapsedSeconds);
-  const totalRolls = Math.floor(elapsedSeconds * rps);
+
+  // [Irritation] (Rage Axe only): scales rps itself by +27.5% per full day idle, since Irritation's
+  // wording explicitly covers "everything idle related" — not just the other offlineBonus rules.
+  const irritationMult = irritationMultiplier(axe, elapsedSeconds);
+  const totalRolls = Math.floor(elapsedSeconds * rps * irritationMult);
 
   const world = WORLDS[state.worldIdx];
   const area = world.areas[state.areaIdx];
@@ -3200,10 +3380,28 @@ async function resolveOfflineProgress(){
   // Formulate the pool items (shared with rollOnceForArea so All's universal pool / debuffMult apply here too)
   const pool = buildAreaPool(world, area);
 
+  // [Irritation] also scales every OTHER offline bonus rule on this axe (flagged irritationScales)
+  // by the same per-day efficiency multiplier — pre-scaled here rather than threading a new param
+  // through the simulation functions, so simulateOfflineBonusRules stays untouched.
+  let scaledOfflineBonus = axe.offlineBonus;
+  if(axe.irritation && axe.offlineBonus && irritationMult > 1){
+    const rules = Array.isArray(axe.offlineBonus) ? axe.offlineBonus : [axe.offlineBonus];
+    scaledOfflineBonus = rules.map(rule => {
+      if(!rule.irritationScales) return rule;
+      const minRolls = rule.minRolls != null ? rule.minRolls : (rule.bonusRolls || 1);
+      const maxRolls = rule.maxRolls != null ? rule.maxRolls : (rule.bonusRolls || 1);
+      return {
+        ...rule,
+        minRolls: Math.round(minRolls * irritationMult),
+        maxRolls: Math.round(maxRolls * irritationMult),
+      };
+    });
+  }
+
   let simResult;
   try {
     // Attempt fast concurrent worker simulation
-    simResult = await runOfflineSimulations(totalRolls, wholeSeconds, pool, luckMult, axe.offlineBonus);
+    simResult = await runOfflineSimulations(totalRolls, wholeSeconds, pool, luckMult, scaledOfflineBonus);
   } catch (err) {
     console.warn('Worker sim execution failed, utilizing sync main thread fallback:', err);
     // Strict budgeted fallback calculation so gameplay doesn't halt
@@ -3303,7 +3501,7 @@ async function resolveOfflineProgress(){
 
     // Bonus triggers computed once against the true total wholeSeconds — same shared function
     // used by the worker path, so both paths can never diverge or reintroduce fragmentation bugs.
-    const bonusResult = simulateOfflineBonusRules(axe.offlineBonus, wholeSeconds, pool, VARIANT_CHAIN, TIERS);
+    const bonusResult = simulateOfflineBonusRules(scaledOfflineBonus, wholeSeconds, pool, VARIANT_CHAIN, TIERS);
     for(const key in bonusResult.counts){
       const bc = bonusResult.counts[key];
       const trueAreaLabel = bc.injectedAreaLabel || area.label;
@@ -3368,6 +3566,8 @@ async function resolveOfflineProgress(){
     capped,
     bonusTriggers: simResult.bonusTriggers,
     bonusRollsFired: simResult.bonusRollsFired,
+    irritationMult: axe.irritation ? irritationMult : null,
+    irritationDays: axe.irritation ? Math.floor(elapsedSeconds / 86400) : 0,
   };
 }
 
@@ -3393,18 +3593,19 @@ function renderOfflineBanner(report){
       <h3>Welcome back 👋</h3>
       <p>Your ${escapeHtml(currentAxe().name)} kept swinging while you were away — ${fmtDuration(report.seconds)}${report.capped ? ' (capped at 7d)' : ''}, ${report.totalRolls.toLocaleString()} rolls calculated.</p>
       ${report.bonusTriggers > 0 ? `<p>Bonus surges triggered <b>${report.bonusTriggers.toLocaleString()}×</b>, adding ${report.bonusRollsFired.toLocaleString()} rolls.</p>` : ''}
+      ${report.irritationDays > 0 ? `<p>😤 Irritation built up over <b>${report.irritationDays} full day${report.irritationDays===1?'':'s'}</b> idle — everything else ran at <b>+${((report.irritationMult-1)*100).toFixed(1)}%</b> efficiency.</p>` : ''}
       <div class="offline-summary">
         ${report.topItems.map(t=>{
           const r = t.result;
           const baseTier = tierFor(r.baseRng);
           const suffix = r.variant ? ' ✦' : '';
-          return `<div class="offline-row">${rankNameHtml(r.name, baseTier.cls, r.variant)}${suffix}<span>×${t.count.toLocaleString()}</span></div>`;
+          return `<div class="offline-row">${rankNameHtml(r.name, baseTier.cls, r.variant, '', baseTier.key)}${suffix}<span>×${t.count.toLocaleString()}</span></div>`;
         }).join('')}
       </div>
       ${report.bestFind ? (()=>{
         const bf = report.bestFind;
         const bfTier = tierFor(bf.baseRng || bf.finalRng);
-        return `<p>Best find: ${rankNameHtml(bf.name, bfTier.cls, bf.variant)}${bf.variant?' ✦':''} (1/${fmtRng(bf.finalRng)})</p>`;
+        return `<p>Best find: ${rankNameHtml(bf.name, bfTier.cls, bf.variant, '', bfTier.key)}${bf.variant?' ✦':''} (1/${fmtRng(bf.finalRng)})</p>`;
       })() : ''}
       <button class="btn small" id="dismissOffline">Nice</button>
     </div>
