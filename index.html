@@ -316,6 +316,16 @@
   }
   .inv-filters select:focus{ outline:none; border-color:var(--accent); }
 
+  /* ---------- Item category select (single dropdown switching Axes/Consumables) ---------- */
+  .item-category-select{ margin-bottom:14px; }
+  .item-category-select select{
+    width:100%;
+    background:var(--bg-1); border:1px solid var(--border-lit); border-radius:10px;
+    color:var(--text); font-family:var(--display); font-size:16px; font-weight:700;
+    padding:11px 14px; appearance:none; cursor:pointer;
+  }
+  .item-category-select select:focus{ outline:none; border-color:var(--accent); }
+
   /* ---------- Cheat banner ---------- */
   .cheat-banner{ border-color:#ef4444 !important; }
   .cheat-banner h3{ color:#ef4444; }
@@ -332,6 +342,25 @@
   .acc-item.open .chev{ transform:rotate(180deg); }
   .acc-body{ display:none; padding:0 16px 14px; }
   .acc-item.open .acc-body{ display:block; }
+
+  /* ---------- Nested sub-accordions (Bonus / Recipe / Effect inside item cards) ---------- */
+  .sub-acc-item{
+    border:1px solid var(--border); border-radius:10px; overflow:hidden;
+    background:var(--bg-1); margin-top:8px;
+  }
+  .sub-acc-head{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:9px 12px; cursor:pointer; font-family:var(--mono); font-size:12px;
+    color:var(--text-dim); user-select:none;
+  }
+  .sub-acc-head .chev{ font-family:var(--mono); color:var(--text-faint); font-size:11px; transition:transform .18s ease; }
+  .sub-acc-item.open .sub-acc-head .chev{ transform:rotate(180deg); }
+  .sub-acc-body{ display:none; padding:0 12px 10px; }
+  .sub-acc-item.open .sub-acc-body{ display:block; }
+  .ready-tag{
+    font-size:9px; color:var(--good); border:1px solid var(--good); border-radius:100px;
+    padding:1px 6px; letter-spacing:0.05em; text-transform:uppercase; margin-left:4px;
+  }
   .rank-row{
     display:flex; justify-content:space-between; align-items:center;
     padding:9px 4px; border-bottom:1px solid var(--border); gap:10px; flex-wrap:wrap;
@@ -458,7 +487,7 @@
   .glow-secret{ text-shadow:0 0 32px rgba(168,85,247,0.8); }
   .secret-row{ background:rgba(168,85,247,0.08); border-radius:6px; }
   .mystery-row{ background:rgba(255,255,255,0.03); border-radius:6px; }
-  .t-mystery{ color:var(--text-faint); font-family:var(--mono); letter-spacing:0.08em; }
+  .pin-tag{ font-size:11px; opacity:0.85; }
 
   .flash-bg{ position:fixed; inset:0; pointer-events:none; z-index:5; opacity:0; }
   .flash-bg.go{ animation:flashfade 0.6s ease-out; }
@@ -647,9 +676,14 @@
     <div class="panel">
       <h2 class="ptitle">Craftable items</h2>
       <div id="pinnedRecipePanel" style="margin-bottom:12px;"></div>
+      <div class="item-category-select">
+        <select id="itemCategorySelect">
+          <option value="axes">🪓 Axes</option>
+          <option value="consumables">🧪 Consumables</option>
+        </select>
+      </div>
       <div class="item-cards" id="itemCards"></div>
-      <h2 class="ptitle" style="margin-top:18px;">Consumables</h2>
-      <div class="item-cards" id="consumableCards"></div>
+      <div class="item-cards" id="consumableCards" style="display:none;"></div>
     </div>
   </div>
 
@@ -696,23 +730,29 @@ const TIERS = [
   { key:'impossible',  label:'Impossible',  min:500000000000, max:Infinity,     cls:'t-impossible' },
 ];
 
-// Troll rolls: 1/5,000 chance on any Unworldly+ result to briefly show a DIFFERENT real rank
-// from the same area you're currently in — using its actual name and actual listed rarity —
-// for 3 seconds before snapping back to reveal what you truly got. Looks completely legitimate;
-// there's no way to tell it's fake until it flips. Purely cosmetic — never touches inventory,
-// log, or stats. The real result underneath is committed to state before this ever runs.
+// Troll rolls: 1/5,000 chance PER CLICK, no requirement on what you actually rolled. When it
+// fires, the display briefly shows a genuinely Unworldly+ rank from your current area — using
+// its real name and real listed rarity — for 3 seconds before snapping back to reveal your
+// actual result. Looks completely legitimate; there's no way to tell it's fake until it flips.
+// Purely cosmetic — never touches inventory, log, or stats. The real result is already committed
+// to state before this ever runs.
 const TROLL_CHANCE = 1 / 5000;
 const TROLL_TIER_KEYS = ['unworldly','colossal','infinite','insanity','impossible'];
 
-// Picks a real rank (or mutation) from the given area, excluding the actual roll's name so the
-// fake is always visibly different from the truth. Falls back to null if the area has nothing else.
+// Picks a random Unworldly+ rank (or mutation) from the given area. Excludes the actual roll's
+// name if it happens to also be Unworldly+, so the fake is always visibly different from the
+// truth when possible. Returns null if the area has no Unworldly+ ranks at all.
 function rollTrollFake(area, excludeName){
   const candidates = [];
   for(const r of area.ranks){
-    if(r.name !== excludeName) candidates.push({ name:r.name, rng:r.rng, isMutation:false });
+    if(TROLL_TIER_KEYS.includes(tierFor(r.rng).key) && r.name !== excludeName){
+      candidates.push({ name:r.name, rng:r.rng, isMutation:false });
+    }
     if(r.mutations){
       for(const m of r.mutations){
-        if(m.name !== excludeName) candidates.push({ name:m.name, rng:m.rng, isMutation:true });
+        if(TROLL_TIER_KEYS.includes(tierFor(m.rng).key) && m.name !== excludeName){
+          candidates.push({ name:m.name, rng:m.rng, isMutation:true });
+        }
       }
     }
   }
@@ -822,6 +862,19 @@ function rankVisualStyleAttr(name, tierKey){
     return `${base} background:${v.colorCss}; background-size:200% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:hueflow 3s linear infinite;`;
   }
   return `${base} color:${v.colorCss};`;
+}
+
+// FONT ONLY — no color/background. Used for the variant .vlayer overlay, which must render text
+// at the exact same glyph shape/width as the base layer underneath it (same font-family/weight/
+// style/letter-spacing) so the two layers align pixel-for-pixel. The variant's own CSS class
+// (.v-weird, .v-rainbow, etc.) then supplies ONLY the color/tint on top of this matching shape —
+// without this, the overlay would render in some other ambient font and visibly peek out from
+// behind the base text as extra, misaligned characters.
+function rankVisualFontOnlyStyleAttr(name){
+  // tierKey doesn't affect font selection (only color/gradient does), so any tierKey value works
+  // here — font choice is purely a function of the rank's name via hashRankName.
+  const v = rankVisualIdentity(name, null);
+  return `font-family:${v.fontFamily}; font-weight:${v.fontWeight}; font-style:${v.fontStyle}; letter-spacing:${v.letterSpacing};`;
 }
 
 const VARIANT_CHAIN = [
@@ -1339,6 +1392,39 @@ const AXES = {
       { name:'Heavenly',                    area:'Dreamland',  amount:10 },
     ],
   },
+  geomathaxe: {
+    key:'geomathaxe', name:'GeomathAxe',
+    desc:'It does math. That\'s it. That\'s the axe.',
+    stats:{ luckMult:0.314, bulk:1618, rps:628 },
+    bonus:'[Addition] Offline every minute: +628 rolls at ×314 luck. [Division] Every 5th click: +300 rolls at ÷0.02 luck and ÷0.666667 mutation luck (that\'s ×50 luck and ×1.5 mutation luck once you flip the exponent — not a nerf). [Multiplication] Every minute: 1/5 for +5n rolls at ×16.18 luck, where n = (hours offline so far) × 5, capped at 1,000 rolls per trigger.',
+    offlineBonus:[
+      { intervalSeconds:60, chancePerInterval:1, minRolls:628, maxRolls:628, bonusLuckMult:314 },
+      {
+        intervalSeconds:60, chancePerInterval:1/5, bonusLuckMult:16.18,
+        // [Multiplication]: rolls = min(5 * (hoursIdleAtThisTick * 5), 1000), rounded to an integer.
+        // tickIndex * intervalSeconds / 3600 = hours elapsed at the moment this specific tick fires.
+        dynamicRolls(tickIndex, intervalSeconds){
+          const hoursIdle = (tickIndex * intervalSeconds) / 3600;
+          const n = hoursIdle * 5;
+          return Math.round(Math.min(5 * n, 1000));
+        },
+      },
+    ],
+    clickBonus:[
+      // [Division]: ÷0.02 luck === ×50 luck, ÷0.666667 mutation luck === ×1.5 mutation luck
+      // (dividing by x is the same as multiplying by x^-1 — the axe's whole gimmick is doing
+      // this the long way around). Only affects this specific bonus, nothing else on the axe.
+      { everyNClicks:5, chance:1, rolls:300, luckMult:50, mutationLuckMult:1.5 },
+    ],
+    // Rank value: 2×Moon(800M) + 1×Garbage Compacter(200M) + 20×Aurora Borealis(150M) + 1×Leviathan(30M) + 8×Heavenly(20M) = 1,200,000,000 exactly ✓
+    requires:[
+      { name:'Moon',               area:'Natural',    amount:2  },
+      { name:'Garbage Compacter',  area:'Wasteland',  amount:1  },
+      { name:'Aurora Borealis',    area:'Dreamland',  amount:20 },
+      { name:'Leviathan',          area:'Natural',    amount:1  },
+      { name:'Heavenly',           area:'Dreamland',  amount:8  },
+    ],
+  },
   rageaxe: {
     key:'rageaxe', name:'Rage Axe',
     desc:'wow! totally expensive and op, is it even WORTH??? STOP!!!! THIS IS SUCH AN ANGRY AXE!!! *scream.mp3*',
@@ -1367,7 +1453,7 @@ const AXES = {
     ],
   },
 };
-const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','silkinator','rageaxe'];
+const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','silkinator','geomathaxe','rageaxe'];
 
 const CONSUMABLES = {
   pushpin: {
@@ -2052,13 +2138,21 @@ function rollOnce(){
 
 // Renders a rank name with: tier class (for glow/structural styling) + this rank's own unique
 // deterministic color/font (inline style, wins over the tier's flat color) + 50% variant overlay.
-function rankNameHtml(name, tierCls, variant, extraCls, tierKey){
+// displayText optionally overrides what's actually shown (e.g. "???" for a mystery-hidden rank)
+// while the color/font are still deterministically derived from the REAL name — so once a 1b+
+// rank is finally revealed, its "???" placeholder already looked/felt exactly like its true self.
+function rankNameHtml(name, tierCls, variant, extraCls, tierKey, displayText){
   extraCls = extraCls || '';
-  const text = escapeHtml(name);
+  const text = escapeHtml(displayText != null ? displayText : name);
   const styleAttr = tierKey ? ` style="${rankVisualStyleAttr(name, tierKey)}"` : '';
   if(!variant) return `<span class="${tierCls} ${extraCls}"${styleAttr}>${text}</span>`;
-  // vwrap carries variant class for CSS scoping; inner text has this rank's own color/font; vlayer overlays variant
-  return `<span class="vwrap ${variant.cls} ${extraCls}"><span class="${tierCls}"${styleAttr}>${text}</span><span class="vlayer" aria-hidden="true">${text}</span></span>`;
+  // vwrap carries variant class for CSS scoping; inner text has this rank's own color/font; vlayer
+  // overlays the variant tint on top. The vlayer MUST share the exact same font-family/weight/
+  // style/letter-spacing as the base layer — otherwise the two text layers render at different
+  // glyph widths and the mismatch shows up as extra/ghosted text bleeding out from behind the
+  // overlay in the wrong font. Only the color/background is variant-specific; font must match.
+  const fontOnlyStyle = tierKey ? ` style="${rankVisualFontOnlyStyleAttr(name)}"` : '';
+  return `<span class="vwrap ${variant.cls} ${extraCls}"><span class="${tierCls}"${styleAttr}>${text}</span><span class="vlayer"${fontOnlyStyle} aria-hidden="true">${text}</span></span>`;
 }
 
 function fmtRng(n){
@@ -2318,6 +2412,24 @@ function setupInventoryFilters(){
   });
 }
 
+// Toggles which card list (Axes or Consumables) is visible in the Items view — a single shared
+// dropdown for the whole view, rather than two always-visible stacked lists.
+function setupItemCategorySelect(){
+  const sel = document.getElementById('itemCategorySelect');
+  if(!sel) return;
+  sel.addEventListener('change', ()=>{
+    const axesEl = document.getElementById('itemCards');
+    const consumablesEl = document.getElementById('consumableCards');
+    if(sel.value === 'axes'){
+      axesEl.style.display = '';
+      consumablesEl.style.display = 'none';
+    } else {
+      axesEl.style.display = 'none';
+      consumablesEl.style.display = '';
+    }
+  });
+}
+
 /* ============================================================
    RENDERING: INDEX VIEW (dropdowns / accordion)
    ============================================================ */
@@ -2331,6 +2443,17 @@ function hasEverFoundGlobal(world, name){
   return false;
 }
 
+// Checks if a specific rank (by area + name) is currently a requirement in the player's pinned
+// recipe. Pinned materials always show their real name in the Index, bypassing the 1b+ mystery
+// hide — you need to see what you're chasing. Discovery still takes priority over this: an
+// already-found rank shows regardless of pin state, a pinned-but-unfound rank shows because it's
+// pinned, and everything else still stays hidden until found.
+function isInPinnedRecipe(areaLabel, name){
+  const recipe = pinnedRecipeData();
+  if(!recipe) return false;
+  return recipe.requires.some(req => req.area === areaLabel && req.name === name);
+}
+
 // Ranks rarer than this stay fully hidden ("???" for name AND rarity) in the Index until the
 // player has actually caught one — a genuine secret-of-scale rather than a bespoke Secret Rank.
 const INDEX_MYSTERY_THRESHOLD = 1000000000; // 1/1b+
@@ -2338,20 +2461,28 @@ const INDEX_MYSTERY_THRESHOLD = 1000000000; // 1/1b+
 // Renders a single Index row for a rank/mutation, applying the hide-until-found rule for 1b+
 // items and this rank's own unique deterministic color/font once revealed. `foundCheck` is a
 // zero-arg function returning whether this specific rank has been found (lets callers use
-// area-specific or world-wide global discovery checks as appropriate).
-function indexRankRowHtml(name, rng, isMutation, sourceTag, foundCheck){
+// area-specific or world-wide global discovery checks as appropriate). `areaLabel` is used to
+// check pinned-recipe bypass (found status still takes discovery priority over pin status).
+function indexRankRowHtml(name, rng, isMutation, sourceTag, foundCheck, areaLabel){
   const t = tierFor(rng);
   const indent = isMutation ? ' style="padding-left:16px; opacity:0.9;"' : '';
   const arrow = isMutation ? '↳ ' : '';
   const fontSize = isMutation ? ' style="font-size:13px;"' : '';
   const src = sourceTag ? ` <span class="rank-src">(${sourceTag})</span>` : '';
 
-  if(rng >= INDEX_MYSTERY_THRESHOLD && !foundCheck()){
-    return `<div class="rank-row mystery-row"${indent}><span class="rname t-mystery"${fontSize}>???</span><span class="rrng">??? · ???${src}</span></div>`;
+  const isMystery = rng >= INDEX_MYSTERY_THRESHOLD && !foundCheck() && !(areaLabel && isInPinnedRecipe(areaLabel, name));
+
+  if(isMystery){
+    // "???" still uses this rank's own real deterministic color/font — derived from its true
+    // name even though the displayed text is hidden — so nothing about its look changes the
+    // instant it's actually revealed.
+    const mysteryHtml = rankNameHtml(name, t.cls, null, '', t.key, '???');
+    return `<div class="rank-row mystery-row"${indent}><span${fontSize}>${mysteryHtml}</span><span class="rrng">??? · ???${src}</span></div>`;
   }
 
+  const pinnedTag = (areaLabel && isInPinnedRecipe(areaLabel, name)) ? ' <span class="pin-tag">📌</span>' : '';
   const nameHtml = rankNameHtml(name, t.cls, null, '', t.key);
-  return `<div class="rank-row"${indent}><span${fontSize}>${arrow}${nameHtml}</span><span class="rrng">1/${fmtRng(rng)} · ${t.label}${src}</span></div>`;
+  return `<div class="rank-row"${indent}><span${fontSize}>${arrow}${nameHtml}${pinnedTag}</span><span class="rrng">1/${fmtRng(rng)} · ${t.label}${src}</span></div>`;
 }
 
 function buildIndexAccordion(){
@@ -2364,7 +2495,7 @@ function buildIndexAccordion(){
       <div class="acc-item" data-acc="global">
         <div class="acc-head"><span>Global — spawns everywhere</span><span class="chev">▾</span></div>
         <div class="acc-body">
-          ${world.global.map(g => indexRankRowHtml(g.name, g.rng, false, null, () => hasEverFoundGlobal(world, g.name))).join('')}
+          ${world.global.map(g => indexRankRowHtml(g.name, g.rng, false, null, () => hasEverFoundGlobal(world, g.name), null)).join('')}
         </div>
       </div>
     `;
@@ -2381,10 +2512,10 @@ function buildIndexAccordion(){
         for(const a of w.areas){
           if(a.key === area.key) continue;
           for(const r of a.ranks){
-            rowsHtml += indexRankRowHtml(r.name, r.rng, false, a.label, () => hasEverFoundRank(a.label, r.name));
+            rowsHtml += indexRankRowHtml(r.name, r.rng, false, a.label, () => hasEverFoundRank(a.label, r.name), a.label);
             if(r.mutations){
               for(const m of r.mutations){
-                rowsHtml += indexRankRowHtml(m.name, m.rng, true, a.label, () => hasEverFoundRank(a.label, m.name));
+                rowsHtml += indexRankRowHtml(m.name, m.rng, true, a.label, () => hasEverFoundRank(a.label, m.name), a.label);
               }
             }
           }
@@ -2392,10 +2523,10 @@ function buildIndexAccordion(){
       }
     } else {
       for(const r of area.ranks){
-        rowsHtml += indexRankRowHtml(r.name, r.rng, false, null, () => hasEverFoundRank(area.label, r.name));
+        rowsHtml += indexRankRowHtml(r.name, r.rng, false, null, () => hasEverFoundRank(area.label, r.name), area.label);
         if(r.mutations){
           for(const m of r.mutations){
-            rowsHtml += indexRankRowHtml(m.name, m.rng, true, null, () => hasEverFoundRank(area.label, m.name));
+            rowsHtml += indexRankRowHtml(m.name, m.rng, true, null, () => hasEverFoundRank(area.label, m.name), area.label);
           }
         }
       }
@@ -2457,7 +2588,6 @@ function renderItemCards(){
         <span class="stat">bulk <b>${axe.stats.bulk}</b></span>
         <span class="stat">rolls/sec offline <b>${axe.stats.rps}</b></span>
       </div>
-      ${axe.bonus ? `<div class="istats" style="margin-top:-4px;"><span class="stat" style="color:var(--accent-2);">✦ ${axe.bonus}</span></div>` : ''}
     `;
 
     let actionHtml = '';
@@ -2474,6 +2604,18 @@ function renderItemCards(){
     const pinBtn = axe.free ? '' :
       `<button class="btn small ${isPinned?'pinned-btn':'secondary'}" data-pin-axe="${key}" style="margin-right:6px;">${isPinned?'📌 Pinned':'📌 Pin'}</button>`;
 
+    const bonusSub = axe.bonus ? `
+      <div class="sub-acc-item" data-sub-acc="bonus-${key}">
+        <div class="sub-acc-head"><span>✦ Bonus</span><span class="chev">▾</span></div>
+        <div class="sub-acc-body"><span class="stat" style="color:var(--accent-2);">${axe.bonus}</span></div>
+      </div>` : '';
+
+    const recipeSub = !axe.free ? `
+      <div class="sub-acc-item" data-sub-acc="recipe-${key}">
+        <div class="sub-acc-head"><span>📋 Recipe${canCraft && !owned ? ' <span class="ready-tag">ready</span>' : ''}</span><span class="chev">▾</span></div>
+        <div class="sub-acc-body"><div class="req-list">${reqHtml}</div></div>
+      </div>` : '';
+
     return `
       <div class="item-card ${equipped?'equipped':''} ${isPinned?'pinned-card':''}">
         <div class="ihead">
@@ -2483,11 +2625,14 @@ function renderItemCards(){
         </div>
         <div class="idesc">${axe.desc}</div>
         ${statsHtml}
-        ${!axe.free ? `<div class="req-list">${reqHtml}</div>` : ''}
-        <div style="text-align:right;">${pinBtn}${actionHtml}</div>
+        ${bonusSub}
+        ${recipeSub}
+        <div style="text-align:right; margin-top:10px;">${pinBtn}${actionHtml}</div>
       </div>
     `;
   }).join('');
+
+  setupSubAccordions(el);
 
   el.querySelectorAll('[data-craft]').forEach(btn=>{
     btn.addEventListener('click', ()=> craftAxe(btn.dataset.craft));
@@ -2496,7 +2641,8 @@ function renderItemCards(){
     btn.addEventListener('click', ()=> equipAxe(btn.dataset.equip));
   });
   el.querySelectorAll('[data-pin-axe]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
       const k = btn.dataset.pinAxe;
       if(state.pinnedRecipe && state.pinnedRecipe.kind === 'axe' && state.pinnedRecipe.key === k){
         clearPinnedRecipe();
@@ -2505,6 +2651,18 @@ function renderItemCards(){
       }
       renderItemCards();
       renderConsumableCards();
+      buildIndexAccordion();
+    });
+  });
+}
+
+// Sets up click-to-toggle for the nested Bonus/Recipe sub-accordions within item cards. Reuses
+// the same open/closed pattern as the Index accordion, just scoped one level deeper.
+function setupSubAccordions(container){
+  container.querySelectorAll('.sub-acc-head').forEach(head=>{
+    head.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      head.parentElement.classList.toggle('open');
     });
   });
 }
@@ -2544,6 +2702,7 @@ function renderPinnedRecipePanel(){
     clearPinnedRecipe();
     renderItemCards();
     renderConsumableCards();
+    buildIndexAccordion();
   });
 }
 
@@ -2656,6 +2815,18 @@ function renderConsumableCards(){
 
     const pinBtn = `<button class="btn small ${isPinned?'pinned-btn':'secondary'}" data-pin-consumable="${key}" style="margin-right:6px;">${isPinned?'📌 Pinned':'📌 Pin'}</button>`;
 
+    const effectSub = `
+      <div class="sub-acc-item" data-sub-acc="effect-${key}">
+        <div class="sub-acc-head"><span>✦ Effect</span><span class="chev">▾</span></div>
+        <div class="sub-acc-body"><span class="stat" style="color:var(--accent-2);">${item.effect}</span></div>
+      </div>`;
+
+    const recipeSub = `
+      <div class="sub-acc-item" data-sub-acc="recipe-${key}">
+        <div class="sub-acc-head"><span>📋 Recipe${canCraft ? ' <span class="ready-tag">ready</span>' : ''}</span><span class="chev">▾</span></div>
+        <div class="sub-acc-body"><div class="req-list">${reqHtml}</div></div>
+      </div>`;
+
     return `
       <div class="item-card ${isPinned?'pinned-card':''}">
         <div class="ihead">
@@ -2664,25 +2835,28 @@ function renderConsumableCards(){
           ${isPinned ? '<span class="badge-pinned">Pinned</span>' : ''}
         </div>
         <div class="idesc">${item.desc}</div>
-        <div class="istats"><span class="stat" style="color:var(--accent-2);">✦ ${item.effect}</span></div>
         ${statusHtml}
-        <div class="req-list">${reqHtml}</div>
-        <div style="text-align:right;">${pinBtn}${actionHtml}</div>
+        ${effectSub}
+        ${recipeSub}
+        <div style="text-align:right; margin-top:10px;">${pinBtn}${actionHtml}</div>
       </div>
     `;
   }).join('');
 
+  setupSubAccordions(el);
+
   el.querySelectorAll('[data-craft-consumable]').forEach(btn=>{
-    btn.addEventListener('click', ()=> craftConsumable(btn.dataset.craftConsumable));
+    btn.addEventListener('click', (e)=>{ e.stopPropagation(); craftConsumable(btn.dataset.craftConsumable); });
   });
   el.querySelectorAll('[data-use-consumable]').forEach(btn=>{
-    btn.addEventListener('click', ()=> useConsumable(btn.dataset.useConsumable));
+    btn.addEventListener('click', (e)=>{ e.stopPropagation(); useConsumable(btn.dataset.useConsumable); });
   });
   el.querySelectorAll('[data-trigger-bomb]').forEach(btn=>{
-    btn.addEventListener('click', ()=> triggerBomb());
+    btn.addEventListener('click', (e)=>{ e.stopPropagation(); triggerBomb(); });
   });
   el.querySelectorAll('[data-pin-consumable]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
       const k = btn.dataset.pinConsumable;
       if(state.pinnedRecipe && state.pinnedRecipe.kind === 'consumable' && state.pinnedRecipe.key === k){
         clearPinnedRecipe();
@@ -2691,6 +2865,7 @@ function renderConsumableCards(){
       }
       renderItemCards();
       renderConsumableCards();
+      buildIndexAccordion();
     });
   });
 }
@@ -2919,13 +3094,11 @@ function doRoll(){
   }
   pushLog(best);
 
-  // Troll roll: 1/5,000 chance on an Unworldly+ result to fake you out for 3 seconds first,
-  // showing a different REAL rank from the same area with its actual listed rarity.
+  // Troll roll: 1/5,000 chance PER CLICK, no requirement on the real result. When it fires, shows
+  // a genuinely Unworldly+ rank from the current area for 3 seconds before revealing the truth.
   // Inventory, log, and stats above are already committed to the REAL result — this is display-only.
-  const bestTier = best.isSecret ? null : tierFor(best.baseRng);
-  const trollEligible = bestTier && TROLL_TIER_KEYS.includes(bestTier.key);
   const trollArea = WORLDS[state.worldIdx].areas[state.areaIdx];
-  const fake = trollEligible && Math.random() < TROLL_CHANCE ? rollTrollFake(trollArea, best.name) : null;
+  const fake = Math.random() < TROLL_CHANCE ? rollTrollFake(trollArea, best.name) : null;
   if(fake){
     rollGeneration++;
     const myGeneration = rollGeneration;
@@ -3135,7 +3308,13 @@ function simulateOfflineBonusRules(offlineBonus, seconds, pool, variantChain, TI
     for(let s = 0; s < intervalTicks; s++){
       if(Math.random() < chancePerInterval){
         bonusTriggers++;
-        const rollsThisTrigger = minRolls === maxRolls ? minRolls : (minRolls + Math.floor(Math.random() * (maxRolls - minRolls + 1)));
+        // Some bonuses (e.g. GeomathAxe's [Multiplication]) scale their roll count dynamically
+        // with how much idle time has elapsed AT THIS TICK, rather than a fixed min/max range.
+        // dynamicRolls(tickIndex, intervalSeconds) returns the roll count for that specific tick.
+        const rollsThisTrigger = rule.dynamicRolls
+          ? rule.dynamicRolls(s, intervalSeconds)
+          : (minRolls === maxRolls ? minRolls : (minRolls + Math.floor(Math.random() * (maxRolls - minRolls + 1))));
+        if(rollsThisTrigger <= 0) continue;
         for(let j = 0; j < rollsThisTrigger; j++){
           let normalWinner = null;
           let bypassedWinner = null;
@@ -3683,6 +3862,7 @@ async function init(){
   setupInventoryFilters();
   renderItemCards();
   renderConsumableCards();
+  setupItemCategorySelect();
   updateStatStrip();
   if(report) renderOfflineBanner(report);
 }
