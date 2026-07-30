@@ -680,10 +680,12 @@
         <select id="itemCategorySelect">
           <option value="axes">🪓 Axes</option>
           <option value="consumables">🧪 Consumables</option>
+          <option value="equips">🛡️ Equippables</option>
         </select>
       </div>
       <div class="item-cards" id="itemCards"></div>
       <div class="item-cards" id="consumableCards" style="display:none;"></div>
+      <div class="item-cards" id="equipCards" style="display:none;"></div>
     </div>
   </div>
 
@@ -1455,6 +1457,126 @@ const AXES = {
 };
 const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','silkinator','geomathaxe','rageaxe'];
 
+/* ============================================================
+   EQUIPPABLES
+   A second, independent equipment slot alongside the axe. Unlike axes, equippables don't
+   provide their own rolls or replace the axe's bulk/rps entirely — they layer passive stat
+   multipliers and/or their own bonus mechanics (offlineBonus/clickBonus, same engines axes use)
+   on top of whatever axe is currently equipped. Exactly one can be worn at a time, swappable
+   freely like axes (own it, equip it, unequip back to bare-handed).
+
+   Shape of an equip entry:
+   {
+     key, name, desc,
+     luckMult?: number,   // multiplies the equipped axe's luck (1 = no change)
+     bulkAdd?: number,    // flat bulk added per manual roll (0 = no change)
+     rpsMult?: number,    // multiplies effective offline rps (1 = no change)
+     bonus?: string,      // human-readable summary shown in the UI
+     offlineBonus?: [...], // same rule shape as axes' offlineBonus
+     clickBonus?: [...],   // same rule shape as axes' clickBonus
+     requires: [...],      // same shape as axes' requires
+   }
+   ============================================================ */
+const EQUIPS = {
+  punything: {
+    key:'punything', name:'Puny Thingy',
+    desc:'is this just a weak ahh thing? 😂',
+    luckMult:1.05, idleEfficiencyMult:1.10,
+    bonus:'On click: 1/25 chance to add (current bulk / 2) rolls at ×2 your current luck and dynamic mutation luck (luck×0.2, clamped between ×0.2 and ×5).',
+    clickBonus:[{
+      oneIn:25,
+      dynamicRollsFn(){ return Math.round(effectiveBulk() / 2); },
+      dynamicLuckMultFn(){ return effectiveLuckMult() * 2; },
+      dynamicMutationLuckFn(){ return Math.max(0.2, Math.min(5, effectiveLuckMult() * 0.2)); },
+    }],
+    requires:[
+      { name:'Dirt', area:'Natural', amount:75 },
+      { name:'Blade of Grass', area:'Natural', amount:10 },
+      { name:'Rock', area:'Natural', amount:18 },
+    ],
+  },
+  vitaminaxey: {
+    key:'vitaminaxey', name:'Vitamin Axey',
+    desc:'- now with 25% more shit to help YOU go faster! (side effects may cause less idle-ing and more active-ing and intense axe usage sessions (Please dont take this seriously and learn what some stuff does this is just a game))',
+    luckMult:3.33, idleEfficiencyMult:1.30,
+    bonus:'On every click: +275 rolls at ×5 luck. Offline every 3 min: +36,500 rolls at ×0.2 luck.',
+    clickBonus:[{ chance:1, rolls:275, luckMult:5 }],
+    offlineBonus:[{ intervalSeconds:180, chancePerInterval:1, minRolls:36500, maxRolls:36500, bonusLuckMult:0.2 }],
+    // Rank value: 8×Life(75,000) + 5×Fire(5,000) = 625,000 exactly ✓
+    requires:[
+      { name:'Life', area:'Natural', amount:8 },
+      { name:'Fire', area:'Natural', amount:5 },
+    ],
+  },
+  coinbag: {
+    key:'coinbag', name:'Coin Bag',
+    desc:'im rich heres money - you ingame',
+    luckMult:1.5, rpsMult:1.5,
+    coinBagStackChance: 1/5,
+    coinBagStackDurationMs: 15000,
+    bonus:'On click: 1/5 chance to add a 15-second stack, each worth +5% of your current luck (capped +125% total) and +0.1× mutation luck (capped +1.5× total), additively. Offline every 4 hours: +75,000 rolls at ×50 luck and ×2 mutation luck.',
+    offlineBonus:[{ intervalSeconds:14400, chancePerInterval:1, minRolls:75000, maxRolls:75000, bonusLuckMult:50 }],
+    // Rank value: 500×Pearl(700,000) + 100×Heavenly(2,500,000) + 15×Aurora Borealis(7,500,000) = 712,500,000 > 700M ✓
+    requires:[
+      { name:'Pearl', area:'Dreamland', amount:500 },
+      { name:'Heavenly', area:'Dreamland', amount:100 },
+      { name:'Aurora Borealis', area:'Dreamland', amount:15 },
+    ],
+  },
+  pottedplant: {
+    key:'pottedplant', name:'Axe In A Potted Plant (why?)',
+    desc:'why?',
+    luckMult:1.2, idleEfficiencyMult:2.0, // "+100% offline efficiency" = x2
+    bonus:'Every 15th click: 1/5 chance to add (×5 your current bulk) rolls at ×2.5 luck and ×1.2 mutation luck.',
+    clickBonus:[{
+      everyNClicks:15, oneIn:5,
+      dynamicRollsFn(){ return Math.round(effectiveBulk() * 5); },
+      luckMult:2.5, mutationLuckMult:1.2,
+    }],
+    // Rank value: 30×Leviathan(30M, weird) + 15×Entropy(50M, odd) + 20×Aurora Borealis(7.5M, rainbow) = 1,800,000,000 exactly ✓
+    // ALL requirements must be VARIANTED ranks — plain/base copies never count toward this recipe.
+    requires:[
+      { name:'Leviathan',        area:'Natural',   amount:30, variant:'weird'   },
+      { name:'Entropy',          area:'Wasteland', amount:15, variant:'odd'     },
+      { name:'Aurora Borealis',  area:'Dreamland', amount:20, variant:'rainbow' },
+    ],
+  },
+  fishystarsystem: {
+    key:'fishystarsystem', name:'Fishy Starsystem',
+    desc:'swimming through the cosmos, somehow.',
+    luckMult:2.5, idleEfficiencyMult:3.75, // "+275% offline efficiency" = x3.75
+    bonus:'On click: 1/150 chance to add 750 rolls at ×25 luck. Offline every hour: +400,000 rolls at ×7.5 luck and ×2 mutation luck.',
+    clickBonus:[{ oneIn:150, rolls:750, luckMult:25 }],
+    offlineBonus:[{ intervalSeconds:3600, chancePerInterval:1, minRolls:400000, maxRolls:400000, bonusLuckMult:7.5 }],
+    // Rank value: 30×Moon(400M) + 16×Obliterator(750M) + 17×Imaginary(680M) = 35,560,000,000 > 35B ✓
+    requires:[
+      { name:'Moon',        area:'Natural',   amount:30 },
+      { name:'Obliterator', area:'Wasteland', amount:16 },
+      { name:'Imaginary',   area:'Dreamland', amount:17 },
+    ],
+  },
+  axenades: {
+    key:'axenades', name:'Portable Rechargable Axenades',
+    desc:'boom, but portable, and reusable.',
+    bombChargeSpeedMult: 2,    // Explosive Axe Bomb charges x2 faster while equipped
+    bombEfficiencyMult: 1.5,   // bomb fires x1.5 as many rolls when triggered
+    bombTriggerBonus:{ rolls:25000, luckMult:175, mutationLuckMult:5 }, // extra batch on trigger
+    bonus:'Offline every 25s: +500 rolls at ×17 luck. Every 100th click: +4,000 rolls at ×2 luck. While equipped, the Explosive Axe Bomb charges ×2 faster and is ×1.5 more efficient — and firing it also adds a bonus 25,000 rolls at ×175 luck and ×5 mutation luck.',
+    offlineBonus:[{ intervalSeconds:25, chancePerInterval:1, minRolls:500, maxRolls:500, bonusLuckMult:17 }],
+    clickBonus:[{ everyNClicks:100, chance:1, rolls:4000, luckMult:2 }],
+    // Rank value: 10×Moon(400M) + 8×Obliterator(750M) + 8×Imaginary(680M) = 15,440,000,000 > 15B ✓
+    requires:[
+      { name:'Moon',        area:'Natural',   amount:10 },
+      { name:'Obliterator', area:'Wasteland', amount:8  },
+      { name:'Imaginary',   area:'Dreamland', amount:8  },
+    ],
+    requiresConsumables:[
+      { key:'bomb', amount:2 },
+    ],
+  },
+};
+const EQUIP_ORDER = ['punything','vitaminaxey','coinbag','pottedplant','fishystarsystem','axenades'];
+
 const CONSUMABLES = {
   pushpin: {
     key:'pushpin', name:'Pushpin',
@@ -1523,6 +1645,8 @@ let state = {
   inventory: {},
   ownedAxes: ['default'],
   equippedAxe: 'default',
+  ownedEquips: [],
+  equippedItem: null,        // key into EQUIPS, or null for bare-handed
   lastSeenAt: Date.now(),
   pinnedRecipe: null,       // { kind:'axe'|'consumable', key }
   consumables: {},          // { pushpin: 2, gloves: 0, bomb: 1 }
@@ -1531,6 +1655,7 @@ let state = {
   clickCount: 0,
   anticheatLockUntil: null,
   wgunStacks: [],           // array of { expiresAt: timestamp }, max 3
+  coinBagStacks: [],        // array of { expiresAt: timestamp } — Coin Bag's 15s luck/mutation-luck stacks
   discoveredSecrets: {},    // { secretKey: firstDiscoveredAtTimestamp }
 };
 
@@ -1538,6 +1663,38 @@ const MAX_OFFLINE_SECONDS = 7 * 24 * 60 * 60; // 7 day cap
 
 function currentAxe(){
   return AXES[state.equippedAxe] || AXES.default;
+}
+
+// Returns the currently equipped item's data, or null if bare-handed (no equip slotted).
+function currentEquip(){
+  if(!state.equippedItem) return null;
+  return EQUIPS[state.equippedItem] || null;
+}
+
+// Effective luck = axe's own luck × equip's luckMult (if any). Equips never replace the axe's
+// luck, only multiply on top of it.
+function effectiveLuckMult(){
+  const axe = currentAxe();
+  const equip = currentEquip();
+  let mult = axe.stats.luckMult;
+  if(equip && equip.luckMult) mult *= equip.luckMult;
+  // [Coin Bag] (equip): active stacks add their luck% ADDITIVELY on top of everything else so
+  // far (not another flat multiplier stacking multiplicatively), matching "+5% of your current
+  // luck" — i.e. current luck grows by a percentage of itself, then that becomes the new total.
+  if(equip && equip.key === 'coinbag'){
+    const bonus = coinBagBonus();
+    if(bonus.luckAddPct > 0) mult *= (1 + bonus.luckAddPct / 100);
+  }
+  return mult;
+}
+
+// Effective bulk = axe's own bulk + equip's flat bulkAdd (if any).
+function effectiveBulk(){
+  const axe = currentAxe();
+  const equip = currentEquip();
+  const base = axe.stats.bulk;
+  if(!equip || !equip.bulkAdd) return base;
+  return base + equip.bulkAdd;
 }
 
 /* ============================================================
@@ -1603,6 +1760,8 @@ async function dbSaveMeta(){
         areaIdx: state.areaIdx,
         ownedAxes: state.ownedAxes,
         equippedAxe: state.equippedAxe,
+        ownedEquips: state.ownedEquips,
+        equippedItem: state.equippedItem,
         lastSeenAt: state.lastSeenAt,
         pinnedRecipe: state.pinnedRecipe,
         consumables: state.consumables,
@@ -1611,6 +1770,7 @@ async function dbSaveMeta(){
         clickCount: state.clickCount,
         anticheatLockUntil: state.anticheatLockUntil,
         wgunStacks: state.wgunStacks,
+        coinBagStacks: state.coinBagStacks,
         discoveredSecrets: state.discoveredSecrets,
       });
     });
@@ -1651,6 +1811,8 @@ async function dbLoadAll(){
       state.areaIdx = meta.areaIdx || 0;
       state.ownedAxes = meta.ownedAxes && meta.ownedAxes.length ? meta.ownedAxes : ['default'];
       state.equippedAxe = meta.equippedAxe || 'default';
+      state.ownedEquips = meta.ownedEquips || [];
+      state.equippedItem = meta.equippedItem || null;
       state.lastSeenAt = meta.lastSeenAt || Date.now();
       state.pinnedRecipe = meta.pinnedRecipe || null;
       state.consumables = meta.consumables || {};
@@ -1659,6 +1821,7 @@ async function dbLoadAll(){
       state.anticheatLockUntil = meta.anticheatLockUntil || null;
       state.clickCount = meta.clickCount || 0;
       state.wgunStacks = meta.wgunStacks || [];
+      state.coinBagStacks = meta.coinBagStacks || [];
       state.discoveredSecrets = meta.discoveredSecrets || {};
     }
 
@@ -2117,7 +2280,7 @@ function rollOnceForArea(world, area, luckMult, opts){
   return { name:winner.name, baseRng:resolvedBaseRng, finalRng, tier, variant, areaLabel:trueAreaLabel };
 }
 
-function rollOnce(){
+function rollOnce(opts){
   const world = WORLDS[state.worldIdx];
   const area = world.areas[state.areaIdx];
 
@@ -2128,8 +2291,8 @@ function rollOnce(){
     return secretHit;
   }
 
-  const luckMult = currentAxe().stats.luckMult;
-  return rollOnceForArea(world, area, luckMult);
+  const luckMult = effectiveLuckMult();
+  return rollOnceForArea(world, area, luckMult, opts);
 }
 
 /* ============================================================
@@ -2200,13 +2363,17 @@ function tierGlowColor(key){
 
 function renderAxeStrip(){
   const axe = currentAxe();
+  const equip = currentEquip();
   const stacks = wgunActiveStacks();
   const rps = effectiveRps();
-  const rpsLabel = stacks > 0 ? `${rps.toFixed(1)} rolls/sec offline 💧×${stacks}` : `${axe.stats.rps} rolls/sec offline`;
+  const luck = effectiveLuckMult();
+  const bulk = effectiveBulk();
+  const rpsLabel = stacks > 0 ? `${rps.toFixed(1)} rolls/sec offline 💧×${stacks}` : `${rps} rolls/sec offline`;
+  const equipLabel = equip ? ` · 🛡️ ${equip.name}` : '';
   const el = document.getElementById('axeStrip');
   el.innerHTML = `
-    <span class="aname">🪓 ${axe.name}</span>
-    <span class="astats">luck ×${axe.stats.luckMult} · bulk ${axe.stats.bulk} · ${rpsLabel}</span>
+    <span class="aname">🪓 ${axe.name}${equipLabel}</span>
+    <span class="astats">luck ×${luck} · bulk ${bulk} · ${rpsLabel}</span>
   `;
 }
 
@@ -2412,21 +2579,18 @@ function setupInventoryFilters(){
   });
 }
 
-// Toggles which card list (Axes or Consumables) is visible in the Items view — a single shared
-// dropdown for the whole view, rather than two always-visible stacked lists.
+// Toggles which card list (Axes, Consumables, or Equippables) is visible in the Items view — a
+// single shared dropdown for the whole view, rather than several always-visible stacked lists.
 function setupItemCategorySelect(){
   const sel = document.getElementById('itemCategorySelect');
   if(!sel) return;
   sel.addEventListener('change', ()=>{
     const axesEl = document.getElementById('itemCards');
     const consumablesEl = document.getElementById('consumableCards');
-    if(sel.value === 'axes'){
-      axesEl.style.display = '';
-      consumablesEl.style.display = 'none';
-    } else {
-      axesEl.style.display = 'none';
-      consumablesEl.style.display = '';
-    }
+    const equipsEl = document.getElementById('equipCards');
+    axesEl.style.display = sel.value === 'axes' ? '' : 'none';
+    consumablesEl.style.display = sel.value === 'consumables' ? '' : 'none';
+    equipsEl.style.display = sel.value === 'equips' ? '' : 'none';
   });
 }
 
@@ -2706,6 +2870,96 @@ function renderPinnedRecipePanel(){
   });
 }
 
+function renderEquipCards(){
+  const el = document.getElementById('equipCards');
+  if(!el) return;
+
+  if(EQUIP_ORDER.length === 0){
+    el.innerHTML = `<div class="inv-empty">No equippables exist yet — check back later.</div>`;
+    return;
+  }
+
+  el.innerHTML = EQUIP_ORDER.map(key=>{
+    const item = EQUIPS[key];
+    const owned = state.ownedEquips.includes(key);
+    const equipped = state.equippedItem === key;
+
+    let reqHtml = '';
+    let canCraft = true;
+    reqHtml = item.requires.map(req=>{
+      const have = getOwnedCount(req.area, req.name, req.variant);
+      const ok = have >= req.amount;
+      if(!ok) canCraft = false;
+      const variantTag = req.variant ? ` (${req.variant})` : '';
+      return `<div class="req-row ${ok?'ok':'short'}">${req.name}${variantTag} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
+    }).join('');
+    if(item.requiresConsumables){
+      reqHtml += item.requiresConsumables.map(creq=>{
+        const have = getConsumableCount(creq.key);
+        const ok = have >= creq.amount;
+        if(!ok) canCraft = false;
+        const cname = CONSUMABLES[creq.key] ? CONSUMABLES[creq.key].name : creq.key;
+        return `<div class="req-row ${ok?'ok':'short'}">${cname} (consumable) <span>${have.toLocaleString()} / ${creq.amount.toLocaleString()}</span></div>`;
+      }).join('');
+    }
+
+    // Equips show their MODIFIERS (relative to the axe), not absolute stats
+    const statParts = [];
+    if(item.luckMult) statParts.push(`<span class="stat">luck <b>×${item.luckMult}</b></span>`);
+    if(item.bulkAdd) statParts.push(`<span class="stat">bulk <b>+${item.bulkAdd}</b></span>`);
+    if(item.rpsMult) statParts.push(`<span class="stat">rps <b>×${item.rpsMult}</b></span>`);
+    if(item.idleEfficiencyMult) statParts.push(`<span class="stat">idle efficiency <b>×${item.idleEfficiencyMult}</b></span>`);
+    const statsHtml = statParts.length ? `<div class="istats">${statParts.join('')}</div>` : '';
+
+    let actionHtml = '';
+    if(equipped){
+      actionHtml = `<button class="btn small secondary" data-unequip="1">Unequip</button>`;
+    } else if(owned){
+      actionHtml = `<button class="btn small" data-equip-item="${key}">Equip</button>`;
+    } else {
+      actionHtml = `<button class="btn small ${canCraft?'':'secondary'}" data-craft-equip="${key}" ${canCraft?'':'disabled'}>Craft</button>`;
+    }
+
+    const bonusSub = item.bonus ? `
+      <div class="sub-acc-item" data-sub-acc="ebonus-${key}">
+        <div class="sub-acc-head"><span>✦ Bonus</span><span class="chev">▾</span></div>
+        <div class="sub-acc-body"><span class="stat" style="color:var(--accent-2);">${item.bonus}</span></div>
+      </div>` : '';
+
+    const recipeSub = `
+      <div class="sub-acc-item" data-sub-acc="erecipe-${key}">
+        <div class="sub-acc-head"><span>📋 Recipe${canCraft && !owned ? ' <span class="ready-tag">ready</span>' : ''}</span><span class="chev">▾</span></div>
+        <div class="sub-acc-body"><div class="req-list">${reqHtml}</div></div>
+      </div>`;
+
+    return `
+      <div class="item-card ${equipped?'equipped':''}">
+        <div class="ihead">
+          <span class="iname">${item.name}</span>
+          ${owned && !equipped ? '<span class="badge-owned">Owned</span>' : ''}
+        </div>
+        <div class="idesc">${item.desc}</div>
+        ${statsHtml}
+        ${bonusSub}
+        ${recipeSub}
+        <div style="text-align:right; margin-top:10px;">${actionHtml}</div>
+      </div>
+    `;
+  }).join('');
+
+  setupSubAccordions(el);
+
+  el.querySelectorAll('[data-craft-equip]').forEach(btn=>{
+    btn.addEventListener('click', ()=> craftEquip(btn.dataset.craftEquip));
+  });
+  el.querySelectorAll('[data-equip-item]').forEach(btn=>{
+    btn.addEventListener('click', ()=> equipItem(btn.dataset.equipItem));
+  });
+  el.querySelectorAll('[data-unequip]').forEach(btn=>{
+    btn.addEventListener('click', ()=> unequipItem());
+  });
+}
+
 function craftAxe(key){
   const axe = AXES[key];
   if(!axe || axe.free || state.ownedAxes.includes(key)) return;
@@ -2732,6 +2986,57 @@ function equipAxe(key){
   state.equippedAxe = key;
   dbSaveMeta();
   renderItemCards();
+  renderAxeStrip();
+  updateStatStrip();
+}
+
+function craftEquip(key){
+  const item = EQUIPS[key];
+  if(!item || state.ownedEquips.includes(key)) return;
+  for(const req of item.requires){
+    if(getOwnedCount(req.area, req.name, req.variant) < req.amount) return;
+  }
+  // Some equips also consume owned CONSUMABLES as part of their recipe (e.g. Axenades needing
+  // 2 Explosive Axe Bombs), not just raw inventory ranks.
+  if(item.requiresConsumables){
+    for(const creq of item.requiresConsumables){
+      if(getConsumableCount(creq.key) < creq.amount) return;
+    }
+  }
+  for(const req of item.requires){
+    const k = invKey(req.area, req.name, req.variant || null);
+    state.inventory[k].count -= req.amount;
+    dbSaveInvItem(state.inventory[k]);
+  }
+  if(item.requiresConsumables){
+    for(const creq of item.requiresConsumables){
+      state.consumables[creq.key] -= creq.amount;
+    }
+  }
+  state.ownedEquips.push(key);
+  state.equippedItem = key;
+  dbSaveMeta();
+  renderEquipCards();
+  renderConsumableCards();
+  renderInventory();
+  renderAxeStrip();
+  updateStatStrip();
+}
+
+function equipItem(key){
+  if(!state.ownedEquips.includes(key)) return;
+  // Toggling the already-equipped item off goes back to bare-handed
+  state.equippedItem = (state.equippedItem === key) ? null : key;
+  dbSaveMeta();
+  renderEquipCards();
+  renderAxeStrip();
+  updateStatStrip();
+}
+
+function unequipItem(){
+  state.equippedItem = null;
+  dbSaveMeta();
+  renderEquipCards();
   renderAxeStrip();
   updateStatStrip();
 }
@@ -2881,13 +3186,39 @@ function wgunActiveStacks(){
   return state.wgunStacks.length;
 }
 
+// [Coin Bag] (equip): every click has a 1/5 chance to add a 15-second stack. Each active stack
+// contributes +5% of your CURRENT luck additively (capped at +125% total) and +0.1x mutation luck
+// (capped at +1.5x total). Stacks are purely time-decayed (15s each), same pattern as the
+// Watergun's stacks, just on its own independent timer/state so the two systems never collide.
+function coinBagActiveStacks(){
+  if(!state.coinBagStacks) return 0;
+  const now = Date.now();
+  state.coinBagStacks = state.coinBagStacks.filter(s => s.expiresAt > now);
+  return state.coinBagStacks.length;
+}
+
+// Returns { luckAddPct, mutationLuckAdd } — the current additive luck% bonus (capped at 125) and
+// additive mutation luck bonus (capped at 1.5) from active Coin Bag stacks. Each stack is worth
+// +5% luck / +0.1x mutation luck; the CURRENT-luck-% part is applied by the caller since "current
+// luck" needs to be evaluated at the point of use (it changes as other buffs stack/decay).
+function coinBagBonus(){
+  const stacks = coinBagActiveStacks();
+  if(stacks === 0) return { luckAddPct: 0, mutationLuckAdd: 0 };
+  return {
+    luckAddPct: Math.min(stacks * 5, 125),
+    mutationLuckAdd: Math.min(stacks * 0.1, 1.5),
+  };
+}
+
 // Effective RPS including watergun stacks: base * (1 + stacks * 0.5), capped at base * 2.5
 function effectiveRps(){
   const base = currentAxe().stats.rps;
   const stacks = wgunActiveStacks();
-  if(stacks === 0) return base;
-  const mult = Math.min(1 + stacks * CONSUMABLES.watergun.stackMult, CONSUMABLES.watergun.capMult);
-  return base * mult;
+  const wgunMult = stacks === 0 ? 1 : Math.min(1 + stacks * CONSUMABLES.watergun.stackMult, CONSUMABLES.watergun.capMult);
+  const equip = currentEquip();
+  const equipMult = (equip && equip.rpsMult) ? equip.rpsMult : 1;
+  const idleEffMult = (equip && equip.idleEfficiencyMult) ? equip.idleEfficiencyMult : 1;
+  return base * wgunMult * equipMult * idleEffMult;
 }
 
 // [Irritation] (Rage Axe only): for every FULL day the player has been continuously idle, every
@@ -2961,7 +3292,11 @@ function useConsumable(key){
       return;
     }
     state.consumables.bomb--;
-    state.bombCharge = { chargingUntil: Date.now() + CONSUMABLES.bomb.chargeSeconds * 1000 };
+    // [Axenades] (equip): if worn, the bomb's charge time is halved (x2 faster).
+    const equip = currentEquip();
+    const chargeSpeedMult = (equip && equip.bombChargeSpeedMult) ? equip.bombChargeSpeedMult : 1;
+    const chargeMs = (CONSUMABLES.bomb.chargeSeconds * 1000) / chargeSpeedMult;
+    state.bombCharge = { chargingUntil: Date.now() + chargeMs };
     dbSaveMeta();
     renderConsumableCards();
   }
@@ -2983,24 +3318,46 @@ function triggerBomb(){
   const area = world.areas[state.areaIdx];
   const axe = currentAxe();
   const cfg = CONSUMABLES.bomb;
+  const equip = currentEquip();
+
+  // [Axenades] (equip): if worn, the bomb itself is x1.5 more efficient — more rolls per trigger.
+  const bombEffMult = (equip && equip.bombEfficiencyMult) ? equip.bombEfficiencyMult : 1;
+  const bombRollCount = Math.round(cfg.rollCount * bombEffMult);
 
   let best = null;
   const counts = {};
-  for(let i=0;i<cfg.rollCount;i++){
+  let totalRollsFired = 0;
+  for(let i=0;i<bombRollCount;i++){
     const r = rollOnceForArea(world, area, cfg.luckMult, { mutationLuckMult: cfg.mutationLuckMult });
     const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
     if(!counts[k]) counts[k] = { result:r, count:0 };
     counts[k].count++;
+    totalRollsFired++;
     if(!best || r.finalRng > best.finalRng) best = r;
   }
+
+  // [Axenades] (equip): also fires an EXTRA bonus batch when the bomb goes off, on top of the
+  // bomb's own (possibly efficiency-boosted) roll batch above.
+  if(equip && equip.bombTriggerBonus){
+    const bb = equip.bombTriggerBonus;
+    for(let i=0;i<bb.rolls;i++){
+      const r = rollOnceForArea(world, area, bb.luckMult, { mutationLuckMult: bb.mutationLuckMult || 1 });
+      const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
+      if(!counts[k]) counts[k] = { result:r, count:0 };
+      counts[k].count++;
+      totalRollsFired++;
+      if(!best || r.finalRng > best.finalRng) best = r;
+    }
+  }
+
   for(const k in counts){
     addToInventory(counts[k].result, counts[k].count);
   }
-  state.rolls += cfg.rollCount;
+  state.rolls += totalRollsFired;
   state.bombCharge = null;
   if(best){
     pushLog(best);
-    renderStage(best, cfg.rollCount);
+    renderStage(best, totalRollsFired);
     if(!state.best || best.finalRng > state.best.finalRng) state.best = best;
   }
   renderInventory();
@@ -3029,7 +3386,7 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
 });
 
 function refreshLiveViews(){
-  if(currentView === 'items'){ renderItemCards(); renderConsumableCards(); }
+  if(currentView === 'items'){ renderItemCards(); renderConsumableCards(); renderEquipCards(); }
   if(currentView === 'inventory') renderInventory();
 }
 
@@ -3037,13 +3394,52 @@ function refreshLiveViews(){
    ROLLING (manual, with bulk from axe)
    ============================================================ */
 
+// Processes a click-bonus rule set (from an axe OR an equip) against the current click count,
+// pushing any triggered rolls into `results` and returning how many extra rolls fired. Shared so
+// axes and equips don't need two separate copies of this logic.
+// Processes a click-bonus rule set (from an axe OR an equip) against the current click count,
+// pushing any triggered rolls into `results` and returning how many extra rolls fired. Shared so
+// axes and equips don't need two separate copies of this logic.
+//
+// Supports optional dynamic functions for rules whose roll count/luck depend on the player's
+// LIVE stats at the moment of firing rather than a fixed value (e.g. Puny Thingy's click bonus:
+// rolls = currentBulk/2, luckMult = 2x currentLuck, mutationLuckMult = clamp(currentLuck*0.2, 0.2, 5)):
+//   dynamicRollsFn()          -> returns the roll count for this trigger
+//   dynamicLuckMultFn()       -> returns the luckMult for this trigger
+//   dynamicMutationLuckFn()   -> returns the mutationLuckMult for this trigger
+function processClickBonusRules(rules, world, area, results, updateBest){
+  if(!rules) return 0;
+  const ruleList = Array.isArray(rules) ? rules : [rules];
+  let fired = 0;
+  for(const rule of ruleList){
+    if(rule.everyNClicks && state.clickCount % rule.everyNClicks !== 0) continue;
+    const chance = rule.chance != null ? rule.chance : (1 / (rule.oneIn || 1));
+    if(Math.random() < chance){
+      const rollCount = rule.dynamicRollsFn ? Math.max(0, Math.round(rule.dynamicRollsFn())) : (rule.rolls || 1);
+      const luckMult = rule.dynamicLuckMultFn ? rule.dynamicLuckMultFn() : rule.luckMult;
+      const mutationLuckMult = rule.dynamicMutationLuckFn ? rule.dynamicMutationLuckFn() : (rule.mutationLuckMult || 1);
+      for(let i=0;i<rollCount;i++){
+        const r = rollOnceForArea(world, area, luckMult, { mutationLuckMult });
+        results.push(r);
+        fired++;
+        updateBest(r);
+      }
+    }
+  }
+  return fired;
+}
+
 function doRoll(){
   const axe = currentAxe();
-  const bulk = axe.stats.bulk;
+  const equip = currentEquip();
+  const bulk = effectiveBulk();
   let best = null;
   const results = [];
+  // [Coin Bag] (equip): active stacks add +mutation luck to EVERY roll, not just click-bonus ones.
+  const coinBagMutBonus = (equip && equip.key === 'coinbag') ? coinBagBonus().mutationLuckAdd : 0;
+  const rollOpts = coinBagMutBonus > 0 ? { mutationLuckMult: 1 + coinBagMutBonus } : undefined;
   for(let i=0;i<bulk;i++){
-    const r = rollOnce();
+    const r = rollOnce(rollOpts);
     results.push(r);
     if(!best || r.finalRng > best.finalRng) best = r;
   }
@@ -3051,39 +3447,33 @@ function doRoll(){
   state.clickCount = (state.clickCount || 0) + 1;
   tickActiveBuffs(bulk);
 
-  // Click-triggered bonus rolls (e.g. Food Eater, Dreamers Prism, GlowAxe Guidance)
-  let clickBonusFired = 0;
-  if(axe.clickBonus){
-    const rules = Array.isArray(axe.clickBonus) ? axe.clickBonus : [axe.clickBonus];
-    const world = WORLDS[state.worldIdx];
-    const area = world.areas[state.areaIdx];
-    for(const rule of rules){
-      // Some click bonuses only check on every Nth click (e.g. Rage Axe's Fist O' Hurt every
-      // 3rd click, Anger every 70th, Slam every 20th) — skip entirely if this isn't that click.
-      if(rule.everyNClicks && state.clickCount % rule.everyNClicks !== 0) continue;
+  const world = WORLDS[state.worldIdx];
+  const area = world.areas[state.areaIdx];
+  const updateBest = (r) => { if(!best || r.finalRng > best.finalRng) best = r; };
 
-      const chance = rule.chance != null ? rule.chance : (1 / (rule.oneIn || 1));
-      if(Math.random() < chance){
-        const rollCount = rule.rolls || 1;
-        for(let i=0;i<rollCount;i++){
-          const r = rollOnceForArea(world, area, rule.luckMult, { mutationLuckMult: rule.mutationLuckMult || 1 });
-          results.push(r);
-          clickBonusFired++;
-          if(!best || r.finalRng > best.finalRng) best = r;
-        }
-      }
+  // Click-triggered bonus rolls from the axe (e.g. Food Eater, Dreamers Prism, GlowAxe Guidance)
+  let clickBonusFired = processClickBonusRules(axe.clickBonus, world, area, results, updateBest);
+
+  // Click-triggered bonus rolls from the equipped item, if any (same rule shape as axes)
+  if(equip){
+    clickBonusFired += processClickBonusRules(equip.clickBonus, world, area, results, updateBest);
+  }
+
+  // [Coin Bag] (equip): on click, 1/5 chance to add a 15-second luck/mutation-luck stack.
+  if(equip && equip.key === 'coinbag' && equip.coinBagStackChance){
+    if(Math.random() < equip.coinBagStackChance){
+      if(!state.coinBagStacks) state.coinBagStacks = [];
+      state.coinBagStacks.push({ expiresAt: Date.now() + equip.coinBagStackDurationMs });
     }
   }
 
   // Sunrays: every N clicks, add bonus rolls (e.g. GlowAxe every 75th click)
   if(axe.sunrays && state.clickCount % axe.sunrays.everyNClicks === 0){
-    const world = WORLDS[state.worldIdx];
-    const area = world.areas[state.areaIdx];
     for(let i=0;i<axe.sunrays.rolls;i++){
       const r = rollOnceForArea(world, area, axe.sunrays.luckMult);
       results.push(r);
       clickBonusFired++;
-      if(!best || r.finalRng > best.finalRng) best = r;
+      updateBest(r);
     }
   }
   state.rolls += clickBonusFired;
@@ -3534,8 +3924,9 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
 
 async function resolveOfflineProgress(){
   const axe = currentAxe();
+  const equip = currentEquip();
   const rps = effectiveRps();
-  if(rps <= 0 && !axe.offlineBonus) return null;
+  if(rps <= 0 && !axe.offlineBonus && !(equip && equip.offlineBonus)) return null;
 
   const now = Date.now();
   let elapsedSeconds = (now - state.lastSeenAt) / 1000;
@@ -3552,9 +3943,10 @@ async function resolveOfflineProgress(){
 
   const world = WORLDS[state.worldIdx];
   const area = world.areas[state.areaIdx];
-  const luckMult = axe.stats.luckMult;
+  const luckMult = effectiveLuckMult();
 
-  if(totalRolls <= 0 && (!axe.offlineBonus || wholeSeconds <= 0)) return null;
+  const hasAnyOfflineBonus = axe.offlineBonus || (equip && equip.offlineBonus);
+  if(totalRolls <= 0 && (!hasAnyOfflineBonus || wholeSeconds <= 0)) return null;
 
   // Formulate the pool items (shared with rollOnceForArea so All's universal pool / debuffMult apply here too)
   const pool = buildAreaPool(world, area);
@@ -3562,10 +3954,10 @@ async function resolveOfflineProgress(){
   // [Irritation] also scales every OTHER offline bonus rule on this axe (flagged irritationScales)
   // by the same per-day efficiency multiplier — pre-scaled here rather than threading a new param
   // through the simulation functions, so simulateOfflineBonusRules stays untouched.
-  let scaledOfflineBonus = axe.offlineBonus;
+  let scaledAxeBonus = axe.offlineBonus;
   if(axe.irritation && axe.offlineBonus && irritationMult > 1){
     const rules = Array.isArray(axe.offlineBonus) ? axe.offlineBonus : [axe.offlineBonus];
-    scaledOfflineBonus = rules.map(rule => {
+    scaledAxeBonus = rules.map(rule => {
       if(!rule.irritationScales) return rule;
       const minRolls = rule.minRolls != null ? rule.minRolls : (rule.bonusRolls || 1);
       const maxRolls = rule.maxRolls != null ? rule.maxRolls : (rule.bonusRolls || 1);
@@ -3573,6 +3965,28 @@ async function resolveOfflineProgress(){
         ...rule,
         minRolls: Math.round(minRolls * irritationMult),
         maxRolls: Math.round(maxRolls * irritationMult),
+      };
+    });
+  }
+
+  // Equip offline bonuses run alongside the axe's — merged into one combined rule list so both
+  // fire correctly through the same simulation pass. Irritation only ever scales axe rules;
+  // idleEfficiencyMult (from an equip) scales EVERY offline bonus rule unconditionally, axe and
+  // equip alike, since it's meant to boost "everything idle" the same way Irritation's wording does.
+  const axeRules = scaledAxeBonus ? (Array.isArray(scaledAxeBonus) ? scaledAxeBonus : [scaledAxeBonus]) : [];
+  const equipRules = (equip && equip.offlineBonus) ? (Array.isArray(equip.offlineBonus) ? equip.offlineBonus : [equip.offlineBonus]) : [];
+  let scaledOfflineBonus = [...axeRules, ...equipRules];
+
+  const idleEffMult = (equip && equip.idleEfficiencyMult) ? equip.idleEfficiencyMult : 1;
+  if(idleEffMult > 1){
+    scaledOfflineBonus = scaledOfflineBonus.map(rule => {
+      if(rule.dynamicRolls) return rule; // dynamic-roll rules (e.g. GeomathAxe's Multiplication) compute their own count; leave untouched
+      const minRolls = rule.minRolls != null ? rule.minRolls : (rule.bonusRolls || 1);
+      const maxRolls = rule.maxRolls != null ? rule.maxRolls : (rule.bonusRolls || 1);
+      return {
+        ...rule,
+        minRolls: Math.round(minRolls * idleEffMult),
+        maxRolls: Math.round(maxRolls * idleEffMult),
       };
     });
   }
@@ -3862,6 +4276,7 @@ async function init(){
   setupInventoryFilters();
   renderItemCards();
   renderConsumableCards();
+  renderEquipCards();
   setupItemCategorySelect();
   updateStatStrip();
   if(report) renderOfflineBanner(report);
