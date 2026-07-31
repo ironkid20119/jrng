@@ -486,6 +486,15 @@
   .glow-unworldly{ text-shadow:0 0 28px rgba(232,121,249,0.5); }
   .glow-secret{ text-shadow:0 0 32px rgba(168,85,247,0.8); }
   .secret-row{ background:rgba(168,85,247,0.08); border-radius:6px; }
+  .secrets-summary{
+    font-family:var(--mono); font-size:12px; color:var(--text-dim);
+    padding:8px 4px 14px; border-bottom:1px solid var(--border); margin-bottom:8px;
+  }
+  .secrets-summary b{ color:#a855f7; }
+  .secret-progress-tag{
+    font-family:var(--mono); font-size:10px; color:var(--text-faint);
+    border:1px solid var(--border-lit); border-radius:100px; padding:2px 7px; margin-left:6px;
+  }
   .mystery-row{ background:rgba(255,255,255,0.03); border-radius:6px; }
   .pin-tag{ font-size:11px; opacity:0.85; }
 
@@ -666,7 +675,11 @@
   <!-- INDEX VIEW -->
   <div class="view" id="view-index">
     <div class="panel">
-      <h2 class="ptitle">Rank index — World 1</h2>
+      <h2 class="ptitle">🔒 Secret Ranks</h2>
+      <div class="accordion" id="secretsAccordion"></div>
+    </div>
+    <div class="panel">
+      <h2 class="ptitle" id="indexPanelTitle">Rank index — World 1</h2>
       <div class="accordion" id="indexAccordion"></div>
     </div>
   </div>
@@ -944,42 +957,134 @@ const SECRET_RANKS = [
       return true;
     },
   },
+  {
+    key:'tile_0',
+    name:'Tile 0',
+    worldKey: 'world0', areaKey: '2048', // must be in Fun -> 2048
+    // 1/750,000 normally, but 1/200,000 specifically at the top of the hour (:00) — trueRng can be
+    // a function evaluated at roll time instead of a flat number, for conditional rarity like this.
+    trueRng(world, area){
+      const now = new Date();
+      return now.getMinutes() === 0 ? 200000 : 750000;
+    },
+    condition(world, area){
+      const now = new Date();
+      // Minute must end in 0 (:00, :10, :20, :30, :40, :50)
+      if(now.getMinutes() % 10 !== 0) return false;
+      // Total rolls must end in exactly one '0' — the last digit is 0, and no OTHER digit is 0
+      // (e.g. 65,430 counts; 652,401 does not; 100 does not since there's a second zero before the last)
+      const s = String(state.rolls);
+      if(!s.endsWith('0')) return false;
+      if(s.slice(0, -1).includes('0')) return false;
+      return true;
+    },
+  },
+  {
+    key:'ampersand',
+    name:'&',
+    trueRng: 26900000,
+    worldKey: 'world0', areaKey: 'abc', // must be in Fun -> ABC
+    condition(world, area){
+      // "&" stands in for "and" — the connector between letters. It used to just check the last
+      // two log entries, but with high-bulk axes almost every click's BEST result in ABC is some
+      // plain letter anyway, so "two different plain letters in a row" was trivial to satisfy on
+      // repeat clicks. The real condition now requires a genuinely specific alignment instead:
+      //   1) Your last FOUR logged catches in this area must alternate consonant/vowel/consonant/vowel
+      //      (or vowel/consonant/vowel/consonant) — i.e. a real A-B-A-B letter-TYPE pattern, not just
+      //      "any two different letters" — and all four must be plain (no variants).
+      //   2) Those four letters, read in order, must spell out something whose combined alphabet
+      //      positions sum to a multiple of 26 (a full trip around the alphabet) — ties the trigger
+      //      to the actual VALUES of the letters you rolled, not just their type pattern.
+      //   3) Your total rolls at the moment of check must be a multiple of 26.
+      if(state.log.length < 4) return false;
+      if(state.rolls % 26 !== 0) return false;
+
+      const VOWELS = new Set(['A','E','I','O','U']);
+      const four = state.log.slice(0, 4);
+      const isPlainLetter = (r) => !r.isSecret && !r.variant && r.areaLabel === area.label && /^[A-Z]$/.test(r.name);
+      if(!four.every(isPlainLetter)) return false;
+
+      const types = four.map(r => VOWELS.has(r.name) ? 'V' : 'C');
+      const alternatesCV = types[0]==='C' && types[1]==='V' && types[2]==='C' && types[3]==='V';
+      const alternatesVC = types[0]==='V' && types[1]==='C' && types[2]==='V' && types[3]==='C';
+      if(!alternatesCV && !alternatesVC) return false;
+
+      const posSum = four.reduce((sum, r) => sum + (r.name.charCodeAt(0) - 64), 0); // A=1..Z=26
+      if(posSum % 26 !== 0) return false;
+
+      return true;
+    },
+  },
+  {
+    key:'secret_tier',
+    name:'Secret Tier',
+    trueRng: 50000000,
+    worldKey: 'world0', areaKey: 'tiers', // must be in Fun -> Tiers
+    condition(world, area){
+      // Requires the FULL collection of every OTHER secret rank — the plain version AND all 4
+      // variants (weird/odd/rainbow/grayscale) of each. Excludes itself, or this would be
+      // permanently impossible to obtain (you'd need to already have it to be eligible for it).
+      for(const other of SECRET_RANKS){
+        if(other.key === 'secret_tier') continue;
+        if(!isSecretDiscovered(other.key, null)) return false;
+        for(const v of VARIANT_CHAIN){
+          if(!isSecretDiscovered(other.key, v.key)) return false;
+        }
+      }
+      return true;
+    },
+  },
 ];
 
 // Checks all secret rank conditions for the given world/area and returns a winning secret roll, or null.
 // Each eligible secret gets its own independent true-rng roll; if multiple hit, the rarest trueRng wins.
+// Secrets can roll variants (Weird/Odd/Rainbow/Grayscale) exactly like normal ranks — each variant
+// of a secret counts as its own separate discovery (used by Secret Tier's full-collection check).
 function rollSecretForArea(world, area){
   let winner = null;
+  let winnerTrueRng = null;
   for(const secret of SECRET_RANKS){
     if(secret.worldKey && secret.worldKey !== world.key) continue;
     if(secret.areaKey && secret.areaKey !== area.key) continue;
     if(!secret.condition(world, area)) continue;
-    if(Math.random() < 1 / secret.trueRng){
-      if(!winner || secret.trueRng > winner.trueRng) winner = secret;
+    const resolvedTrueRng = typeof secret.trueRng === 'function' ? secret.trueRng(world, area) : secret.trueRng;
+    if(Math.random() < 1 / resolvedTrueRng){
+      if(!winner || resolvedTrueRng > winnerTrueRng){
+        winner = secret;
+        winnerTrueRng = resolvedTrueRng;
+      }
     }
   }
   if(!winner) return null;
+  const variant = rollVariant();
+  const finalRng = variant ? winnerTrueRng * variant.totalMult : winnerTrueRng;
   return {
     name: winner.name,
-    baseRng: winner.trueRng,
-    finalRng: winner.trueRng,
+    baseRng: winnerTrueRng,
+    finalRng,
     tier: SECRET_TIER,
-    variant: null,
+    variant,
     areaLabel: area.label,
     isSecret: true,
     secretKey: winner.key,
   };
 }
 
-function isSecretDiscovered(key){
-  return !!(state.discoveredSecrets && state.discoveredSecrets[key]);
+function isSecretDiscovered(key, variantKey){
+  if(!state.discoveredSecrets) return false;
+  const lookupKey = variantKey ? `${key}|${variantKey}` : key;
+  return !!state.discoveredSecrets[lookupKey];
 }
 
-function markSecretDiscovered(key){
+function markSecretDiscovered(key, variantKey){
   if(!state.discoveredSecrets) state.discoveredSecrets = {};
-  if(!state.discoveredSecrets[key]){
-    state.discoveredSecrets[key] = Date.now();
+  const lookupKey = variantKey ? `${key}|${variantKey}` : key;
+  if(!state.discoveredSecrets[lookupKey]){
+    state.discoveredSecrets[lookupKey] = Date.now();
     dbSaveMeta();
+    // Live-refresh the Secrets panel if it's currently the open view, so a fresh discovery
+    // shows up immediately without needing to switch tabs away and back.
+    if(typeof currentView !== 'undefined' && currentView === 'index') buildSecretsAccordion();
   }
 }
 
@@ -1377,11 +1482,11 @@ const AXES = {
   silkinator: {
     key:'silkinator', name:'Silkinator',
     desc:'Spun from something that was never quite alive.',
-    stats:{ luckMult:2.5, bulk:39, rps:175 },
-    bonus:'[Spider Web] Offline every 5 mins: +5,000 rolls at ×3.5 luck. [Creepy Crawlies] Offline every sec: 1/1,111 for +11,111 rolls at ×11.11 luck.',
+    stats:{ luckMult:5, bulk:40, rps:625 },
+    bonus:'[Spider Web] Offline every minute: +2,500 rolls at ×12.5 luck. [Creepy Crawlies] Offline every 22 min: 1/2.2 chance for +22,222 rolls at ×22.2 luck.',
     offlineBonus:[
-      { intervalSeconds:300, chancePerInterval:1, minRolls:5000, maxRolls:5000, bonusLuckMult:3.5 },
-      { intervalSeconds:1, chancePerInterval:1/1111, minRolls:11111, maxRolls:11111, bonusLuckMult:11.11 },
+      { intervalSeconds:60, chancePerInterval:1, minRolls:2500, maxRolls:2500, bonusLuckMult:12.5 },
+      { intervalSeconds:1320, chancePerInterval:1/2.2, minRolls:22222, maxRolls:22222, bonusLuckMult:22.2 },
     ],
     // Rank value: 1×Moon(400M) + 1×Garbage Compacter(200M) + 3×Leviathan(90M) + 5×Aurora Borealis(37.5M) + 2×The Probably Rarest Thing Ever(20M) + 5×Leftover Burger(4M) + 10×Heavenly(25M) ≈ 776.5M > 775M ✓
     requires:[
@@ -2287,7 +2392,7 @@ function rollOnce(opts){
   // Secret ranks are checked first — true rng, bypasses luck/buffs entirely, real-time clock gated
   const secretHit = rollSecretForArea(world, area);
   if(secretHit){
-    markSecretDiscovered(secretHit.secretKey);
+    markSecretDiscovered(secretHit.secretKey, secretHit.variant ? secretHit.variant.key : null);
     return secretHit;
   }
 
@@ -2465,7 +2570,7 @@ function renderWorldTabs(){
       renderWorldTabs();
       renderAreaSelect();
       buildIndexAccordion();
-      const titleEl = document.querySelector('.ptitle');
+      const titleEl = document.getElementById('indexPanelTitle');
       if(titleEl) titleEl.textContent = `Rank index — ${WORLDS[state.worldIdx].label}`;
       dbSaveMeta();
     });
@@ -2649,6 +2754,59 @@ function indexRankRowHtml(name, rng, isMutation, sourceTag, foundCheck, areaLabe
   return `<div class="rank-row"${indent}><span${fontSize}>${arrow}${nameHtml}${pinnedTag}</span><span class="rrng">1/${fmtRng(rng)} · ${t.label}${src}</span></div>`;
 }
 
+// Dedicated Secrets section of the Index — independent of which world tab is selected, since
+// secret ranks are scattered across multiple worlds. Shows every secret's discovery status
+// (plain + all 4 variants individually), a completion count, and hides names for anything
+// completely undiscovered so it stays a genuine surprise until you actually find one.
+function buildSecretsAccordion(){
+  const el = document.getElementById('secretsAccordion');
+  if(!el) return;
+
+  let totalSlots = 0;
+  let foundSlots = 0;
+  let html = '';
+
+  for(const secret of SECRET_RANKS){
+    const plainFound = isSecretDiscovered(secret.key, null);
+    const variantResults = VARIANT_CHAIN.map(v => ({ v, found: isSecretDiscovered(secret.key, v.key) }));
+    const foundCount = (plainFound ? 1 : 0) + variantResults.filter(r => r.found).length;
+    totalSlots += 1 + VARIANT_CHAIN.length;
+    foundSlots += foundCount;
+
+    const anyFound = foundCount > 0;
+    const displayName = anyFound ? secret.name : '???';
+    const progressTag = `<span class="secret-progress-tag">${foundCount}/${VARIANT_CHAIN.length + 1}</span>`;
+
+    const plainRow = `<div class="rank-row ${plainFound?'':'mystery-row'}">
+      <span class="rname ${plainFound?'t-secret':''}">${plainFound ? '🔒 '+secret.name : '???'}</span>
+      <span class="rrng">${plainFound ? '??? · Secret' : '??? · ???'}</span>
+    </div>`;
+
+    const variantRows = variantResults.map(({v, found}) => `
+      <div class="rank-row ${found?'':'mystery-row'}" style="padding-left:16px; opacity:0.9;">
+        <span class="rname ${found?'t-secret vwrap '+v.cls:''}" style="font-size:13px;">${found ? `🔒 ↳ ${secret.name} ✦` : `↳ ???`}</span>
+        <span class="rrng">${found ? `??? · Secret (${v.label})` : '??? · ???'}</span>
+      </div>
+    `).join('');
+
+    html += `
+      <div class="acc-item" data-acc="secret-${secret.key}">
+        <div class="acc-head"><span>${anyFound ? '🔒 ' : '🔒 '}${displayName} ${progressTag}</span><span class="chev">▾</span></div>
+        <div class="acc-body">${plainRow}${variantRows}</div>
+      </div>
+    `;
+  }
+
+  const summaryHtml = `<div class="secrets-summary">Overall: <b>${foundSlots} / ${totalSlots}</b> secret forms discovered</div>`;
+  el.innerHTML = summaryHtml + html;
+
+  el.querySelectorAll('.acc-head').forEach(head=>{
+    head.addEventListener('click', ()=>{
+      head.parentElement.classList.toggle('open');
+    });
+  });
+}
+
 function buildIndexAccordion(){
   const el = document.getElementById('indexAccordion');
   const world = WORLDS[state.worldIdx];
@@ -2696,12 +2854,19 @@ function buildIndexAccordion(){
       }
     }
 
-    // Secret ranks tied to this world/area only appear once discovered — rarity always stays hidden
+    // Secret ranks tied to this world/area only appear once discovered — rarity always stays hidden.
+    // Each variant of a secret (plain, weird, odd, rainbow, grayscale) is tracked and shown separately.
     for(const secret of SECRET_RANKS){
       if(secret.worldKey && secret.worldKey !== world.key) continue;
       if(secret.areaKey && secret.areaKey !== area.key) continue;
-      if(!isSecretDiscovered(secret.key)) continue;
-      rowsHtml += `<div class="rank-row secret-row"><span class="rname t-secret">🔒 ${secret.name}</span><span class="rrng">??? · Secret</span></div>`;
+      if(isSecretDiscovered(secret.key, null)){
+        rowsHtml += `<div class="rank-row secret-row"><span class="rname t-secret">🔒 ${secret.name}</span><span class="rrng">??? · Secret</span></div>`;
+      }
+      for(const v of VARIANT_CHAIN){
+        if(isSecretDiscovered(secret.key, v.key)){
+          rowsHtml += `<div class="rank-row secret-row" style="padding-left:16px; opacity:0.9;"><span class="rname t-secret vwrap ${v.cls}" style="font-size:13px;">🔒 ↳ ${secret.name} ✦</span><span class="rrng">??? · Secret (${v.label})</span></div>`;
+        }
+      }
     }
     html += `
       <div class="acc-item" data-acc="${area.key}">
@@ -4269,7 +4434,8 @@ async function init(){
   renderWorldTabs();
   renderAreaSelect();
   buildIndexAccordion();
-  const titleEl0 = document.querySelector('.ptitle');
+  buildSecretsAccordion();
+  const titleEl0 = document.getElementById('indexPanelTitle');
   if(titleEl0) titleEl0.textContent = `Rank index — ${WORLDS[state.worldIdx].label}`;
   renderLog();
   renderInventory();
