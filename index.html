@@ -3665,8 +3665,11 @@ function processClickBonusRules(rules, world, area, results, updateBest){
       const rollCount = rule.dynamicRollsFn ? Math.max(0, Math.round(rule.dynamicRollsFn())) : (rule.rolls || 1);
       const luckMult = rule.dynamicLuckMultFn ? rule.dynamicLuckMultFn() : rule.luckMult;
       const mutationLuckMult = rule.dynamicMutationLuckFn ? rule.dynamicMutationLuckFn() : (rule.mutationLuckMult || 1);
+      
+      const pool = buildAreaPool(world, area, { mutationLuckMult });
+      
       for(let i=0;i<rollCount;i++){
-        const r = rollOnceForArea(world, area, luckMult, { mutationLuckMult });
+        const r = rollOnceForArea(world, area, luckMult, { mutationLuckMult }, pool);
         results.push(r);
         fired++;
         updateBest(r);
