@@ -1269,7 +1269,7 @@ const WORLD0 = {
     {
       key:'gimmicks', label:'Gimmicks',
       ranks:[
-        { name: 'Gimmick Crystal', rng: 1, requirement: 'No requirements' },
+        { name: 'Gimmick Crystal', rng: 1 },
         { name: 'Weakling', rng: 25, requirement: 'Have Puny Thingy equipped', condition: () => currentEquip() && currentEquip().key === 'punything' },
         { name: 'Default Axe', rng: 500, requirement: 'Have Default Axe equipped', condition: () => currentAxe().key === 'default' },
         { name: 'Pushpin', rng: 1000, requirement: 'Must have Pushpin active', condition: () => state.activeBuffs && state.activeBuffs.pushpin && state.activeBuffs.pushpin.rollsLeft > 0 },
@@ -1309,8 +1309,8 @@ const WORLD0 = {
         { name: 'Axe in a Potted Plant', rng: 99999999, requirement: 'Must have Axe in a Potted Plant equipped', condition: () => currentEquip() && currentEquip().key === 'pottedplant' },
         { 
           name: 'Youre Winner', rng: 125000000, requirement: 'Must have all ranks less rare or equal to 1/1,000,000,000 in any area',
-          condition: () => {
-            for(const w of WORLDS) for(const area of w.areas) for(const r of area.ranks) if(r.rng >= 1000000000 && !hasEverFoundRank(area.label, r.name)) return false;
+          condition: (w, a, opts) => {
+            for(const world of WORLDS) for(const area of world.areas) for(const r of area.ranks) if(r.rng >= 1000000000 && !hasEverFoundRank(area.label, r.name)) return false;
             return true;
           }
         },
@@ -1321,10 +1321,12 @@ const WORLD0 = {
         { name: 'Fishy Starsystem', rng: 265000000, requirement: 'Must have Fishy Starsystem equipped', condition: () => currentEquip() && currentEquip().key === 'fishystarsystem' },
         { 
           name: 'Lord of Requirements', rng: 300000000, requirement: 'Have 10 or more requirements active',
-          condition: () => {
+          condition: (world, area, opts) => {
             let active = 0;
-            const gimmicks = WORLD0.areas.find(a => a.key === 'gimmicks');
-            for(const r of gimmicks.ranks) if(r.condition && r.condition(WORLD0, gimmicks, {})) active++;
+            for(const r of area.ranks) {
+                if (r.name === 'Lord of Requirements') continue;
+                if(r.condition && r.condition(world, area, {})) active++;
+            }
             return active >= 10;
           }
         },
@@ -1333,13 +1335,12 @@ const WORLD0 = {
           name: 'Sakura Tree', rng: 700000000, requirement: 'Only rollable on Sundays, the hour before it becomes Monday',
           condition: () => { const now = new Date(); return now.getDay() === 0 && now.getHours() === 23; }
         },
-        { name: 'Portable Rechargable Axenades', rng: 750000000, requirement: 'No requirements' },
-        { name: 'Trollstone', rng: 3, requirement: 'Has a chance to appear next roll if youve been troll rolled', condition: () => state.lastRollWasTroll },
+        { name: 'Portable Rechargable Axenades', rng: 750000000, requirement: 'Have Portable Rechargable Axenades equipped', condition: () => currentEquip() && currentEquip().key === 'axenades' },
+        { name: 'Trollstone', rng: 3, requirement: 'Has a chance to appear next roll if youve been troll rolled', condition: () => state.trollstoneEligible },
         { 
           name: 'U Win', rng: 1500000000, requirement: 'Can only spawn if you have everything from this area EXCEPT this',
-          condition: () => {
-            const gimmicks = WORLD0.areas.find(a => a.key === 'gimmicks');
-            for(const r of gimmicks.ranks) if(r.name !== 'U Win' && !hasEverFoundRank('Gimmicks', r.name)) return false;
+          condition: (world, area, opts) => {
+            for(const r of area.ranks) if(r.name !== 'U Win' && !hasEverFoundRank('Gimmicks', r.name)) return false;
             return true;
           }
         },
@@ -3676,6 +3677,7 @@ function processClickBonusRules(rules, world, area, results, updateBest){
 }
 
 function doRoll(){
+  state.trollstoneEligible = !!state.lastRollWasTroll;
   state.lastRollWasTroll = false;
   const axe = currentAxe();
   const equip = currentEquip();
