@@ -1201,7 +1201,6 @@ const WORLD0 = {
   global: [],
   areas:[
     {
-      // Rarity scales as 2^n for n = 0..40. Naming: "Tile {abbreviated 2^n}" (e.g. Tile 65k for 65536).
       key:'2048', label:'2048',
       ranks:[
         { name:'Tile 1', rng:1 },
@@ -1248,70 +1247,121 @@ const WORLD0 = {
       ]
     },
     {
-      // Rarity scales as (2^n) * (n^1.5) * 1.75, where n is the letter's position in the alphabet (A=1..Z=26).
       key:'abc', label:'ABC',
       ranks:[
-        { name:'A', rng:4 },
-        { name:'B', rng:20 },
-        { name:'C', rng:73 },
-        { name:'D', rng:224 },
-        { name:'E', rng:626 },
-        { name:'F', rng:1646 },
-        { name:'G', rng:4149 },
-        { name:'H', rng:10137 },
-        { name:'I', rng:24192 },
-        { name:'J', rng:56668 },
-        { name:'K', rng:130755 },
-        { name:'L', rng:297968 },
-        { name:'M', rng:671959 },
-        { name:'N', rng:1501931 },
-        { name:'O', rng:3331385 },
-        { name:'P', rng:7340032 },
-        { name:'Q', rng:16077605 },
-        { name:'R', rng:35033758 },
-        { name:'S', rng:75986837 },
-        { name:'T', rng:164128105 },
-        { name:'U', rng:353180649 },
-        { name:'V', rng:757411639 },
-        { name:'W', rng:1619271615 },
-        { name:'X', rng:3452031954 },
-        { name:'Y', rng:7340032000 },
+        { name:'A', rng:4 }, { name:'B', rng:20 }, { name:'C', rng:73 }, { name:'D', rng:224 }, { name:'E', rng:626 },
+        { name:'F', rng:1646 }, { name:'G', rng:4149 }, { name:'H', rng:10137 }, { name:'I', rng:24192 }, { name:'J', rng:56668 },
+        { name:'K', rng:130755 }, { name:'L', rng:297968 }, { name:'M', rng:671959 }, { name:'N', rng:1501931 }, { name:'O', rng:3331385 },
+        { name:'P', rng:7340032 }, { name:'Q', rng:16077605 }, { name:'R', rng:35033758 }, { name:'S', rng:75986837 }, { name:'T', rng:164128105 },
+        { name:'U', rng:353180649 }, { name:'V', rng:757411639 }, { name:'W', rng:1619271615 }, { name:'X', rng:3452031954 }, { name:'Y', rng:7340032000 },
         { name:'Z', rng:15569618022 },
       ]
     },
     {
-      // Each rank is named after an actual game tier. Its rng is that tier's minimum threshold —
-      // except Usual, which uses 25 instead of its literal min of 1 (since Common already owns 0–1).
-      // Values are min+1 (not the raw min) so each rank actually resolves back to its own tier name
-      // via tierFor's exclusive-min/inclusive-max boundaries.
       key:'tiers', label:'Tiers',
       ranks:[
-        { name:'Common', rng:1 },
-        { name:'Usual', rng:25 },
-        { name:'Decent', rng:251 },
-        { name:'Rare', rng:1001 },
-        { name:'Unusual', rng:7501 },
-        { name:'Good', rng:30001 },
-        { name:'Epic', rng:90001 },
-        { name:'Pelicular', rng:250001 },
-        { name:'Horizon', rng:1000001 },
-        { name:'Grandiose', rng:7500001 },
-        { name:'Zenith', rng:30000001 },
-        { name:'Unworldly', rng:100000001 },
-        { name:'Colossal', rng:1000000001 },
-        { name:'Infinite', rng:25000000001 },
-        { name:'Insanity', rng:70000000001 },
-        { name:'Impossible', rng:500000000001 },
+        { name:'Common', rng:1 }, { name:'Usual', rng:25 }, { name:'Decent', rng:251 }, { name:'Rare', rng:1001 },
+        { name:'Unusual', rng:7501 }, { name:'Good', rng:30001 }, { name:'Epic', rng:90001 }, { name:'Pelicular', rng:250001 },
+        { name:'Horizon', rng:1000001 }, { name:'Grandiose', rng:7500001 }, { name:'Zenith', rng:30000001 }, { name:'Unworldly', rng:100000001 },
+        { name:'Colossal', rng:1000000001 }, { name:'Infinite', rng:25000000001 }, { name:'Insanity', rng:70000000001 }, { name:'Impossible', rng:500000000001 },
       ]
     },
     {
-      // "All" doesn't have its own fixed rank list — at roll-time it pulls from EVERY rank and
-      // mutation in EVERY other area of the game, all made x200 rarer (debuffMult). This is a
-      // PURE ODDS-TIME debuff: whatever gets caught reverts to its true listed rarity and is
-      // credited to its actual home area (same mechanism the "revert on catch" fix uses for
-      // Reach/Gloves), so it stacks onto the exact same inventory entry a normal roll of that
-      // item elsewhere would produce. `ranks` stays empty here — see rollOnceForArea's
-      // isUniversalPool handling for how the real pool gets built dynamically.
+      key:'gimmicks', label:'Gimmicks',
+      ranks:[
+        { name: 'Gimmick Crystal', rng: 1, requirement: 'No requirements' },
+        { name: 'Weakling', rng: 25, requirement: 'Have Puny Thingy equipped', condition: () => currentEquip() && currentEquip().key === 'punything' },
+        { name: 'Default Axe', rng: 500, requirement: 'Have Default Axe equipped', condition: () => currentAxe().key === 'default' },
+        { name: 'Pushpin', rng: 1000, requirement: 'Must have Pushpin active', condition: () => state.activeBuffs && state.activeBuffs.pushpin && state.activeBuffs.pushpin.rollsLeft > 0 },
+        { name: 'Thumbtacks', rng: 1750, requirement: 'Have any recipe pinned', condition: () => state.pinnedRecipe && state.pinnedRecipe.key },
+        { name: 'Crude Axe', rng: 2000, requirement: 'Have Crude Axe equipped', condition: () => currentAxe().key === 'crude' },
+        { name: 'Destructive Destroyed Destroyer', rng: 3500, requirement: 'Have Destructive Destroyed Destroyer equipped', condition: () => currentAxe().key === 'destroyer' },
+        { name: 'Disaster Bringer', rng: 5000, requirement: 'Have Disaster Bringer equipped', condition: () => currentAxe().key === 'disaster' },
+        { name: 'Welcome Back', rng: 7500, requirement: 'Come back after 1h or longer idle time', condition: (w, a, opts) => opts.isOffline && state.lastOfflineElapsed >= 3600 },
+        { name: 'Potato But Cold', rng: 7777, requirement: 'Meet same requirements as Hot Potato but in this area', condition: () => (state.rolls % 2 !== 0) && (new Date().getSeconds() % 7 === 0) },
+        { name: 'Trophy', rng: 10000, requirement: 'Get something rarer than 1/100m today', condition: () => state.best && state.best.finalRng >= 100000000 },
+        { name: 'Snek Eys', rng: 11111, requirement: "Have '11' anywhere in your rolls", condition: () => String(state.rolls).includes('11') },
+        { name: 'Dark Axe', rng: 16666, requirement: 'Have Dark Axe equipped', condition: () => currentAxe().key === 'dark' },
+        { name: 'And Sand', rng: 20006, requirement: "Have '26' anywhere in your rolls", condition: () => String(state.rolls).includes('26') },
+        { name: 'Food Eater', rng: 25000, requirement: 'Have Food Eater equipped', condition: () => currentAxe().key === 'foodeater' },
+        { name: 'Emblem of the Jackpot', rng: 30000, requirement: 'Have Emblem of the Jackpot equipped', condition: () => currentAxe().key === 'emblem' },
+        { name: 'Dreamers Prism', rng: 50000, requirement: "Have Dreamer's Prism equipped", condition: () => currentAxe().key === 'dreamersprism' },
+        { name: 'Tail Zero', rng: 65000, requirement: 'Time must end in x:x0', condition: () => new Date().getMinutes() % 10 === 0 },
+        { name: 'Sentient Watergun', rng: 75000, requirement: 'Have Sentient Watergun active', condition: () => state.activeBuffs && state.activeBuffs.watergun && state.activeBuffs.watergun.rollsLeft > 0 },
+        { name: 'Universal Recipe Gloves', rng: 80000, requirement: 'Have Universal Recipe Gloves active', condition: () => state.activeBuffs && state.activeBuffs.gloves && state.activeBuffs.gloves.rollsLeft > 0 },
+        { name: 'Glowaxe', rng: 100000, requirement: 'Have Glowaxe equipped', condition: () => currentAxe().key === 'glowaxe' },
+        { name: 'Coin Bag', rng: 222000, requirement: 'Must have Coin Bag equipped', condition: () => currentEquip() && currentEquip().key === 'coinbag' },
+        { name: 'Bedtime', rng: 500000, requirement: 'Have AFK time be higher than 1d when you return', condition: (w, a, opts) => opts.isOffline && state.lastOfflineElapsed >= 86400 },
+        { name: 'Day', rng: 750000, requirement: 'Must be daytime', condition: () => { const h = new Date().getHours(); return h >= 6 && h < 18; } },
+        { name: 'Night', rng: 1000000, requirement: 'Must be night', condition: () => { const h = new Date().getHours(); return h < 6 || h >= 18; } },
+        { name: 'Explosive Axe Bomb', rng: 5000000, requirement: 'Must be rolled from Explosive Axe Bombs usage', condition: (w, a, opts) => opts.isBomb },
+        { name: 'Vitamin Axey', rng: 13333000, requirement: 'Must have Vitamin Axey equipped', condition: () => currentEquip() && currentEquip().key === 'vitaminaxey' },
+        { name: 'Silkinator', rng: 17500000, requirement: 'Must use Silkinator', condition: () => currentAxe().key === 'silkinator' },
+        { name: 'Geomathaxe', rng: 60000000, requirement: 'Must use Geomathaxe', condition: () => currentAxe().key === 'geomathaxe' },
+        { 
+          name: 'Specific Minute', rng: 80000000, requirement: 'Can only be rolled at a random minute per hour',
+          condition: () => {
+            const now = new Date();
+            const targetMin = (now.getHours() * 17 + 42) % 60;
+            return now.getMinutes() === targetMin;
+          }
+        },
+        { name: 'Axe in a Potted Plant', rng: 99999999, requirement: 'Must have Axe in a Potted Plant equipped', condition: () => currentEquip() && currentEquip().key === 'pottedplant' },
+        { 
+          name: 'Youre Winner', rng: 125000000, requirement: 'Must have all ranks less rare or equal to 1/1,000,000,000 in any area',
+          condition: () => {
+            for(const w of WORLDS) for(const area of w.areas) for(const r of area.ranks) if(r.rng >= 1000000000 && !hasEverFoundRank(area.label, r.name)) return false;
+            return true;
+          }
+        },
+        { 
+          name: 'Bootleg Tier', rng: 200000000, requirement: 'Have Tail Zero found, Snek Eys, Potato But Cold, and And Sand found here',
+          condition: () => hasEverFoundRank('2048', 'Tile 0') && hasEverFoundRank('Gimmicks', 'Snek Eys') && hasEverFoundRank('Gimmicks', 'Potato But Cold') && hasEverFoundRank('Gimmicks', 'And Sand')
+        },
+        { name: 'Fishy Starsystem', rng: 265000000, requirement: 'Must have Fishy Starsystem equipped', condition: () => currentEquip() && currentEquip().key === 'fishystarsystem' },
+        { 
+          name: 'Lord of Requirements', rng: 300000000, requirement: 'Have 10 or more requirements active',
+          condition: () => {
+            let active = 0;
+            const gimmicks = WORLD0.areas.find(a => a.key === 'gimmicks');
+            for(const r of gimmicks.ranks) if(r.condition && r.condition(WORLD0, gimmicks, {})) active++;
+            return active >= 10;
+          }
+        },
+        { name: '3 AM Demon', rng: 666666666, requirement: 'Time must be between 3 and 4 am', condition: () => new Date().getHours() === 3 },
+        { 
+          name: 'Sakura Tree', rng: 700000000, requirement: 'Only rollable on Sundays, the hour before it becomes Monday',
+          condition: () => { const now = new Date(); return now.getDay() === 0 && now.getHours() === 23; }
+        },
+        { name: 'Portable Rechargable Axenades', rng: 750000000, requirement: 'No requirements' },
+        { name: 'Trollstone', rng: 3, requirement: 'Has a chance to appear next roll if youve been troll rolled', condition: () => state.lastRollWasTroll },
+        { 
+          name: 'U Win', rng: 1500000000, requirement: 'Can only spawn if you have everything from this area EXCEPT this',
+          condition: () => {
+            const gimmicks = WORLD0.areas.find(a => a.key === 'gimmicks');
+            for(const r of gimmicks.ranks) if(r.name !== 'U Win' && !hasEverFoundRank('Gimmicks', r.name)) return false;
+            return true;
+          }
+        },
+      ]
+    },
+    {
+      key:'lame', label:'LAME world',
+      ranks:[
+        { name: 'nothing', rng: 1 },
+        { name: 'boringest thingy ever', rng: 30000000 },
+        { name: 'lame crystal', rng: 80000000 },
+        { name: 'boringite', rng: 300000000, mutations: [{ name: 'evil-ish rare boringite', rng: 999999999 }] },
+        { name: 'nothing but its GIANT', rng: 8000000000 },
+        { name: 'WASTELAND FROM WORLD 1 AREA 2', rng: 10000000000 },
+        { name: 'something because nothing was boring', rng: 15000000000 },
+        { name: 'great an infinite tier we dont need', rng: 55000000000 },
+        { name: 'weird concept of nothing', rng: 70000000000 },
+        { name: 'GO AWAY-IUM', rng: 250000000000 },
+        { name: 'lightbulb', rng: 800000000000 },
+      ]
+    },
+    {
       key:'all', label:'All', debuffMult:200, isUniversalPool:true,
       ranks:[]
     },
@@ -1333,7 +1383,6 @@ const WORLD0 = {
         { name:'Oumbaß', rng:12345678 },
         { name:'Eel', rng:39916800 },
         { name:'GLOVE', rng:52570000 },
-        { name:'This Rank Can Only Be Rolled On A Specific Minute Better Not Hope Its xx:59 LOSER 😂😂😂😂😂', rng:80000000 },
         { name:'Comic Book', rng:100000000 },
         { name:'ELECTRIC BLANKET!!!', rng:333222111 },
         { name:'The Burger YOU Ate', rng:694200000 },
@@ -2131,23 +2180,26 @@ function allUnfinishedMaterials(){
 
 // Finds a rank or mutation's base rng by area label, searching across all worlds
 function findRankRng(areaLabel, name){
+  const r = findRankObj(areaLabel, name);
+  return r ? r.rng : null;
+}
+
+function findRankObj(areaLabel, name){
   for(const world of WORLDS){
     for(const area of world.areas){
       if(area.label !== areaLabel) continue;
       for(const r of area.ranks){
-        if(r.name === name) return r.rng;
+        if(r.name === name) return r;
         if(r.mutations){
           for(const m of r.mutations){
-            if(m.name === name) return m.rng;
+            if(m.name === name) return m;
           }
         }
       }
     }
-    // Global items are area-agnostic within their world — check if this areaLabel belongs
-    // to this world, and if so, also search its globals.
     if(world.areas.some(a => a.label === areaLabel)){
       for(const g of world.global){
-        if(g.name === name) return g.rng;
+        if(g.name === name) return g;
       }
     }
   }
@@ -2173,7 +2225,8 @@ function clearPinnedRecipe(){
 // applies the area's debuffMult (if any) to rarity for odds purposes — reverted on catch by
 // resolveRollWinner's use of findRankRng. Shared by rollOnceForArea, the offline worker sim, and
 // the offline fallback sim so all three paths stay consistent.
-function buildAreaPool(world, area){
+function buildAreaPool(world, area, opts){
+  opts = opts || {};
   const pool = [];
   const areaDebuffMult = area.debuffMult || 1;
 
@@ -2182,9 +2235,11 @@ function buildAreaPool(world, area){
       for(const a of w.areas){
         if(a.key === area.key) continue;
         for(const r of a.ranks){
+          if(r.condition && !r.condition(w, a, opts)) continue;
           pool.push({ name:r.name, rng:r.rng * areaDebuffMult, isMutation:false, injectedAreaLabel:a.label });
           if(r.mutations){
             for(const m of r.mutations){
+              if(m.condition && !m.condition(w, a, opts)) continue;
               pool.push({ name:m.name, rng:m.rng * areaDebuffMult, isMutation:true, injectedAreaLabel:a.label });
             }
           }
@@ -2193,8 +2248,14 @@ function buildAreaPool(world, area){
     }
   } else {
     for(const r of area.ranks){
+      if(r.condition && !r.condition(world, area, opts)) continue;
       pool.push({ name:r.name, rng:r.rng * areaDebuffMult, isMutation:false });
-      if(r.mutations) for(const m of r.mutations) pool.push({ name:m.name, rng:m.rng * areaDebuffMult, isMutation:true });
+      if(r.mutations) {
+        for(const m of r.mutations) {
+          if(m.condition && !m.condition(world, area, opts)) continue;
+          pool.push({ name:m.name, rng:m.rng * areaDebuffMult, isMutation:true });
+        }
+      }
     }
   }
   for(const g of world.global) pool.push({ name:g.name, rng:g.rng === Infinity ? Infinity : g.rng * areaDebuffMult, isMutation:false });
@@ -2207,7 +2268,7 @@ function rollOnceForArea(world, area, luckMult, opts){
   const mutationLuckMult = opts.mutationLuckMult || 1;
   const applyBuffs = opts.applyBuffs !== false; // default true
 
-  const pool = buildAreaPool(world, area);
+  const pool = buildAreaPool(world, area, opts);
 
   // --- Unified "Reach" mechanic ---------------------------------------------------------
   // Multiple sources can let pinned-recipe materials drop outside their home area (at some
@@ -2739,19 +2800,38 @@ function indexRankRowHtml(name, rng, isMutation, sourceTag, foundCheck, areaLabe
   const fontSize = isMutation ? ' style="font-size:13px;"' : '';
   const src = sourceTag ? ` <span class="rank-src">(${sourceTag})</span>` : '';
 
+  let displayName = name;
+  if (name === 'Specific Minute') {
+      const now = new Date();
+      const targetMin = (now.getHours() * 17 + 42) % 60;
+      displayName = `Specific Minute (xx:${targetMin.toString().padStart(2, '0')})`;
+  }
+
   const isMystery = rng >= INDEX_MYSTERY_THRESHOLD && !foundCheck() && !(areaLabel && isInPinnedRecipe(areaLabel, name));
 
   if(isMystery){
-    // "???" still uses this rank's own real deterministic color/font — derived from its true
-    // name even though the displayed text is hidden — so nothing about its look changes the
-    // instant it's actually revealed.
     const mysteryHtml = rankNameHtml(name, t.cls, null, '', t.key, '???');
     return `<div class="rank-row mystery-row"${indent}><span${fontSize}>${mysteryHtml}</span><span class="rrng">??? · ???${src}</span></div>`;
   }
 
+  const rankObj = findRankObj(areaLabel, name);
+  let reqHtml = '';
+  if(rankObj && rankObj.requirement){
+      reqHtml = `
+        <div class="sub-acc-item">
+          <div class="sub-acc-head"><span>Requirement</span><span class="chev">▾</span></div>
+          <div class="sub-acc-body">
+            <div style="font-family:var(--mono); font-size:11px; color:var(--text-dim); padding:4px 0;">
+              ${rankObj.requirement}
+            </div>
+          </div>
+        </div>
+      `;
+  }
+
   const pinnedTag = (areaLabel && isInPinnedRecipe(areaLabel, name)) ? ' <span class="pin-tag">📌</span>' : '';
-  const nameHtml = rankNameHtml(name, t.cls, null, '', t.key);
-  return `<div class="rank-row"${indent}><span${fontSize}>${arrow}${nameHtml}${pinnedTag}</span><span class="rrng">1/${fmtRng(rng)} · ${t.label}${src}</span></div>`;
+  const nameHtml = rankNameHtml(name, t.cls, null, '', t.key, displayName);
+  return `<div class="rank-row"${indent}><div style="flex:1;"><span${fontSize}>${arrow}${nameHtml}${pinnedTag}</span><span class="rrng">1/${fmtRng(rng)} · ${t.label}${src}</span>${reqHtml}</div></div>`;
 }
 
 // Dedicated Secrets section of the Index — independent of which world tab is selected, since
@@ -2882,6 +2962,7 @@ function buildIndexAccordion(){
       head.parentElement.classList.toggle('open');
     });
   });
+  setupSubAccordions(el);
 }
 
 /* ============================================================
@@ -3493,7 +3574,7 @@ function triggerBomb(){
   const counts = {};
   let totalRollsFired = 0;
   for(let i=0;i<bombRollCount;i++){
-    const r = rollOnceForArea(world, area, cfg.luckMult, { mutationLuckMult: cfg.mutationLuckMult });
+    const r = rollOnceForArea(world, area, cfg.luckMult, { mutationLuckMult: cfg.mutationLuckMult, isBomb: true });
     const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
     if(!counts[k]) counts[k] = { result:r, count:0 };
     counts[k].count++;
@@ -3506,7 +3587,7 @@ function triggerBomb(){
   if(equip && equip.bombTriggerBonus){
     const bb = equip.bombTriggerBonus;
     for(let i=0;i<bb.rolls;i++){
-      const r = rollOnceForArea(world, area, bb.luckMult, { mutationLuckMult: bb.mutationLuckMult || 1 });
+      const r = rollOnceForArea(world, area, bb.luckMult, { mutationLuckMult: bb.mutationLuckMult || 1, isBomb: true });
       const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
       if(!counts[k]) counts[k] = { result:r, count:0 };
       counts[k].count++;
@@ -3595,6 +3676,7 @@ function processClickBonusRules(rules, world, area, results, updateBest){
 }
 
 function doRoll(){
+  state.lastRollWasTroll = false;
   const axe = currentAxe();
   const equip = currentEquip();
   const bulk = effectiveBulk();
@@ -3655,6 +3737,7 @@ function doRoll(){
   const trollArea = WORLDS[state.worldIdx].areas[state.areaIdx];
   const fake = Math.random() < TROLL_CHANCE ? rollTrollFake(trollArea, best.name) : null;
   if(fake){
+    state.lastRollWasTroll = true;
     rollGeneration++;
     const myGeneration = rollGeneration;
     renderStage(best, bulk + clickBonusFired, fake);
@@ -3666,7 +3749,6 @@ function doRoll(){
     renderStage(best, bulk + clickBonusFired);
   }
 
-  renderInventory();
   refreshLiveViews();
 
   if(!state.best || best.finalRng > state.best.finalRng) state.best = best;
@@ -4114,7 +4196,8 @@ async function resolveOfflineProgress(){
   if(totalRolls <= 0 && (!hasAnyOfflineBonus || wholeSeconds <= 0)) return null;
 
   // Formulate the pool items (shared with rollOnceForArea so All's universal pool / debuffMult apply here too)
-  const pool = buildAreaPool(world, area);
+  state.lastOfflineElapsed = elapsedSeconds;
+  const pool = buildAreaPool(world, area, { isOffline: true });
 
   // [Irritation] also scales every OTHER offline bonus rule on this axe (flagged irritationScales)
   // by the same per-day efficiency multiplier — pre-scaled here rather than threading a new param
