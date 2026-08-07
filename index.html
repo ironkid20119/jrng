@@ -1192,6 +1192,50 @@ const SUBWORLD1 = {
         { name:'The Probably Rarest Thing Ever', rng:10000000 },
       ]
     },
+    {
+      // [Gimmick] While err.redirector isn't active, every rank caught here has its displayed
+      // rarity (the "1 in N" number) garbled with random symbols — everywhere it's shown
+      // (roll stage, log, inventory). The name itself always stays fully readable. Garbling is
+      // fixed per-catch (deterministic from the result), not re-randomized on every render.
+      key:'404', label:'404',
+      truncated:true,
+      ranks:[
+        { name:'missing', rng:1 },
+        { name:'not found', rng:404, mutations:[{name:'GONE.', rng:41000000000}] },
+        { name:'undefined', rng:666 },
+        { name:'corruption', rng:3333, mutations:[{name:'NIL', rng:4040000000}] },
+        { name:'NaN', rng:40400 },
+        { name:'Bad Request', rng:80808 },
+        { name:'FORBIDDEN.', rng:403000 },
+        { name:'TIMEOUT', rng:8000000 },
+        { name:'UNAUTHORIZED.', rng:40000000 },
+        { name:'NULL', rng:666000000 },
+        { name:'DENIAL', rng:18000000000 },
+        { name:'NO CONTENT.', rng:24040000000 },
+        { name:'MISDIRECTED', rng:40400000000 },
+        { name:'dreamcore', rng:4040000000000 },
+      ]
+    },
+    {
+      key:'factoritization', label:'Factoritization',
+      ranks:[
+        { name:'ONE', rng:1 },
+        { name:'TWO', rng:2 },
+        { name:'THREE', rng:6 },
+        { name:'FOUR', rng:24 },
+        { name:'FIVE', rng:120 },
+        { name:'SIX', rng:720 },
+        { name:'SEVEN', rng:5040 },
+        { name:'EIGHT', rng:40320 },
+        { name:'NINE', rng:362880 },
+        { name:'TEN', rng:3628800 },
+        { name:'ELEVEN', rng:39916800 },
+        { name:'TWELVE', rng:479001600 },
+        { name:'THIRTEEN', rng:6227020800 },
+        { name:'FOURTEEN', rng:87178291200 },
+        { name:'FINALE', rng:1307674368000 },
+      ]
+    },
   ]
 };
 
@@ -1609,8 +1653,40 @@ const AXES = {
       { name:'The Probably Rarest Thing Ever',  area:'Scary Land', amount:100 },
     ],
   },
+  nanaxe: {
+    key:'nanaxe', name:'nan.axe',
+    desc:'404: axe not found. Somehow still swings.',
+    stats:{ luckMult:404, bulk:404, rps:404 },
+    bonus:'[Deletion] Offline every 404s: 1/4.04 for +4 rolls at ×4,040,404 luck. [Bad Gateway] Every 5th click: +503 rolls at ×503 luck, guaranteed. [Segmentation Fault] Offline every hour: 1/40.3 for +403 rolls at ×403,403 luck. [Unstability] Every 10th click: 1/50 for +1,234 rolls at ×56,789 luck. [Corruption] Every 4th click: 1/4.04 for +4,040 rolls at ×4,040 luck (×4.04 mutation luck). [Nilbomb] Every 404th click: 1/4 for +40,404 rolls at ×40.4 luck (×1.4 mutation luck). [MISSING TEXTURE] Always active, online or offline: 1/6.66 every 66th click AND 1/666 every 6s offline, either way adding +666 rolls at ×6,666 luck.',
+    offlineBonus:[
+      { intervalSeconds:404,  chancePerInterval:1/4.04,  minRolls:4,     maxRolls:4,     bonusLuckMult:4040404 },  // Deletion
+      { intervalSeconds:3600, chancePerInterval:1/40.3,  minRolls:403,   maxRolls:403,   bonusLuckMult:403403 },   // Segmentation Fault
+      { intervalSeconds:6,    chancePerInterval:1/666,   minRolls:666,   maxRolls:666,   bonusLuckMult:6666 },     // MISSING TEXTURE (offline half)
+    ],
+    clickBonus:[
+      { everyNClicks:5,   chance:1,     rolls:503,   luckMult:503 },                                  // Bad Gateway
+      { everyNClicks:10,  oneIn:50,     rolls:1234,  luckMult:56789 },                                 // Unstability
+      { everyNClicks:4,   oneIn:4.04,   rolls:4040,  luckMult:4040,  mutationLuckMult:4.04 },           // Corruption
+      { everyNClicks:404, oneIn:4,      rolls:40404, luckMult:40.4,  mutationLuckMult:1.4 },            // Nilbomb
+      { everyNClicks:66,  oneIn:6.66,   rolls:666,   luckMult:6666 },                                  // MISSING TEXTURE (click half)
+    ],
+    requires:[
+      { consumable:'errredirector', amount:40 },
+      { name:'NIL',            area:'404', amount:4 },
+      { name:'UNAUTHORIZED.',  area:'404', amount:404 },
+      { name:'undefined',      area:'404', amount:60000000 },
+      { name:'not found',      area:'404', amount:40400000 },
+      { name:'NaN',            area:'404', amount:680000 },
+      { name:'NULL',           area:'404', amount:10 },
+      { name:'FOUR',           area:'factoritization', amount:404000000 },
+      { name:'NO CONTENT.',    area:'404', amount:1 },
+      { name:'corruption',     area:'404', amount:3330000 },
+      { name:'TIMEOUT',        area:'404', amount:204 },
+      { name:'Bad Request',    area:'404', amount:606060 },
+    ],
+  },
 };
-const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','silkinator','geomathaxe','rageaxe'];
+const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','silkinator','geomathaxe','rageaxe','nanaxe'];
 
 /* ============================================================
    EQUIPPABLES
@@ -1785,8 +1861,20 @@ const CONSUMABLES = {
       { name:'Water',         area:'The Fridge', amount:5   },
     ],
   },
+  errredirector: {
+    key:'errredirector', name:'err.redirector',
+    desc:'A little patch cable for the 404 zone. Plug it in and the static clears up, for a while.',
+    effect:'On use: temporarily removes the 404 area\'s rarity-truncation gimmick for 12 hours. Rarity numbers display normally the whole time.',
+    durationSeconds: 12 * 3600,
+    requires:[
+      { name:'Bad Request', area:'404', amount:2, variant:'weird' },
+      { name:'NaN',         area:'404', amount:40 },
+      { name:'corruption',  area:'404', amount:66 },
+      { name:'not found',   area:'404', amount:40400 },
+    ],
+  },
 };
-const CONSUMABLE_ORDER = ['pushpin','gloves','bomb','watergun'];
+const CONSUMABLE_ORDER = ['pushpin','gloves','bomb','watergun','errredirector'];
 
 /* ============================================================
    STATE
@@ -1812,7 +1900,12 @@ let state = {
   wgunStacks: [],           // array of { expiresAt: timestamp }, max 3
   coinBagStacks: [],        // array of { expiresAt: timestamp } — Coin Bag's 15s luck/mutation-luck stacks
   discoveredSecrets: {},    // { secretKey: firstDiscoveredAtTimestamp }
+  errRedirectorUntil: null, // timestamp — while in the future, the 404 area's rarity-truncation gimmick is suppressed
 };
+
+function isErrRedirectorActive(){
+  return !!state.errRedirectorUntil && Date.now() < state.errRedirectorUntil;
+}
 
 const MAX_OFFLINE_SECONDS = 7 * 24 * 60 * 60; // 7 day cap
 
@@ -2118,6 +2211,15 @@ function addToInventory(result, count){
 function getOwnedCount(areaLabel, name, variantKey){
   const key = invKey(areaLabel, name, variantKey || null);
   return state.inventory[key] ? state.inventory[key].count : 0;
+}
+
+// Reads how much of a requirement the player currently has. Most requirements are caught
+// ranks (req.area/req.name/req.variant, checked against the inventory); some (like nan.axe's
+// err.redirector cost) are crafted CONSUMABLE items instead (req.consumable = a CONSUMABLES key),
+// checked against state.consumables.
+function getReqOwnedCount(req){
+  if(req.consumable) return getConsumableCount(req.consumable);
+  return getOwnedCount(req.area, req.name, req.variant);
 }
 
 // Checks if a rank has EVER been caught in the given area, in ANY variant (plain, weird, odd,
@@ -2496,6 +2598,50 @@ function fmtRngOrSecret(isSecret, n){
   return isSecret ? '???' : fmtRng(n);
 }
 
+/* ------------------------------------------------------------
+   404 AREA GIMMICK — rarity truncation
+   While err.redirector isn't active, any rank whose home area is "404" has its displayed
+   rarity number (never its name) partially garbled with random symbols. The garbling is
+   derived deterministically from the result's own name+rng, so the same catch always looks
+   the same everywhere (stage/log/inventory) instead of flickering on every re-render.
+   ------------------------------------------------------------ */
+const GLITCH_SYMBOLS = ['#','%','&','$','?','@','*','■','░','▒','×'];
+
+// Small deterministic PRNG seeded from a string, so the same rank+rng always garbles identically.
+function seededRandFromString(str){
+  let h = 0;
+  for(let i=0;i<str.length;i++){ h = (h * 31 + str.charCodeAt(i)) >>> 0; }
+  return function(){
+    h = (h * 1664525 + 1013904223) >>> 0;
+    return h / 4294967296;
+  };
+}
+
+// Garbles a rarity number's digits (leaves commas/formatting structure intact), swapping
+// roughly half the digits for a random glitch symbol. Seeded by name+rng so it's stable.
+function glitchRngText(name, n){
+  const clean = fmtRng(n);
+  const rand = seededRandFromString(name + '|' + n);
+  let out = '';
+  for(const ch of clean){
+    if(/[0-9]/.test(ch) && rand() < 0.5){
+      out += GLITCH_SYMBOLS[Math.floor(rand() * GLITCH_SYMBOLS.length)];
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+// Rarity text for a result (roll result or inventory item — both have name/areaLabel and
+// either .finalRng or .lastRng), applying the 404 truncation gimmick when relevant.
+function fmtRngForResult(r){
+  const n = r.finalRng != null ? r.finalRng : r.lastRng;
+  if(r.isSecret) return '???';
+  if(r.areaLabel === '404' && !isErrRedirectorActive()) return glitchRngText(r.name, n);
+  return fmtRng(n);
+}
+
 function escapeHtml(s){
   const d = document.createElement('div');
   d.textContent = s;
@@ -2576,7 +2722,7 @@ function renderStage(result, count, trollOverride){
   stage.innerHTML = `
     <div class="result-tier">${result.areaLabel} · ${baseTier.label}</div>
     <div class="result-name">${nameHtml}</div>
-    <div class="result-rng">${result.isSecret ? '1 in ???' : `1 in ${fmtRng(result.finalRng)}`}</div>
+    <div class="result-rng">1 in ${fmtRngForResult(result)}</div>
     ${result.variant ? `<div class="result-variant">✦ ${result.variant.label} variant (×${result.variant.totalMult})</div>` : ''}
     ${result.isSecret ? `<div class="result-variant">🔒 Secret rank discovered!</div>` : ''}
     ${count && count > 1 ? `<div class="multi-note">shown: rarest of ${count} rolls (bulk)</div>` : ''}
@@ -2609,7 +2755,7 @@ function renderLog(){
     return `
     <div class="log-row">
       <span class="lname">${rankNameHtml(r.name, baseTier.cls, r.variant, '', r.isSecret ? null : baseTier.key)}${suffix}</span>
-      <span class="lrng">${fmtRngOrSecret(r.isSecret, r.finalRng)}</span>
+      <span class="lrng">${fmtRngForResult(r)}</span>
     </div>
   `}).join('');
 }
@@ -2731,7 +2877,7 @@ function renderInventory(){
       <div class="inv-row">
         <div>
           <div class="iname">${nameEl}${suffix}</div>
-          <div class="imeta">${it.areaLabel} · ${fmtRngOrSecret(it.isSecret, it.lastRng)} · ${it.tierLabel}${variantTxt}</div>
+          <div class="imeta">${it.areaLabel} · ${fmtRngForResult(it)} · ${it.tierLabel}${variantTxt}</div>
         </div>
         <span class="icount">×${it.count.toLocaleString()}</span>
       </div>
@@ -2985,11 +3131,12 @@ function renderItemCards(){
       reqHtml = `<div class="req-row ok">Free · auto-equipped at start</div>`;
     } else {
       reqHtml = axe.requires.map(req=>{
-        const have = getOwnedCount(req.area, req.name, req.variant);
+        const have = getReqOwnedCount(req);
         const ok = have >= req.amount;
         if(!ok) canCraft = false;
         const variantTag = req.variant ? ` (${req.variant})` : '';
-        return `<div class="req-row ${ok?'ok':'short'}">${req.name}${variantTag} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
+        const label = req.consumable ? CONSUMABLES[req.consumable].name : req.name;
+        return `<div class="req-row ${ok?'ok':'short'}">${label}${variantTag} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
       }).join('');
     }
 
@@ -3212,18 +3359,23 @@ function craftAxe(key){
   if(!axe || axe.free || state.ownedAxes.includes(key)) return;
   // verify and consume
   for(const req of axe.requires){
-    if(getOwnedCount(req.area, req.name, req.variant) < req.amount) return;
+    if(getReqOwnedCount(req) < req.amount) return;
   }
   for(const req of axe.requires){
-    const k = invKey(req.area, req.name, req.variant || null);
-    state.inventory[k].count -= req.amount;
-    dbSaveInvItem(state.inventory[k]);
+    if(req.consumable){
+      state.consumables[req.consumable] -= req.amount;
+    } else {
+      const k = invKey(req.area, req.name, req.variant || null);
+      state.inventory[k].count -= req.amount;
+      dbSaveInvItem(state.inventory[k]);
+    }
   }
   state.ownedAxes.push(key);
   state.equippedAxe = key;
   dbSaveMeta();
   renderItemCards();
   renderInventory();
+  renderConsumableCards();
   renderAxeStrip();
   updateStatStrip();
 }
@@ -3335,6 +3487,10 @@ function renderConsumableCards(){
         statusHtml = `<div class="buff-active">💧 ${activeStacks}/3 stacks active · ×${curMult.toFixed(1)} rps<br>${stackLines}</div>`;
       }
     }
+    if(key === 'errredirector' && isErrRedirectorActive()){
+      const msLeft = state.errRedirectorUntil - now;
+      statusHtml = `<div class="buff-active">📡 404 static cleared — ${fmtDuration(Math.ceil(msLeft/1000))} left</div>`;
+    }
 
     // Action buttons
     let actionHtml = '';
@@ -3350,6 +3506,13 @@ function renderConsumableCards(){
       const atCap = activeStacks >= CONSUMABLES.watergun.maxStacks;
       const useDisabled = count <= 0 || atCap;
       const useTitle = count <= 0 ? 'None owned' : atCap ? 'Already at max stacks' : '';
+      actionHtml = `
+        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft</button>
+        <button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>
+      `;
+    } else if(key === 'errredirector'){
+      const useDisabled = count <= 0;
+      const useTitle = count <= 0 ? 'None owned' : (isErrRedirectorActive() ? 'Extends the current 12h window' : '');
       actionHtml = `
         <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft</button>
         <button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>
@@ -3514,6 +3677,18 @@ function useConsumable(key){
     renderConsumableCards();
     renderAxeStrip();
     updateStatStrip();
+    return;
+  }
+
+  if(key === 'errredirector'){
+    state.consumables.errredirector--;
+    const now = Date.now();
+    const base = isErrRedirectorActive() ? state.errRedirectorUntil : now;
+    state.errRedirectorUntil = base + CONSUMABLES.errredirector.durationSeconds * 1000;
+    dbSaveMeta();
+    renderConsumableCards();
+    renderLog();
+    renderInventory();
     return;
   }
 
@@ -4451,7 +4626,7 @@ function renderOfflineBanner(report){
       ${report.bestFind ? (()=>{
         const bf = report.bestFind;
         const bfTier = tierFor(bf.baseRng || bf.finalRng);
-        return `<p>Best find: ${rankNameHtml(bf.name, bfTier.cls, bf.variant, '', bfTier.key)}${bf.variant?' ✦':''} (1/${fmtRng(bf.finalRng)})</p>`;
+        return `<p>Best find: ${rankNameHtml(bf.name, bfTier.cls, bf.variant, '', bfTier.key)}${bf.variant?' ✦':''} (1/${fmtRngForResult(bf)})</p>`;
       })() : ''}
       <button class="btn small" id="dismissOffline">Nice</button>
     </div>
@@ -4543,10 +4718,12 @@ window.addEventListener('beforeunload', ()=>{
 });
 
 // Live countdown for bomb charge timer
+let wasErrRedirectorActive = isErrRedirectorActive();
 setInterval(()=>{
   if(currentView === 'items'){
     if(state.bombCharge) renderConsumableCards();
     if(state.wgunStacks && state.wgunStacks.length) renderConsumableCards();
+    if(state.errRedirectorUntil) renderConsumableCards();
   }
   // Expire old watergun stacks and update strip if changed
   if(state.wgunStacks && state.wgunStacks.length){
@@ -4557,6 +4734,14 @@ setInterval(()=>{
       renderAxeStrip();
       updateStatStrip();
     }
+  }
+  // When err.redirector's window lapses, the 404 gimmick kicks back in — refresh any views
+  // showing rarity numbers so they re-garble immediately rather than on the next roll.
+  const nowActive = isErrRedirectorActive();
+  if(nowActive !== wasErrRedirectorActive){
+    wasErrRedirectorActive = nowActive;
+    renderLog();
+    renderInventory();
   }
 }, 1000);
 document.addEventListener('visibilitychange', async ()=>{
