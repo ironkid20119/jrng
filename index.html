@@ -1678,15 +1678,64 @@ const AXES = {
       { name:'not found',      area:'404', amount:40400000 },
       { name:'NaN',            area:'404', amount:680000 },
       { name:'NULL',           area:'404', amount:10 },
-      { name:'FOUR',           area:'factoritization', amount:404000000 },
+      { name:'FOUR',           area:'Factoritization', amount:404000000 },
       { name:'NO CONTENT.',    area:'404', amount:1 },
       { name:'corruption',     area:'404', amount:3330000 },
       { name:'TIMEOUT',        area:'404', amount:204 },
       { name:'Bad Request',    area:'404', amount:606060 },
     ],
   },
+  blandaxe: {
+    key:'blandaxe', name:'Bland Axe',
+    desc:'"hi i noticed there wasnt any active axes so consider this a blessing if you hate hybrids or idles" - juni (also good luck if youre doing the active way ! theres a long way to grind)',
+    stats:{ luckMult:1.5, bulk:80, rps:5 },
+    bonus:'[lameness] On click: 1/10 to add 30 rolls at ×300 luck (×1.25 mutation luck). [yay active also 4th wall break] Every 10th click, always: +300 rolls at ×30 luck (×3 mutation luck).',
+    clickBonus:[
+      { chance:1/10, rolls:30, luckMult:300, mutationLuckMult:1.25 },       // lameness
+      { everyNClicks:10, chance:1, rolls:300, luckMult:30, mutationLuckMult:3 }, // yay active also 4th wall break
+    ],
+    requires:[
+      { name:'Wood',   area:'Natural', amount:100 },
+      { name:'Crystal',area:'Natural', amount:500 },
+      { name:'Silver', area:'Natural', amount:100 },
+    ],
+  },
+  magicwand: {
+    key:'magicwand', name:'Magic Wand',
+    desc:'why a wand and not an axe? oh wait theres literally a person who eats food and literal math as an axe',
+    stats:{ luckMult:3.5, bulk:75, rps:10 },
+    bonus:'[luck ium blast] Every 10th click: 1/5 to add 2,000 rolls at ×(random number between 5-10) luck (×1.5 mutation luck). [illusions] Always on the 25th click: +50 rolls at ×250 luck (×1.2 mutation luck). [glitter spread] On EVERY roll (not click), 1/1,250 to add +125 more rolls at ×1,250 luck (×1.25 mutation luck) — these bonus rolls can themselves trigger Glitter Spread again, chaining, capped at 75,000 chained rolls per click. Does not trigger from offline rolls.',
+    clickBonus:[
+      { everyNClicks:10, oneIn:5, rolls:2000, dynamicLuckMultFn:()=> 5 + Math.random()*5, mutationLuckMult:1.5 }, // luck ium blast
+      { everyNClicks:25, chance:1, rolls:50, luckMult:250, mutationLuckMult:1.2 },                                // illusions
+    ],
+    perRollBonus:{ oneIn:1250, rolls:125, luckMult:1250, mutationLuckMult:1.25, chainCapPerClick:75000 },        // glitter spread
+    requires:[
+      { name:'Pearl',            area:'Dreamland', amount:280 },
+      { name:'Heavenly',         area:'Dreamland', amount:100 },
+      { name:'Aurora Borealis',  area:'Dreamland', amount:20 },
+    ],
+  },
+  godaxe: {
+    key:'godaxe', name:'God Axe',
+    desc:'stay awake. you cant get rid of the power youve reached for... will you stay or join the corruption?',
+    stats:{ luckMult:20000, bulk:5, rps:0 },
+    bonus:'[divinity] Every click: 1/50 to add +2 rolls at ×700,000 luck (×20 mutation luck). [ascension] Every 20th click, always: +30,000 rolls at ×800 luck (×4 mutation luck). [supremity] Every 75th click, always: +9,000 rolls at ×70 luck. [prayers] Every 5th click: 1/25 to add +50,000 rolls at ×800 luck. [omnipotence] Every 10 clicks: 1/10 to add +100,000 rolls at ×10 luck.',
+    clickBonus:[
+      { chance:1/50, rolls:2, luckMult:700000, mutationLuckMult:20 },        // divinity
+      { everyNClicks:20, chance:1, rolls:30000, luckMult:800, mutationLuckMult:4 }, // ascension
+      { everyNClicks:75, chance:1, rolls:9000, luckMult:70 },                // supremity
+      { everyNClicks:5, oneIn:25, rolls:50000, luckMult:800 },               // prayers
+      { everyNClicks:10, oneIn:10, rolls:100000, luckMult:10 },              // omnipotence
+    ],
+    requires:[
+      { name:'DENIAL',        area:'404', amount:5 },
+      { name:'MISDIRECTED',   area:'404', amount:2 },
+      { name:'Obliterator',   area:'Wasteland', amount:6 },
+    ],
+  },
 };
-const AXE_ORDER = ['default','crude','destroyer','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','silkinator','geomathaxe','rageaxe','nanaxe'];
+const AXE_ORDER = ['default','crude','destroyer','blandaxe','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','magicwand','silkinator','geomathaxe','rageaxe','godaxe','nanaxe'];
 
 /* ============================================================
    EQUIPPABLES
@@ -3817,6 +3866,36 @@ function refreshLiveViews(){
    ============================================================ */
 
 // Processes a click-bonus rule set (from an axe OR an equip) against the current click count,
+// Processes a "fires on every roll, not every click" bonus rule (e.g. Magic Wand's Glitter
+// Spread). Unlike processClickBonusRules (which checks the rule once per click against
+// state.clickCount), this rolls the dice once per INDIVIDUAL roll passed to it — including
+// its own freshly-spawned bonus rolls, which is what lets it chain. chainCapPerClick bounds
+// the total extra rolls this can produce in a single click so a lucky chain can't run away.
+// Only called from live doRoll() clicks — never from offline simulation.
+function processPerRollBonus(rule, world, area, results, updateBest, baseRollCount){
+  if(!rule) return 0;
+  const chance = rule.chance != null ? rule.chance : (1 / (rule.oneIn || 1));
+  let fired = 0;
+  let toCheck = baseRollCount; // how many "roll events" still need to be checked against the chance
+  while(toCheck > 0 && fired < rule.chainCapPerClick){
+    toCheck--;
+    if(Math.random() < chance){
+      const remainingBudget = rule.chainCapPerClick - fired;
+      const rollCount = Math.min(rule.rolls, remainingBudget);
+      const pool = buildAreaPool(world, area, { mutationLuckMult: rule.mutationLuckMult || 1 });
+      for(let i=0;i<rollCount;i++){
+        const r = rollOnceForArea(world, area, rule.luckMult, { mutationLuckMult: rule.mutationLuckMult || 1 }, pool);
+        results.push(r);
+        fired++;
+        updateBest(r);
+      }
+      // Each newly-spawned bonus roll is itself a roll event that can trigger Glitter Spread again — this is the chain.
+      toCheck += rollCount;
+    }
+  }
+  return fired;
+}
+
 // pushing any triggered rolls into `results` and returning how many extra rolls fired. Shared so
 // axes and equips don't need two separate copies of this logic.
 // Processes a click-bonus rule set (from an axe OR an equip) against the current click count,
@@ -3878,8 +3957,19 @@ function doRoll(){
   const area = world.areas[state.areaIdx];
   const updateBest = (r) => { if(!best || r.finalRng > best.finalRng) best = r; };
 
+  // [Magic Wand] Glitter Spread: a perRollBonus fires independently on EVERY roll in this click
+  // (base rolls AND its own chained bonus rolls), not once per click like normal click bonuses.
+  // Capped per-click via chainCapPerClick so a lucky chain can't run away indefinitely.
+  let perRollBonusFired = 0;
+  if(axe.perRollBonus){
+    perRollBonusFired = processPerRollBonus(axe.perRollBonus, world, area, results, updateBest, bulk);
+  }
+  if(equip && equip.perRollBonus){
+    perRollBonusFired += processPerRollBonus(equip.perRollBonus, world, area, results, updateBest, bulk);
+  }
+
   // Click-triggered bonus rolls from the axe (e.g. Food Eater, Dreamers Prism, GlowAxe Guidance)
-  let clickBonusFired = processClickBonusRules(axe.clickBonus, world, area, results, updateBest);
+  let clickBonusFired = processClickBonusRules(axe.clickBonus, world, area, results, updateBest) + perRollBonusFired;
 
   // Click-triggered bonus rolls from the equipped item, if any (same rule shape as axes)
   if(equip){
