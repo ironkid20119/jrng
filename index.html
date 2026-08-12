@@ -68,6 +68,20 @@
   }
 
   .brand{ display:flex; flex-direction:column; gap:2px; }
+  .cache-reset-btn{
+    display:none;
+    margin-top:4px;
+    font-size:11px;
+    font-family:var(--mono);
+    background:rgba(255,80,80,0.15);
+    border:1px solid rgba(255,80,80,0.5);
+    color:#ff8080;
+    padding:4px 10px;
+    border-radius:6px;
+    cursor:pointer;
+    width:fit-content;
+  }
+  .cache-reset-btn.show{ display:block; }
   .brand .eyebrow{
     font-family:var(--mono);
     font-size:11px;
@@ -638,7 +652,8 @@
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <h1>Juni's RNG Game</h1>
+      <h1 id="logoTitle" style="cursor:pointer; user-select:none;">Juni's RNG Game</h1>
+      <button id="cacheResetBtn" class="cache-reset-btn" type="button">⟳ Force reload latest version (keeps your save)</button>
     </div>
     <div class="stat-strip">
       <div class="s"><span class="label">Rolls</span><span class="val" id="statRolls">0</span></div>
@@ -4260,6 +4275,36 @@ function initMobileAutoRollUI(){
   controls.appendChild(btn);
 }
 initMobileAutoRollUI();
+
+/* ============================================================
+   HIDDEN CACHE-RESET BUTTON
+   Tap the logo 5 times within 3 seconds to reveal a button that force-reloads the page with a
+   cache-busting query param. This only forces the browser/PWA to re-fetch fresh HTML/JS/CSS —
+   your save data lives in IndexedDB, entirely separate from the page cache, so it's untouched.
+   ============================================================ */
+(function initCacheResetButton(){
+  const logo = document.getElementById('logoTitle');
+  const btn = document.getElementById('cacheResetBtn');
+  if(!logo || !btn) return;
+
+  let tapTimes = [];
+  logo.addEventListener('click', () => {
+    const now = Date.now();
+    tapTimes.push(now);
+    tapTimes = tapTimes.filter(t => now - t < 3000); // only count taps within the last 3s
+    if(tapTimes.length >= 5){
+      btn.classList.add('show');
+      tapTimes = [];
+    }
+  });
+
+  btn.addEventListener('click', () => {
+    // Cache-bust by appending/refreshing a version query param, stripping any existing one first.
+    const url = new URL(window.location.href);
+    url.searchParams.set('_cb', Date.now().toString());
+    window.location.href = url.toString();
+  });
+})();
 
 document.getElementById('clearLog').addEventListener('click', ()=>{
   state.log = [];
