@@ -1275,5 +1275,3 @@ function effectiveBulk(){
   return base + equip.bulkAdd;
 }
 
-/* ============================================================
-   
