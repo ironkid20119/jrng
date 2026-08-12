@@ -168,6 +168,23 @@
     position:relative;
   }
 
+  .skillcheck-circle{
+    position:absolute;
+    border-radius:50%;
+    background:radial-gradient(circle at 35% 35%, rgba(255,255,255,0.9), rgba(120,180,255,0.55) 60%, rgba(80,120,255,0.35));
+    border:2px solid rgba(255,255,255,0.85);
+    box-shadow:0 0 14px rgba(120,170,255,0.7), inset 0 0 10px rgba(255,255,255,0.5);
+    cursor:pointer;
+    z-index:20;
+    animation:skillcheckShrink 3s linear forwards;
+    touch-action:none;
+  }
+  @keyframes skillcheckShrink{
+    0%{ opacity:0.55; transform:scale(0.85); }
+    10%{ opacity:1; transform:scale(1); }
+    100%{ opacity:0.25; transform:scale(0.6); }
+  }
+
   .result-name{
     font-family:var(--display);
     font-size:38px;
@@ -1342,6 +1359,11 @@ const WORLD0 = {
         { name: 'Vitamin Axey', rng: 13333000, requirement: 'Must have Vitamin Axey equipped', condition: () => currentEquip() && currentEquip().key === 'vitaminaxey' },
         { name: 'Silkinator', rng: 17500000, requirement: 'Must use Silkinator', condition: () => currentAxe().key === 'silkinator' },
         { name: 'Geomathaxe', rng: 60000000, requirement: 'Must use Geomathaxe', condition: () => currentAxe().key === 'geomathaxe' },
+        { name: 'Bland Axe', rng: 70000000, requirement: 'Must use Bland Axe', condition: () => currentAxe().key === 'blandaxe' },
+        { name: 'Magic Wand', rng: 90000000, requirement: 'Must use Magic Wand', condition: () => currentAxe().key === 'magicwand' },
+        { name: 'Rage Axe', rng: 250000000, requirement: 'Must use Rage Axe', condition: () => currentAxe().key === 'rageaxe' },
+        { name: 'God Axe', rng: 12500000000, requirement: 'Must use God Axe', condition: () => currentAxe().key === 'godaxe' },
+        { name: 'nan.axe', rng: 4040000000, requirement: 'Must use nan.axe', condition: () => currentAxe().key === 'nanaxe' },
         { 
           name: 'Specific Minute', rng: 80000000, requirement: 'Can only be rolled at a random minute per hour',
           condition: () => {
@@ -1382,9 +1404,9 @@ const WORLD0 = {
         { name: 'Portable Rechargable Axenades', rng: 750000000, requirement: 'Have Portable Rechargable Axenades equipped', condition: () => currentEquip() && currentEquip().key === 'axenades' },
         { name: 'Trollstone', rng: 3, requirement: 'Has a chance to appear next roll if youve been troll rolled', condition: () => state.trollstoneEligible },
         { 
-          name: 'U Win', rng: 1500000000, requirement: 'Can only spawn if you have everything from this area EXCEPT this',
+          name: 'U Win', rng: 1500000000, requirement: 'Can only spawn if you have found every OTHER rank rarer than or equal to 1/1,000,000,000 in this area',
           condition: (world, area, opts) => {
-            for(const r of area.ranks) if(r.name !== 'U Win' && !hasEverFoundRank('Gimmicks', r.name)) return false;
+            for(const r of area.ranks) if(r.name !== 'U Win' && r.rng < 1000000000 && !hasEverFoundRank(area.label, r.name)) return false;
             return true;
           }
         },
@@ -3933,7 +3955,12 @@ function processClickBonusRules(rules, world, area, results, updateBest){
   return fired;
 }
 
-function doRoll(){
+// Performs ONE full "click" worth of rolling: base bulk rolls, Glitter Spread-style per-roll
+// bonuses, axe/equip click bonuses, sunrays, Coin Bag stacking, inventory commit, and log push.
+// Shared by the real ROLL button (doRoll) and the mobile skillcheck payout, so both behave
+// identically using the current axe/equip stats — the skillcheck is not a separate, weaker path.
+// Returns { best, totalRolls } — does NOT touch the stage/troll-roll display, callers do that.
+function performClick(){
   state.trollstoneEligible = !!state.lastRollWasTroll;
   state.lastRollWasTroll = false;
   const axe = currentAxe();
@@ -4001,6 +4028,12 @@ function doRoll(){
   }
   pushLog(best);
 
+  return { best, totalRolls: bulk + clickBonusFired };
+}
+
+function doRoll(){
+  const { best, totalRolls } = performClick();
+
   // Troll roll: 1/5,000 chance PER CLICK, no requirement on the real result. When it fires, shows
   // a genuinely Unworldly+ rank from the current area for 3 seconds before revealing the truth.
   // Inventory, log, and stats above are already committed to the REAL result — this is display-only.
@@ -4010,13 +4043,13 @@ function doRoll(){
     state.lastRollWasTroll = true;
     rollGeneration++;
     const myGeneration = rollGeneration;
-    renderStage(best, bulk + clickBonusFired, fake);
+    renderStage(best, totalRolls, fake);
     setTimeout(()=>{
-      if(myGeneration === rollGeneration) renderStage(best, bulk + clickBonusFired);
+      if(myGeneration === rollGeneration) renderStage(best, totalRolls);
     }, 3000);
   } else {
     rollGeneration++;
-    renderStage(best, bulk + clickBonusFired);
+    renderStage(best, totalRolls);
   }
 
   refreshLiveViews();
@@ -4044,6 +4077,186 @@ function tickActiveBuffs(rollCount){
 
 
 document.getElementById('rollBtn').addEventListener('click', doRoll);
+
+/* ============================================================
+   MOBILE AUTO-ROLL SKILLCHECK
+   A mobile-only alternative to spamming the ROLL button (which can drop taps in installed
+   PWA mode). While active, small timed circles spawn on the stage; tapping one fires a batch
+   of CLICKS (full bulk + axe/equip click bonuses, same as pressing ROLL) sized by tap accuracy.
+   Tapping in the circle's final 1.4-1.5s "perfect window" grants a stronger 5-second sustained
+   payout instead of a one-time batch. This uses the player's current axe/equipment stats, not
+   a separate flat-roll path — a skillcheck hit is a real stand-in for N presses of ROLL.
+   ============================================================ */
+
+// Performs `clickCount` full CLICKS (each one running the exact same logic as pressing ROLL:
+// base bulk, axe/equip click bonuses, Glitter Spread-style per-roll bonuses, sunrays, etc.) —
+// used by the mobile skillcheck payout so a skillcheck hit is a real stand-in for N clicks,
+// not a separate weaker flat-roll path. Renders only the final click's result on the stage.
+function performBulkRolls(clickCount){
+  if(clickCount <= 0) return;
+  let lastBest = null;
+  let lastTotalRolls = 0;
+  for(let i=0;i<clickCount;i++){
+    const { best, totalRolls } = performClick();
+    lastBest = best;
+    lastTotalRolls = totalRolls;
+  }
+  rollGeneration++;
+  renderStage(lastBest, lastTotalRolls);
+  refreshLiveViews();
+  if(!state.best || lastBest.finalRng > state.best.finalRng) state.best = lastBest;
+  updateStatStrip();
+  dbSaveMeta();
+}
+
+const isMobileDevice = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0 && window.innerWidth < 900);
+
+const skillcheck = {
+  active: false,
+  timer: null,       // setTimeout handle for the next spawn
+  el: null,           // the circle DOM element, while spawned
+  spawnedAt: 0,
+  perfectTicker: null, // interval handle while a perfect-window sustain is running
+};
+
+// accuracy: how centered the tap was on the circle, scaled 0.01-2.5 (0.01 = just grazed the
+// edge, 2.5 = dead center). Distance-from-center is normalized against the circle's own radius.
+function computeTapAccuracy(circleEl, clientX, clientY){
+  const rect = circleEl.getBoundingClientRect();
+  const cx = rect.left + rect.width/2;
+  const cy = rect.top + rect.height/2;
+  const dist = Math.hypot(clientX - cx, clientY - cy);
+  const radius = rect.width/2;
+  const norm = Math.max(0, 1 - dist/radius); // 1 at dead center, 0 at/beyond edge
+  return 0.01 + norm * 2.49; // scale into 0.01-2.5
+}
+
+function clearSkillcheckCircle(){
+  if(skillcheck.el){ skillcheck.el.remove(); skillcheck.el = null; }
+  if(skillcheck.perfectTicker){ clearInterval(skillcheck.perfectTicker); skillcheck.perfectTicker = null; }
+}
+
+function scheduleNextSkillcheck(){
+  if(!skillcheck.active) return;
+  const delay = (2 + Math.random()*3) * 1000; // every 2-5 seconds
+  skillcheck.timer = setTimeout(spawnSkillcheckCircle, delay);
+}
+
+function spawnSkillcheckCircle(){
+  if(!skillcheck.active) return;
+  const stage = document.getElementById('stage');
+  if(!stage) return;
+  clearSkillcheckCircle();
+
+  const size = 40 + Math.random()*50; // 40-90px, "appropriately sized"
+  const stageRect = stage.getBoundingClientRect();
+  const maxX = Math.max(0, stageRect.width - size);
+  const maxY = Math.max(0, stageRect.height - size);
+  const x = Math.random()*maxX;
+  const y = Math.random()*maxY;
+
+  const circle = document.createElement('div');
+  circle.className = 'skillcheck-circle';
+  circle.style.width = size+'px';
+  circle.style.height = size+'px';
+  circle.style.left = x+'px';
+  circle.style.top = y+'px';
+  stage.appendChild(circle);
+  skillcheck.el = circle;
+  skillcheck.spawnedAt = Date.now();
+
+  const LIFESPAN_MS = 3000;
+  const PERFECT_WINDOW_START = 1400; // ms remaining
+  const PERFECT_WINDOW_END = 1500;   // ms remaining
+
+  const despawnTimer = setTimeout(()=>{
+    if(skillcheck.el === circle){
+      clearSkillcheckCircle();
+      scheduleNextSkillcheck();
+    }
+  }, LIFESPAN_MS);
+
+  const onTap = (clientX, clientY) => {
+    if(skillcheck.el !== circle) return; // already resolved
+    const elapsed = Date.now() - skillcheck.spawnedAt;
+    const remaining = LIFESPAN_MS - elapsed;
+    const accuracy = computeTapAccuracy(circle, clientX, clientY);
+
+    const rect = circle.getBoundingClientRect();
+    const dist = Math.hypot(clientX - (rect.left+rect.width/2), clientY - (rect.top+rect.height/2));
+    const isMiss = dist > rect.width/2;
+
+    clearTimeout(despawnTimer);
+    clearSkillcheckCircle();
+
+    if(isMiss){
+      // Miss entirely — no rolls, auto-roll pauses until the next circle spawns
+      scheduleNextSkillcheck();
+      return;
+    }
+
+    if(remaining >= PERFECT_WINDOW_START && remaining <= PERFECT_WINDOW_END){
+      // Perfect timing window: sustained 5-second payout, ticking once per second.
+      // Each "click" here is a FULL click — full bulk, axe/equip click bonuses, everything.
+      let ticksLeft = 5;
+      const clicksPerTick = Math.max(1, Math.round(10 * (accuracy * 1.5)));
+      skillcheck.perfectTicker = setInterval(()=>{
+        performBulkRolls(clicksPerTick);
+        ticksLeft--;
+        if(ticksLeft <= 0){
+          clearInterval(skillcheck.perfectTicker);
+          skillcheck.perfectTicker = null;
+          scheduleNextSkillcheck();
+        }
+      }, 1000);
+      performBulkRolls(clicksPerTick); // first tick fires immediately
+      ticksLeft--;
+    } else {
+      // Normal hit, anywhere/anytime within the circle's life — grants this many full clicks.
+      const clicks = Math.max(1, Math.round(10 * accuracy));
+      performBulkRolls(clicks);
+      scheduleNextSkillcheck();
+    }
+  };
+
+  circle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    onTap(e.clientX, e.clientY);
+  });
+}
+
+function startMobileAutoRoll(){
+  if(skillcheck.active) return;
+  skillcheck.active = true;
+  const btn = document.getElementById('mobileAutoRollBtn');
+  if(btn) btn.textContent = 'Stop Auto-Roll';
+  scheduleNextSkillcheck();
+}
+
+function stopMobileAutoRoll(){
+  skillcheck.active = false;
+  if(skillcheck.timer){ clearTimeout(skillcheck.timer); skillcheck.timer = null; }
+  clearSkillcheckCircle();
+  const btn = document.getElementById('mobileAutoRollBtn');
+  if(btn) btn.textContent = 'Start Auto-Roll';
+}
+
+function initMobileAutoRollUI(){
+  if(!isMobileDevice) return;
+  const controls = document.querySelector('.roll-controls');
+  if(!controls || document.getElementById('mobileAutoRollBtn')) return;
+  const btn = document.createElement('button');
+  btn.className = 'btn small secondary';
+  btn.id = 'mobileAutoRollBtn';
+  btn.textContent = 'Start Auto-Roll';
+  btn.style.marginTop = '8px';
+  btn.addEventListener('click', ()=>{
+    if(skillcheck.active) stopMobileAutoRoll();
+    else startMobileAutoRoll();
+  });
+  controls.appendChild(btn);
+}
+initMobileAutoRollUI();
 
 document.getElementById('clearLog').addEventListener('click', ()=>{
   state.log = [];
