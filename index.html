@@ -2761,7 +2761,7 @@ function renderAxeStrip(){
   `;
 }
 
-function renderStage(result, count, trollOverride){
+function renderStage(result, count, trollOverride, clicksNote){
   const stage = document.getElementById('stage');
   const baseTier = result.isSecret ? SECRET_TIER : tierFor(result.baseRng);
   const glowCls = result.isSecret ? 'glow-secret' : (['epic','pelicular','horizon','grandiose','zenith','unworldly'].includes(baseTier.key) ? `glow-${baseTier.key}` : '');
@@ -2776,7 +2776,7 @@ function renderStage(result, count, trollOverride){
       <div class="result-tier">${result.areaLabel} · ${fakeTier.label}</div>
       <div class="result-name">${fakeNameHtml}</div>
       <div class="result-rng">1 in ${fmtRng(trollOverride.rng)}</div>
-      ${count && count > 1 ? `<div class="multi-note">shown: rarest of ${count} rolls (bulk)</div>` : ''}
+      ${clicksNote ? `<div class="multi-note">${clicksNote}</div>` : (count && count > 1 ? `<div class="multi-note">shown: rarest of ${count} rolls (bulk)</div>` : '')}
     `;
     if(['pelicular','horizon','grandiose','zenith','unworldly','colossal','infinite','insanity','impossible'].includes(fakeTier.key)){
       const flash = document.getElementById('flashBg');
@@ -2796,7 +2796,7 @@ function renderStage(result, count, trollOverride){
     <div class="result-rng">1 in ${fmtRngForResult(result)}</div>
     ${result.variant ? `<div class="result-variant">✦ ${result.variant.label} variant (×${result.variant.totalMult})</div>` : ''}
     ${result.isSecret ? `<div class="result-variant">🔒 Secret rank discovered!</div>` : ''}
-    ${count && count > 1 ? `<div class="multi-note">shown: rarest of ${count} rolls (bulk)</div>` : ''}
+    ${clicksNote ? `<div class="multi-note">${clicksNote}</div>` : (count && count > 1 ? `<div class="multi-note">shown: rarest of ${count} rolls (bulk)</div>` : '')}
   `;
 
   if(result.isSecret || ['pelicular','horizon','grandiose','zenith','unworldly','colossal','infinite','insanity','impossible'].includes(baseTier.key)){
@@ -4091,20 +4091,23 @@ document.getElementById('rollBtn').addEventListener('click', doRoll);
 // Performs `clickCount` full CLICKS (each one running the exact same logic as pressing ROLL:
 // base bulk, axe/equip click bonuses, Glitter Spread-style per-roll bonuses, sunrays, etc.) —
 // used by the mobile skillcheck payout so a skillcheck hit is a real stand-in for N clicks,
-// not a separate weaker flat-roll path. Renders only the final click's result on the stage.
+// not a separate weaker flat-roll path. Renders only the final click's result on the stage,
+// alongside a "X clicks × ~N rolls = total" summary so the payout is actually visible.
 function performBulkRolls(clickCount){
   if(clickCount <= 0) return;
-  let lastBest = null;
-  let lastTotalRolls = 0;
+  let overallBest = null;
+  let grandTotalRolls = 0;
   for(let i=0;i<clickCount;i++){
     const { best, totalRolls } = performClick();
-    lastBest = best;
-    lastTotalRolls = totalRolls;
+    grandTotalRolls += totalRolls;
+    if(best && (!overallBest || best.finalRng > overallBest.finalRng)) overallBest = best;
   }
   rollGeneration++;
-  renderStage(lastBest, lastTotalRolls);
+  const avgPerClick = Math.round(grandTotalRolls / clickCount);
+  const clicksNote = `${clickCount.toLocaleString()} clicks × ~${avgPerClick.toLocaleString()} rolls = ${grandTotalRolls.toLocaleString()} total`;
+  renderStage(overallBest, grandTotalRolls, null, clicksNote);
   refreshLiveViews();
-  if(!state.best || lastBest.finalRng > state.best.finalRng) state.best = lastBest;
+  if(!state.best || overallBest.finalRng > state.best.finalRng) state.best = overallBest;
   updateStatStrip();
   dbSaveMeta();
 }
