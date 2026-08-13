@@ -1771,8 +1771,27 @@ const AXES = {
       { name:'Obliterator',   area:'Wasteland', amount:6 },
     ],
   },
+  fraudaxe: {
+    key:'fraudaxe', name:'Fraud Axe',
+    desc:"im the best axe ever - said liar or truth-er (finally a REAL idle axe!)",
+    stats:{ luckMult:2.5, bulk:3, rps:300 },
+    bonus:'[SCAM TOUCH] Offline every hour, always: +5 rolls at ×200,000 luck (×10 mutation luck). [blockfraud] Offline every 5 min, always: +1,000 rolls at ×5 luck. [real blocks for free] Offline every 15 min, always: +500,000 rolls at ×0.5 luck.',
+    offlineBonus:[
+      { intervalSeconds:3600, chancePerInterval:1, minRolls:5,      maxRolls:5,      bonusLuckMult:200000, bonusMutationLuckMult:10 }, // SCAM TOUCH
+      { intervalSeconds:300,  chancePerInterval:1, minRolls:1000,   maxRolls:1000,   bonusLuckMult:5 },                                // blockfraud
+      { intervalSeconds:900,  chancePerInterval:1, minRolls:500000, maxRolls:500000, bonusLuckMult:0.5 },                              // real blocks for free
+    ],
+    // Rank value: 1×Moon(400,000,000) + 5×Leviathan(150,000,000) + 40×Aurora Borealis(300,000,000)
+    //           + 20,000×Fragments(100,000,000) = 950,000,000 exactly ✓
+    requires:[
+      { name:'Moon',              area:'Natural',   amount:1     },
+      { name:'Leviathan',         area:'Natural',   amount:5     },
+      { name:'Aurora Borealis',   area:'Dreamland', amount:40    },
+      { name:'Fragments',         area:'Wasteland', amount:20000 },
+    ],
+  },
 };
-const AXE_ORDER = ['default','crude','destroyer','blandaxe','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','magicwand','silkinator','geomathaxe','rageaxe','godaxe','nanaxe'];
+const AXE_ORDER = ['default','crude','destroyer','blandaxe','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','magicwand','silkinator','geomathaxe','fraudaxe','rageaxe','godaxe','nanaxe'];
 
 /* ============================================================
    EQUIPPABLES
@@ -1898,7 +1917,7 @@ const CONSUMABLES = {
   pushpin: {
     key:'pushpin', name:'Pushpin',
     desc:'Stick it through your pinned recipe. The rarest thing you\'re missing gets a little closer.',
-    effect:'On use: the rarest unfinished material in your pinned recipe becomes ×2.5 easier to get in its home area, for 500 rolls.',
+    effect:'On use: the rarest unfinished material in your pinned recipe becomes ×2.5 easier to get in its home area, for 500 clicks.',
     duration: 500,
     requires:[
       { name:'Crystal', area:'Natural', amount:25 },
@@ -1908,7 +1927,7 @@ const CONSUMABLES = {
   gloves: {
     key:'gloves', name:'Universal Recipe Gloves',
     desc:'Reach across worlds. Not without a price, though.',
-    effect:'On use: the rarest unfinished material in your pinned recipe can drop in any area, at ×2 rarity, for 250 rolls.',
+    effect:'On use: EVERY unfinished material in your pinned recipe can drop in any area, at ×2 rarity, for 250 clicks. Stacks additively alongside whatever already drops there — nothing gets replaced.',
     duration: 250,
     requires:[
       { name:'Illusion Crystal', area:'Dreamland', amount:12 },
@@ -1930,6 +1949,21 @@ const CONSUMABLES = {
       { name:'Unfunctional Tool', area:'Wasteland', amount:15 },
       { name:'Decayal Device', area:'Wasteland', amount:1 },
       { name:'Crystal', area:'Natural', amount:3000 },
+    ],
+  },
+  nullbomb: {
+    key:'nullbomb', name:'null_bomb',
+    desc:'Error at: github/junisrng/bomb/item/null_bomb: 40:4 Expected value, got null or nil',
+    effect:'On use: charges for 4h 4m 4s. Once triggered after charging, fires 40.4 million rolls in your current area at ×40.4 luck and ×1.404 mutation luck. Processed gradually in the background over a few seconds so it never freezes the game. Only one can be charging at a time.',
+    chargeSeconds: 4*3600 + 4*60 + 4,
+    rollCount: 40400000,
+    luckMult: 40.4,
+    mutationLuckMult: 1.404,
+    requires:[
+      { consumable:'bomb',        amount:15      },
+      { name:'Obliterator',       area:'Wasteland', amount:3       },
+      { name:'TIMEOUT',           area:'404',       amount:50      },
+      { name:'☢️',                area:'Placeholder Land', amount:2500000 },
     ],
   },
   watergun: {
@@ -1960,7 +1994,7 @@ const CONSUMABLES = {
     ],
   },
 };
-const CONSUMABLE_ORDER = ['pushpin','gloves','bomb','watergun','errredirector'];
+const CONSUMABLE_ORDER = ['pushpin','gloves','bomb','nullbomb','watergun','errredirector'];
 
 /* ============================================================
    STATE
@@ -1979,8 +2013,9 @@ let state = {
   lastSeenAt: Date.now(),
   pinnedRecipe: null,       // { kind:'axe'|'consumable', key }
   consumables: {},          // { pushpin: 2, gloves: 0, bomb: 1 }
-  activeBuffs: {},          // { pushpin: { rollsLeft }, gloves: { rollsLeft } }
+  activeBuffs: {},          // { pushpin: { rollsLeft }, gloves: { rollsLeft } } — rollsLeft is a CLICKS counter for these two, despite the name
   bombCharge: null,         // { chargingUntil: timestamp }
+  nullBombCharge: null,     // { chargingUntil: timestamp } — separate from bombCharge, can charge alongside it
   clickCount: 0,
   anticheatLockUntil: null,
   wgunStacks: [],           // array of { expiresAt: timestamp }, max 3
@@ -2093,6 +2128,7 @@ function backupToLocalStorage(){
       consumables: state.consumables,
       activeBuffs: state.activeBuffs,
       bombCharge: state.bombCharge,
+      nullBombCharge: state.nullBombCharge,
       clickCount: state.clickCount,
       anticheatLockUntil: state.anticheatLockUntil,
       wgunStacks: state.wgunStacks,
@@ -2134,6 +2170,7 @@ async function dbSaveMeta(){
         consumables: state.consumables,
         activeBuffs: state.activeBuffs,
         bombCharge: state.bombCharge,
+        nullBombCharge: state.nullBombCharge,
         clickCount: state.clickCount,
         anticheatLockUntil: state.anticheatLockUntil,
         wgunStacks: state.wgunStacks,
@@ -2181,6 +2218,7 @@ function applyMetaToState(meta){
   state.consumables = meta.consumables || {};
   state.activeBuffs = meta.activeBuffs || {};
   state.bombCharge = meta.bombCharge || null;
+  state.nullBombCharge = meta.nullBombCharge || null;
   state.anticheatLockUntil = meta.anticheatLockUntil || null;
   state.clickCount = meta.clickCount || 0;
   state.wgunStacks = meta.wgunStacks || [];
@@ -2534,11 +2572,11 @@ function rollOnceForArea(world, area, luckMult, opts){
 
   // --- Unified "Reach" mechanic ---------------------------------------------------------
   // Multiple sources can let pinned-recipe materials drop outside their home area (at some
-  // rarity penalty): Universal Recipe Gloves (consumable, ×2, targets only the rarest missing
-  // material) and Emblem of the Jackpot's innate [Reach] (always-on while equipped, ×5, targets
-  // EVERY unfinished material). Rather than each being its own bespoke pool-injection block,
-  // both funnel through the same reachSources list below so future reach effects don't need to
-  // duplicate this logic again.
+  // rarity penalty): Universal Recipe Gloves (consumable, ×2, targets EVERY unfinished material —
+  // additive, stacks with whatever else is reaching) and Emblem of the Jackpot's innate [Reach]
+  // (always-on while equipped, ×5, also targets EVERY unfinished material). Rather than each
+  // being its own bespoke pool-injection block, both funnel through the same reachSources list
+  // below so future reach effects don't need to duplicate this logic again.
   const equippedAxe = currentAxe();
   const pushpinActive = applyBuffs && state.activeBuffs && state.activeBuffs.pushpin && state.activeBuffs.pushpin.rollsLeft > 0;
   const glovesActive = applyBuffs && state.activeBuffs && state.activeBuffs.gloves && state.activeBuffs.gloves.rollsLeft > 0;
@@ -2546,9 +2584,11 @@ function rollOnceForArea(world, area, luckMult, opts){
 
   const reachSources = [];
   if(glovesActive){
-    // Gloves only reaches for the single rarest unfinished material
-    const target = rarestUnfinishedMaterial();
-    if(target) reachSources.push({ materials:[target], rarityMult:2 });
+    // Gloves reaches for EVERY unfinished material in the pinned recipe at once — any rank from
+    // that area can drop, not just the rarest missing one. This is additive: it's injected into
+    // the pool alongside whatever's already native/reachable here, never replacing anything.
+    const mats = allUnfinishedMaterials();
+    if(mats.length) reachSources.push({ materials:mats, rarityMult:2 });
   }
   if(emblemActive){
     // Emblem's innate Reach covers every unfinished material at once
@@ -3612,27 +3652,43 @@ function renderConsumableCards(){
 
     let canCraft = true;
     const reqHtml = item.requires.map(req=>{
-      const have = getOwnedCount(req.area, req.name, req.variant);
+      const have = getReqOwnedCount(req);
       const ok = have >= req.amount;
       if(!ok) canCraft = false;
-      return `<div class="req-row ${ok?'ok':'short'}">${req.name} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
+      const label = req.consumable ? CONSUMABLES[req.consumable].name : req.name;
+      return `<div class="req-row ${ok?'ok':'short'}">${label} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
     }).join('');
 
     // Buff / bomb / watergun status
     let statusHtml = '';
     if(key === 'pushpin' && state.activeBuffs && state.activeBuffs.pushpin){
-      statusHtml = `<div class="buff-active">⚡ Active: ${state.activeBuffs.pushpin.rollsLeft.toLocaleString()} rolls left</div>`;
+      statusHtml = `<div class="buff-active">⚡ Active: ${state.activeBuffs.pushpin.rollsLeft.toLocaleString()} clicks left</div>`;
     }
     if(key === 'gloves' && state.activeBuffs && state.activeBuffs.gloves){
-      statusHtml = `<div class="buff-active">⚡ Active: ${state.activeBuffs.gloves.rollsLeft.toLocaleString()} rolls left</div>`;
+      statusHtml = `<div class="buff-active">⚡ Active: ${state.activeBuffs.gloves.rollsLeft.toLocaleString()} clicks left</div>`;
     }
     if(key === 'bomb'){
       if(state.bombCharge){
         const msLeft = state.bombCharge.chargingUntil - now;
-        if(msLeft > 0){
+        if(state.bombCharge.detonating){
+          statusHtml = `<div class="buff-active">💥 Detonating…</div>`;
+        } else if(msLeft > 0){
           statusHtml = `<div class="buff-active">⏳ Charging: ${fmtDuration(Math.ceil(msLeft/1000))} left</div>`;
         } else {
           statusHtml = `<div class="buff-active ready">💥 READY — trigger to fire!</div>`;
+        }
+      }
+    }
+    if(key === 'nullbomb'){
+      if(state.nullBombCharge){
+        const msLeft = state.nullBombCharge.chargingUntil - now;
+        if(state.nullBombCharge.detonating){
+          const pct = Math.floor((state.nullBombCharge.progress || 0) * 100);
+          statusHtml = `<div class="buff-active">💣 Detonating… ${pct}%</div>`;
+        } else if(msLeft > 0){
+          statusHtml = `<div class="buff-active">⏳ Charging: ${fmtDuration(Math.ceil(msLeft/1000))} left</div>`;
+        } else {
+          statusHtml = `<div class="buff-active ready">💣 READY — trigger to fire!</div>`;
         }
       }
     }
@@ -3656,8 +3712,19 @@ function renderConsumableCards(){
     let actionHtml = '';
     if(key === 'bomb' && state.bombCharge){
       const msLeft = state.bombCharge.chargingUntil - now;
-      if(msLeft <= 0){
+      if(state.bombCharge.detonating){
+        actionHtml = `<button class="btn small secondary" disabled>Detonating…</button>`;
+      } else if(msLeft <= 0){
         actionHtml = `<button class="btn small" data-trigger-bomb="1">💥 Trigger</button>`;
+      } else {
+        actionHtml = `<button class="btn small secondary" disabled>Charging…</button>`;
+      }
+    } else if(key === 'nullbomb' && state.nullBombCharge){
+      const msLeft = state.nullBombCharge.chargingUntil - now;
+      if(state.nullBombCharge.detonating){
+        actionHtml = `<button class="btn small secondary" disabled>Detonating…</button>`;
+      } else if(msLeft <= 0){
+        actionHtml = `<button class="btn small" data-trigger-nullbomb="1">💣 Trigger</button>`;
       } else {
         actionHtml = `<button class="btn small secondary" disabled>Charging…</button>`;
       }
@@ -3728,6 +3795,9 @@ function renderConsumableCards(){
   });
   el.querySelectorAll('[data-trigger-bomb]').forEach(btn=>{
     btn.addEventListener('click', (e)=>{ e.stopPropagation(); triggerBomb(); });
+  });
+  el.querySelectorAll('[data-trigger-nullbomb]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{ e.stopPropagation(); triggerNullBomb(); });
   });
   el.querySelectorAll('[data-pin-consumable]').forEach(btn=>{
     btn.addEventListener('click', (e)=>{
@@ -3806,12 +3876,16 @@ function craftConsumable(key){
   const item = CONSUMABLES[key];
   if(!item) return;
   for(const req of item.requires){
-    if(getOwnedCount(req.area, req.name, req.variant) < req.amount) return;
+    if(getReqOwnedCount(req) < req.amount) return;
   }
   for(const req of item.requires){
-    const k = invKey(req.area, req.name, req.variant || null);
-    state.inventory[k].count -= req.amount;
-    dbSaveInvItem(state.inventory[k]);
+    if(req.consumable){
+      state.consumables[req.consumable] -= req.amount;
+    } else {
+      const k = invKey(req.area, req.name, req.variant || null);
+      state.inventory[k].count -= req.amount;
+      dbSaveInvItem(state.inventory[k]);
+    }
   }
   if(!state.consumables) state.consumables = {};
   state.consumables[key] = (state.consumables[key] || 0) + 1;
@@ -3849,6 +3923,19 @@ function useConsumable(key){
     renderConsumableCards();
     renderLog();
     renderInventory();
+    return;
+  }
+
+  if(key === 'nullbomb'){
+    if(state.nullBombCharge){
+      alertUser('null_bomb is already charging — only one can charge at a time.');
+      return;
+    }
+    state.consumables.nullbomb--;
+    const chargeMs = CONSUMABLES.nullbomb.chargeSeconds * 1000;
+    state.nullBombCharge = { chargingUntil: Date.now() + chargeMs };
+    dbSaveMeta();
+    renderConsumableCards();
     return;
   }
 
@@ -3892,61 +3979,147 @@ function alertUser(msg){
   document.getElementById('dismissOffline').addEventListener('click', ()=>{ el.innerHTML=''; });
 }
 
+// Shared budget for chunked bomb-style detonations — keeps each animation frame's synchronous
+// work small so firing hundreds of thousands (or millions) of rolls never freezes the tab.
+const DETONATION_CHUNK_BUDGET_MS = 8;
+
 function triggerBomb(){
   if(!state.bombCharge) return;
   if(Date.now() < state.bombCharge.chargingUntil) return;
+  if(state.bombCharge.detonating) return; // already running
+  state.bombCharge.detonating = true;
+  renderConsumableCards();
 
   const world = WORLDS[state.worldIdx];
   const area = world.areas[state.areaIdx];
-  const axe = currentAxe();
-  const cfg = CONSUMABLES.bomb;
   const equip = currentEquip();
+  const cfg = CONSUMABLES.bomb;
 
   // [Axenades] (equip): if worn, the bomb itself is x1.5 more efficient — more rolls per trigger.
   const bombEffMult = (equip && equip.bombEfficiencyMult) ? equip.bombEfficiencyMult : 1;
   const bombRollCount = Math.round(cfg.rollCount * bombEffMult);
 
+  // Extra batch also fired when the bomb goes off, on top of the bomb's own roll batch.
+  const extraBatch = (equip && equip.bombTriggerBonus) ? equip.bombTriggerBonus : null;
+  const totalPlanned = bombRollCount + (extraBatch ? extraBatch.rolls : 0);
+
   let best = null;
   const counts = {};
   let totalRollsFired = 0;
-  for(let i=0;i<bombRollCount;i++){
-    const r = rollOnceForArea(world, area, cfg.luckMult, { mutationLuckMult: cfg.mutationLuckMult, isBomb: true });
+  let i = 0; // index into the combined virtual roll sequence (bomb batch, then extra batch)
+
+  function fireOne(){
+    const inExtra = i >= bombRollCount;
+    const r = inExtra
+      ? rollOnceForArea(world, area, extraBatch.luckMult, { mutationLuckMult: extraBatch.mutationLuckMult || 1, isBomb: true })
+      : rollOnceForArea(world, area, cfg.luckMult, { mutationLuckMult: cfg.mutationLuckMult, isBomb: true });
     const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
     if(!counts[k]) counts[k] = { result:r, count:0 };
     counts[k].count++;
     totalRollsFired++;
     if(!best || r.finalRng > best.finalRng) best = r;
+    i++;
   }
 
-  // [Axenades] (equip): also fires an EXTRA bonus batch when the bomb goes off, on top of the
-  // bomb's own (possibly efficiency-boosted) roll batch above.
-  if(equip && equip.bombTriggerBonus){
-    const bb = equip.bombTriggerBonus;
-    for(let i=0;i<bb.rolls;i++){
-      const r = rollOnceForArea(world, area, bb.luckMult, { mutationLuckMult: bb.mutationLuckMult || 1, isBomb: true });
+  function processChunk(){
+    const chunkStart = performance.now();
+    while(i < totalPlanned && (performance.now() - chunkStart) < DETONATION_CHUNK_BUDGET_MS){
+      fireOne();
+    }
+
+    if(i < totalPlanned){
+      requestAnimationFrame(processChunk);
+      return;
+    }
+
+    for(const k in counts){
+      addToInventory(counts[k].result, counts[k].count);
+    }
+    state.rolls += totalRollsFired;
+    state.bombCharge = null;
+    if(best){
+      pushLog(best);
+      renderStage(best, totalRollsFired);
+      if(!state.best || best.finalRng > state.best.finalRng) state.best = best;
+    }
+    renderInventory();
+    refreshLiveViews();
+    updateStatStrip();
+    renderConsumableCards();
+    dbSaveMeta();
+  }
+
+  processChunk();
+}
+
+// null_bomb's detonation: 40.4 million rolls (before any future multipliers). Looping that many
+// rollOnceForArea() calls synchronously would freeze/crash the tab, so this simulates the same
+// chunked-across-frames way triggerBomb does — just spread across more frames given the size.
+// Progress is reflected in the consumable card ("Detonating… X%") so it's clearly still working,
+// not frozen.
+function triggerNullBomb(){
+  if(!state.nullBombCharge) return;
+  if(Date.now() < state.nullBombCharge.chargingUntil) return;
+  if(state.nullBombCharge.detonating) return; // already running
+
+  const world = WORLDS[state.worldIdx];
+  const area = world.areas[state.areaIdx];
+  const cfg = CONSUMABLES.nullbomb;
+  const totalPlanned = cfg.rollCount;
+
+  state.nullBombCharge.detonating = true;
+  state.nullBombCharge.progress = 0;
+  renderConsumableCards();
+
+  let best = null;
+  const counts = {};
+  let totalRollsFired = 0;
+  let i = 0;
+  let lastUiUpdate = 0;
+
+  function processChunk(){
+    const chunkStart = performance.now();
+    while(i < totalPlanned && (performance.now() - chunkStart) < DETONATION_CHUNK_BUDGET_MS){
+      const r = rollOnceForArea(world, area, cfg.luckMult, { mutationLuckMult: cfg.mutationLuckMult, isBomb: true });
       const k = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
       if(!counts[k]) counts[k] = { result:r, count:0 };
       counts[k].count++;
       totalRollsFired++;
       if(!best || r.finalRng > best.finalRng) best = r;
+      i++;
     }
+
+    if(i < totalPlanned){
+      // Throttle progress-bar re-renders to a few times a second — re-rendering every frame
+      // for millions of rolls would itself add unnecessary overhead.
+      const now = performance.now();
+      if(now - lastUiUpdate > 200){
+        state.nullBombCharge.progress = i / totalPlanned;
+        renderConsumableCards();
+        lastUiUpdate = now;
+      }
+      requestAnimationFrame(processChunk);
+      return;
+    }
+
+    for(const k in counts){
+      addToInventory(counts[k].result, counts[k].count);
+    }
+    state.rolls += totalRollsFired;
+    state.nullBombCharge = null;
+    if(best){
+      pushLog(best);
+      renderStage(best, totalRollsFired);
+      if(!state.best || best.finalRng > state.best.finalRng) state.best = best;
+    }
+    renderInventory();
+    refreshLiveViews();
+    updateStatStrip();
+    renderConsumableCards();
+    dbSaveMeta();
   }
 
-  for(const k in counts){
-    addToInventory(counts[k].result, counts[k].count);
-  }
-  state.rolls += totalRollsFired;
-  state.bombCharge = null;
-  if(best){
-    pushLog(best);
-    renderStage(best, totalRollsFired);
-    if(!state.best || best.finalRng > state.best.finalRng) state.best = best;
-  }
-  renderInventory();
-  refreshLiveViews();
-  updateStatStrip();
-  renderConsumableCards();
-  dbSaveMeta();
+  processChunk();
 }
 
 /* ============================================================
@@ -4067,7 +4240,6 @@ function performClick(){
   }
   state.rolls += bulk;
   state.clickCount = (state.clickCount || 0) + 1;
-  tickActiveBuffs(bulk);
 
   const world = WORLDS[state.worldIdx];
   const area = world.areas[state.areaIdx];
@@ -4110,7 +4282,9 @@ function performClick(){
     }
   }
   state.rolls += clickBonusFired;
-  if(clickBonusFired > 0) tickActiveBuffs(clickBonusFired);
+  // Pushpin / Universal Recipe Gloves are consumed per CLICK, not per roll — one click, one tick,
+  // regardless of how many rolls/click-bonuses fired inside it.
+  tickActiveBuffs(true);
 
   for(const r of results){
     addToInventory(r, 1);
@@ -4148,14 +4322,17 @@ function doRoll(){
   dbSaveMeta();
 }
 
-// Counts down rolls remaining on Pushpin / Universal Recipe Gloves buffs, clearing them at zero
-function tickActiveBuffs(rollCount){
+// Counts down clicks remaining on Pushpin / Universal Recipe Gloves buffs, clearing them at zero.
+// clickHappened should be true exactly once per performClick() call, regardless of how many
+// rolls/click-bonuses fired inside it — these two buffs are consumed per CLICK, not per roll.
+function tickActiveBuffs(clickHappened){
   if(!state.activeBuffs) return;
+  if(!clickHappened) return;
   let changed = false;
   for(const key of Object.keys(state.activeBuffs)){
     const buff = state.activeBuffs[key];
     if(!buff) continue;
-    buff.rollsLeft -= rollCount;
+    buff.rollsLeft -= 1;
     changed = true;
     if(buff.rollsLeft <= 0){
       delete state.activeBuffs[key];
@@ -4182,23 +4359,47 @@ document.getElementById('rollBtn').addEventListener('click', doRoll);
 // used by the mobile skillcheck payout so a skillcheck hit is a real stand-in for N clicks,
 // not a separate weaker flat-roll path. Renders only the final click's result on the stage,
 // alongside a "X clicks × ~N rolls = total" summary so the payout is actually visible.
+//
+// The clicks are processed in small chunks spread across animation frames rather than one
+// giant synchronous loop. A single click's own internal roll loop (bulk) can already be large,
+// so multiplying that by a big clickCount in one synchronous pass is what was freezing/crashing
+// the tab on mobile. Chunking keeps each frame's work bounded so the main thread stays responsive.
+const BULK_ROLL_CHUNK_BUDGET_MS = 8; // max synchronous work per frame before yielding
+
 function performBulkRolls(clickCount){
   if(clickCount <= 0) return;
   let overallBest = null;
   let grandTotalRolls = 0;
-  for(let i=0;i<clickCount;i++){
-    const { best, totalRolls } = performClick();
-    grandTotalRolls += totalRolls;
-    if(best && (!overallBest || best.finalRng > overallBest.finalRng)) overallBest = best;
+  let i = 0;
+
+  function processChunk(){
+    const chunkStart = performance.now();
+    while(i < clickCount && (performance.now() - chunkStart) < BULK_ROLL_CHUNK_BUDGET_MS){
+      const { best, totalRolls } = performClick();
+      grandTotalRolls += totalRolls;
+      if(best && (!overallBest || best.finalRng > overallBest.finalRng)) overallBest = best;
+      i++;
+    }
+
+    if(i < clickCount){
+      // More clicks left — yield to the browser and continue next frame instead of
+      // blocking synchronously, so scrolling/rendering/input never freezes mid-payout.
+      requestAnimationFrame(processChunk);
+      return;
+    }
+
+    // All clicks done — finalize exactly as before.
+    rollGeneration++;
+    const avgPerClick = Math.round(grandTotalRolls / clickCount);
+    const clicksNote = `${clickCount.toLocaleString()} clicks × ~${avgPerClick.toLocaleString()} rolls = ${grandTotalRolls.toLocaleString()} total`;
+    renderStage(overallBest, grandTotalRolls, null, clicksNote);
+    refreshLiveViews();
+    if(!state.best || overallBest.finalRng > state.best.finalRng) state.best = overallBest;
+    updateStatStrip();
+    dbSaveMeta();
   }
-  rollGeneration++;
-  const avgPerClick = Math.round(grandTotalRolls / clickCount);
-  const clicksNote = `${clickCount.toLocaleString()} clicks × ~${avgPerClick.toLocaleString()} rolls = ${grandTotalRolls.toLocaleString()} total`;
-  renderStage(overallBest, grandTotalRolls, null, clicksNote);
-  refreshLiveViews();
-  if(!state.best || overallBest.finalRng > state.best.finalRng) state.best = overallBest;
-  updateStatStrip();
-  dbSaveMeta();
+
+  processChunk();
 }
 
 const isMobileDevice = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0 && window.innerWidth < 900);
@@ -4533,13 +4734,18 @@ function simulateOfflineBonusRules(offlineBonus, seconds, pool, variantChain, TI
     const intervalSeconds = rule.intervalSeconds || 1;
     const chancePerInterval = rule.chancePerInterval != null ? rule.chancePerInterval : (rule.chancePerSecond || 0);
     const bonusLuckMult = rule.bonusLuckMult;
+    // Mutation luck for offline-simulated bonus rolls, mirroring the live roller's
+    // `isMutation ? luckMult * mutationLuckMult : luckMult` handling (rollOnceForArea).
+    // Defaults to 1 (no extra mutation boost) for every existing rule that doesn't set it.
+    const bonusMutationLuckMult = rule.bonusMutationLuckMult != null ? rule.bonusMutationLuckMult : 1;
     const minRolls = rule.minRolls != null ? rule.minRolls : (rule.bonusRolls || 1);
     const maxRolls = rule.maxRolls != null ? rule.maxRolls : (rule.bonusRolls || 1);
 
     let highestGuaranteedBonusRng = 0;
     for(const item of pool){
       if(item.rng !== Infinity){
-        const effectiveChance = bonusLuckMult / item.rng;
+        const itemBonusLuckMult = item.isMutation ? bonusLuckMult * bonusMutationLuckMult : bonusLuckMult;
+        const effectiveChance = itemBonusLuckMult / item.rng;
         if(effectiveChance >= 1 && item.rng > highestGuaranteedBonusRng){
           highestGuaranteedBonusRng = item.rng;
         }
@@ -4563,8 +4769,9 @@ function simulateOfflineBonusRules(offlineBonus, seconds, pool, variantChain, TI
           let bypassedWinner = null;
 
           for(const item of pool){
+            const itemBonusLuckMult = item.isMutation ? bonusLuckMult * bonusMutationLuckMult : bonusLuckMult;
             if(item.rng === Infinity){
-              if(Math.random() < 0.0005 * bonusLuckMult){
+              if(Math.random() < 0.0005 * itemBonusLuckMult){
                 if(!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
               }
               continue;
@@ -4575,7 +4782,7 @@ function simulateOfflineBonusRules(offlineBonus, seconds, pool, variantChain, TI
                 if(!bypassedWinner || item.rng > bypassedWinner.rng) bypassedWinner = item;
               }
             } else {
-              const effectiveChance = bonusLuckMult / item.rng;
+              const effectiveChance = itemBonusLuckMult / item.rng;
               if(Math.random() < effectiveChance){
                 if(!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
               }
@@ -5105,6 +5312,16 @@ function anticheatLockRemaining(){
 async function init(){
   await dbLoadAll();
 
+  // Safety: if the page reloaded/crashed mid-detonation, "detonating" would be stuck true with
+  // no simulation loop actually running (that loop only exists in-memory). Clear the flag so the
+  // Trigger button is clickable again rather than permanently showing "Detonating…". The charge
+  // itself (and its remaining time, if still charging) is preserved either way.
+  if(state.bombCharge && state.bombCharge.detonating) delete state.bombCharge.detonating;
+  if(state.nullBombCharge && state.nullBombCharge.detonating){
+    delete state.nullBombCharge.detonating;
+    delete state.nullBombCharge.progress;
+  }
+
   // Run anticheat before offline progress
   await runAnticheat();
 
@@ -5148,6 +5365,7 @@ let wasErrRedirectorActive = isErrRedirectorActive();
 setInterval(()=>{
   if(currentView === 'items'){
     if(state.bombCharge) renderConsumableCards();
+    if(state.nullBombCharge) renderConsumableCards();
     if(state.wgunStacks && state.wgunStacks.length) renderConsumableCards();
     if(state.errRedirectorUntil) renderConsumableCards();
   }
