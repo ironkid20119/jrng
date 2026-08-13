@@ -2070,6 +2070,234 @@ function effectiveBulk(){
 /* ============================================================
    INDEXEDDB PERSISTENCE
    ============================================================ */
+
+/* ============================================================
+   PERSISTENCE WORKER WIRING
+   All WRITES (IndexedDB puts/deletes + the localStorage backup mirror) are offloaded to a
+   dedicated worker so a roll click never blocks on storage. Previously, backupToLocalStorage()
+   did a full JSON.stringify of the entire inventory PLUS a synchronous localStorage.setItem —
+   inline, synchronously, on every single distinct item a click produced. That's what made the
+   ROLL button feel unresponsive under load (bulk clicks, bonus rolls, the mobile auto-roll
+   skillcheck). The worker now owns that serialization + the actual IndexedDB write; main thread
+   just fires a message and moves on. Reads (dbLoadAll, once at startup) stay on the main thread
+   via openDB/withDbRetry below since they're a one-time cost, not a per-click cost.
+   ============================================================ */
+
+const PERSISTENCE_WORKER_SRC = String.raw`/* ============================================================
+   PERSISTENCE WORKER
+   Owns all IndexedDB WRITES for meta + inventory. The main thread posts fire-and-forget
+   messages here instead of running JSON encoding / IndexedDB transactions inline on every
+   roll click, which is what was causing the ROLL button to feel unresponsive under load
+   (backupToLocalStorage's full-inventory JSON.stringify + an IDB write were both running
+   synchronously in the middle of the click handler, once per distinct item per click).
+
+   IndexedDB is available inside workers, so this can open its own connection and write
+   directly — no main-thread involvement needed once a message is posted.
+
+   localStorage is NOT available inside workers, so the worker periodically sends the
+   serialized backup strings back to the main thread (batched/throttled), which does one
+   cheap localStorage.setItem with an already-built string — much cheaper than the main
+   thread building that string itself on every click.
+   ============================================================ */
+
+const DB_NAME = 'junis-rng-db';
+const DB_VERSION = 1;
+const STORE_META = 'meta';
+const STORE_INV  = 'inventory';
+
+let dbPromise = null;
+
+function openDB(){
+  if(dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e)=>{
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META, { keyPath:'id' });
+      if(!db.objectStoreNames.contains(STORE_INV)) db.createObjectStore(STORE_INV, { keyPath:'key' });
+    };
+    req.onsuccess = (e)=>{
+      const db = e.target.result;
+      db.onclose = ()=>{ dbPromise = null; };
+      db.onversionchange = ()=>{ db.close(); dbPromise = null; };
+      resolve(db);
+    };
+    req.onerror = (e)=>{ dbPromise = null; reject(e); };
+  });
+  return dbPromise;
+}
+
+async function withDbRetry(fn){
+  try{
+    const db = await openDB();
+    return await fn(db);
+  }catch(err){
+    const isStaleConnection = err && (err.name === 'InvalidStateError' || /closing/i.test(err.message || ''));
+    if(isStaleConnection){
+      dbPromise = null;
+      const db = await openDB();
+      return await fn(db);
+    }
+    throw err;
+  }
+}
+
+async function saveMeta(meta){
+  await withDbRetry(async (db)=>{
+    const tx = db.transaction(STORE_META, 'readwrite');
+    tx.objectStore(STORE_META).put(Object.assign({ id:'state' }, meta));
+  });
+}
+
+async function saveInvItem(item){
+  await withDbRetry(async (db)=>{
+    const tx = db.transaction(STORE_INV, 'readwrite');
+    tx.objectStore(STORE_INV).put(item);
+  });
+}
+
+async function deleteInvItem(key){
+  await withDbRetry(async (db)=>{
+    const tx = db.transaction(STORE_INV, 'readwrite');
+    tx.objectStore(STORE_INV).delete(key);
+  });
+}
+
+// Batched localStorage backup: the main thread's inventory can be large (hundreds of distinct
+// ranks/variants). Rather than re-stringifying it on every single message, we cache the latest
+// inventory snapshot the worker has been told about and only build+post the backup string on a
+// throttle, so a burst of rolls (e.g. a big bulk click, or the mobile skillcheck payout) only
+// pays this cost once every LS_BACKUP_INTERVAL_MS rather than once per item.
+const LS_BACKUP_INTERVAL_MS = 2000;
+let latestMeta = null;
+let latestInventoryMap = null; // key -> item, mirrors state.inventory shape
+let lsBackupTimer = null;
+let lsBackupDirty = false;
+
+function scheduleLsBackup(){
+  lsBackupDirty = true;
+  if(lsBackupTimer) return;
+  lsBackupTimer = setTimeout(flushLsBackup, LS_BACKUP_INTERVAL_MS);
+}
+
+function flushLsBackup(){
+  lsBackupTimer = null;
+  if(!lsBackupDirty) return;
+  lsBackupDirty = false;
+  const metaStr = latestMeta ? JSON.stringify(latestMeta) : null;
+  const invStr = latestInventoryMap ? JSON.stringify(Object.values(latestInventoryMap)) : null;
+  postMessage({ type:'ls-backup', metaStr, invStr });
+}
+
+self.onmessage = async (e)=>{
+  const msg = e.data;
+  if(!msg || !msg.type) return;
+
+  try{
+    switch(msg.type){
+      case 'save-meta':
+        latestMeta = msg.meta;
+        await saveMeta(msg.meta);
+        scheduleLsBackup();
+        break;
+
+      case 'save-inv-item':
+        if(!latestInventoryMap) latestInventoryMap = {};
+        latestInventoryMap[msg.item.key] = msg.item;
+        await saveInvItem(msg.item);
+        scheduleLsBackup();
+        break;
+
+      case 'delete-inv-item':
+        if(latestInventoryMap) delete latestInventoryMap[msg.key];
+        await deleteInvItem(msg.key);
+        scheduleLsBackup();
+        break;
+
+      // Lets the main thread hand over its full current inventory snapshot once (e.g. right
+      // after load, or after a bulk operation that touched many keys at once) so the worker's
+      // localStorage-backup cache stays accurate without needing a message per item.
+      case 'sync-inventory-snapshot':
+        latestInventoryMap = msg.inventory;
+        scheduleLsBackup();
+        break;
+
+      case 'flush':
+        // Force an immediate backup (used e.g. on page hide/unload where a 2s delay might not
+        // get a chance to fire).
+        if(lsBackupTimer){ clearTimeout(lsBackupTimer); lsBackupTimer = null; }
+        flushLsBackup();
+        break;
+    }
+  }catch(err){
+    postMessage({ type:'error', op: msg.type, message: (err && err.message) || String(err) });
+  }
+};
+`;
+
+let persistenceWorker = null;
+try{
+  const workerBlob = new Blob([PERSISTENCE_WORKER_SRC], { type:'application/javascript' });
+  persistenceWorker = new Worker(URL.createObjectURL(workerBlob));
+  persistenceWorker.onmessage = (e)=>{
+    const msg = e.data;
+    if(!msg || !msg.type) return;
+    if(msg.type === 'ls-backup'){
+      // The worker already built these strings — main thread just writes them, which is the
+      // one truly cheap part of the whole backup (a single localStorage.setItem call each).
+      try{
+        if(msg.metaStr) localStorage.setItem('junis_rng_backup_meta', msg.metaStr);
+        if(msg.invStr) localStorage.setItem('junis_rng_backup_inv', msg.invStr);
+      }catch(e){ console.warn('LocalStorage backup write failed:', e); }
+    } else if(msg.type === 'error'){
+      console.error(`Persistence worker error during ${msg.op}:`, msg.message);
+    }
+  };
+  persistenceWorker.onerror = (e)=>{
+    // Some environments (strict CSP, sandboxed iframes/previews, certain WebViews) block Worker
+    // construction from blob: URLs entirely and report it via a generic ErrorEvent with an empty
+    // message rather than throwing synchronously from `new Worker(...)` above. Log everything
+    // available so it's diagnosable, then fall back to running persistence on the main thread —
+    // the game still works correctly, it just loses the off-main-thread benefit.
+    console.error('Persistence worker crashed — falling back to main-thread persistence.', {
+      message: e && e.message,
+      filename: e && e.filename,
+      lineno: e && e.lineno,
+      colno: e && e.colno,
+      error: e && e.error,
+    });
+    if(e && typeof e.preventDefault === 'function') e.preventDefault();
+    persistenceWorker = null;
+  };
+}catch(e){
+  console.warn('Web Worker unavailable, persistence will run on the main thread as a fallback.', e);
+  persistenceWorker = null;
+}
+
+function buildMetaSnapshot(){
+  return {
+    rolls: state.rolls,
+    best: state.best,
+    worldIdx: state.worldIdx,
+    areaIdx: state.areaIdx,
+    ownedAxes: state.ownedAxes,
+    equippedAxe: state.equippedAxe,
+    ownedEquips: state.ownedEquips,
+    equippedItem: state.equippedItem,
+    lastSeenAt: state.lastSeenAt,
+    pinnedRecipe: state.pinnedRecipe,
+    consumables: state.consumables,
+    activeBuffs: state.activeBuffs,
+    bombCharge: state.bombCharge,
+    nullBombCharge: state.nullBombCharge,
+    clickCount: state.clickCount,
+    anticheatLockUntil: state.anticheatLockUntil,
+    wgunStacks: state.wgunStacks,
+    coinBagStacks: state.coinBagStacks,
+    discoveredSecrets: state.discoveredSecrets,
+  };
+}
+
 const DB_NAME = 'junis-rng-db';
 const DB_VERSION = 1;
 const STORE_META = 'meta';
@@ -2077,6 +2305,8 @@ const STORE_INV  = 'inventory';
 let dbPromise = null;
 let saveLoadedSuccessfully = false;
 
+// Main-thread IndexedDB connection — used ONLY for the one-time read on startup (dbLoadAll).
+// All writes go through the worker instead (see above).
 function openDB(){
   if(dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject)=>{
@@ -2112,95 +2342,62 @@ async function withDbRetry(fn){
   }
 }
 
-function backupToLocalStorage(){
+// Fallback path used only if the Worker constructor itself failed (very old browsers / locked-down
+// environments) — mirrors the old inline behavior exactly so the game still works, just without
+// the off-main-thread benefit.
+function backupToLocalStorageInline(){
   try{
-    const metaObj = {
-      rolls: state.rolls,
-      best: state.best,
-      worldIdx: state.worldIdx,
-      areaIdx: state.areaIdx,
-      ownedAxes: state.ownedAxes,
-      equippedAxe: state.equippedAxe,
-      ownedEquips: state.ownedEquips,
-      equippedItem: state.equippedItem,
-      lastSeenAt: state.lastSeenAt,
-      pinnedRecipe: state.pinnedRecipe,
-      consumables: state.consumables,
-      activeBuffs: state.activeBuffs,
-      bombCharge: state.bombCharge,
-      nullBombCharge: state.nullBombCharge,
-      clickCount: state.clickCount,
-      anticheatLockUntil: state.anticheatLockUntil,
-      wgunStacks: state.wgunStacks,
-      coinBagStacks: state.coinBagStacks,
-      discoveredSecrets: state.discoveredSecrets,
-    };
-    localStorage.setItem('junis_rng_backup_meta', JSON.stringify(metaObj));
+    localStorage.setItem('junis_rng_backup_meta', JSON.stringify(buildMetaSnapshot()));
     localStorage.setItem('junis_rng_backup_inv', JSON.stringify(Object.values(state.inventory)));
   }catch(e){
     console.warn('LocalStorage backup failed:', e);
   }
 }
 
-async function dbSaveMeta(){
+function dbSaveMeta(){
   // SAFETY GUARD: If we never loaded successfully and state is empty/default, DO NOT overwrite!
   if(!saveLoadedSuccessfully && state.rolls === 0 && Object.keys(state.inventory).length === 0){
     console.warn('Refusing to save empty state over uninitialized load to prevent permanent data loss.');
     return;
   }
-  
-  // Always update localStorage backup first
-  backupToLocalStorage();
 
-  try{
-    await withDbRetry(async (db)=>{
+  const meta = buildMetaSnapshot();
+
+  if(persistenceWorker){
+    // Fire-and-forget: structured-cloned to the worker, which does the IndexedDB write AND
+    // schedules the (throttled) localStorage backup. Returns immediately — no blocking.
+    persistenceWorker.postMessage({ type:'save-meta', meta });
+  } else {
+    backupToLocalStorageInline();
+    withDbRetry(async (db)=>{
       const tx = db.transaction(STORE_META, 'readwrite');
-      tx.objectStore(STORE_META).put({
-        id:'state',
-        rolls: state.rolls,
-        best: state.best,
-        worldIdx: state.worldIdx,
-        areaIdx: state.areaIdx,
-        ownedAxes: state.ownedAxes,
-        equippedAxe: state.equippedAxe,
-        ownedEquips: state.ownedEquips,
-        equippedItem: state.equippedItem,
-        lastSeenAt: state.lastSeenAt,
-        pinnedRecipe: state.pinnedRecipe,
-        consumables: state.consumables,
-        activeBuffs: state.activeBuffs,
-        bombCharge: state.bombCharge,
-        nullBombCharge: state.nullBombCharge,
-        clickCount: state.clickCount,
-        anticheatLockUntil: state.anticheatLockUntil,
-        wgunStacks: state.wgunStacks,
-        coinBagStacks: state.coinBagStacks,
-        discoveredSecrets: state.discoveredSecrets,
-      });
-    });
-  }catch(err){ 
-    console.error('Failed to save meta to IndexedDB, fallback localStorage active', err); 
+      tx.objectStore(STORE_META).put(Object.assign({ id:'state' }, meta));
+    }).catch(err=> console.error('Failed to save meta to IndexedDB, fallback localStorage active', err));
   }
 }
 
-async function dbSaveInvItem(item){
-  backupToLocalStorage();
-  try{
-    await withDbRetry(async (db)=>{
+function dbSaveInvItem(item){
+  if(persistenceWorker){
+    persistenceWorker.postMessage({ type:'save-inv-item', item });
+  } else {
+    backupToLocalStorageInline();
+    withDbRetry(async (db)=>{
       const tx = db.transaction(STORE_INV, 'readwrite');
       tx.objectStore(STORE_INV).put(item);
-    });
-  }catch(err){ console.error('Failed to save inventory item', err); }
+    }).catch(err=> console.error('Failed to save inventory item', err));
+  }
 }
 
-async function dbDeleteInvItem(key){
-  backupToLocalStorage();
-  try{
-    await withDbRetry(async (db)=>{
+function dbDeleteInvItem(key){
+  if(persistenceWorker){
+    persistenceWorker.postMessage({ type:'delete-inv-item', key });
+  } else {
+    backupToLocalStorageInline();
+    withDbRetry(async (db)=>{
       const tx = db.transaction(STORE_INV, 'readwrite');
       tx.objectStore(STORE_INV).delete(key);
-    });
-  }catch(err){ console.error('Failed to delete inventory item', err); }
+    }).catch(err=> console.error('Failed to delete inventory item', err));
+  }
 }
 
 function applyMetaToState(meta){
@@ -2284,6 +2481,14 @@ async function dbLoadAll(){
     }
 
     await migrateMisattributedInventory();
+
+    // Seed the worker's localStorage-backup cache with what we just loaded, so the backup
+    // mirror reflects the full inventory from the start rather than only items touched again
+    // after this point (save-inv-item messages patch the worker's cache incrementally, but
+    // that cache starts empty otherwise).
+    if(persistenceWorker){
+      persistenceWorker.postMessage({ type:'sync-inventory-snapshot', inventory: state.inventory });
+    }
   }catch(err){
     console.error('Fatal load error, initiating safe mode (saving disabled until manual action)', err);
     saveLoadedSuccessfully = false;
@@ -5358,6 +5563,7 @@ init();
 window.addEventListener('beforeunload', ()=>{
   state.lastSeenAt = Date.now();
   dbSaveMeta();
+  if(persistenceWorker) persistenceWorker.postMessage({ type:'flush' });
 });
 
 // Live countdown for bomb charge timer
@@ -5392,6 +5598,7 @@ document.addEventListener('visibilitychange', async ()=>{
   if(document.visibilityState === 'hidden'){
     state.lastSeenAt = Date.now();
     dbSaveMeta();
+    if(persistenceWorker) persistenceWorker.postMessage({ type:'flush' });
   } else {
     await runAnticheat();
     if(isAnticheatLocked()){
