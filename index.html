@@ -373,6 +373,40 @@
   .acc-body{ display:none; padding:0 16px 14px; }
   .acc-item.open .acc-body{ display:block; }
 
+  /* ---------- Inventory mode toggle (List/Folders, Accordion/Breadcrumb) ---------- */
+  .seg-toggle{ display:inline-flex; border:1px solid var(--border-lit); border-radius:10px; overflow:hidden; background:var(--bg-1); }
+  .seg-btn{
+    font-family:var(--mono); font-size:12px; padding:8px 14px; background:transparent; color:var(--text-dim);
+    border:none; cursor:pointer; transition:background .15s ease, color .15s ease;
+  }
+  .seg-btn.active{ background:var(--border-lit); color:var(--text); font-weight:700; }
+  .seg-btn:not(.active):hover{ background:var(--bg-2); }
+
+  /* ---------- Folder-style inventory browser ---------- */
+  .inv-folders{ display:flex; flex-direction:column; gap:10px; }
+  .folder-decor-path{
+    font-family:var(--mono); font-size:11px; color:var(--text-faint); opacity:0.65;
+    margin-bottom:2px; word-break:break-all;
+  }
+  .folder-breadcrumb{
+    display:flex; flex-wrap:wrap; align-items:center; gap:4px;
+    font-family:var(--mono); font-size:13px; margin-bottom:8px;
+  }
+  .folder-crumb{ color:var(--text-dim); cursor:pointer; padding:2px 4px; border-radius:4px; }
+  .folder-crumb:hover{ background:var(--bg-2); color:var(--text); }
+  .folder-crumb.current{ color:var(--text); font-weight:700; cursor:default; }
+  .folder-crumb.current:hover{ background:none; }
+  .folder-crumb-sep{ color:var(--text-faint); opacity:0.5; }
+  .folder-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--bg-1);
+    cursor:pointer; user-select:none; font-family:var(--sans); font-weight:600; font-size:14px;
+  }
+  .folder-row:hover{ background:var(--bg-2); }
+  .folder-row .folder-icon{ margin-right:8px; }
+  .folder-row .folder-count{ font-family:var(--mono); font-size:12px; color:var(--text-faint); font-weight:400; }
+  .folder-leaf-list{ display:flex; flex-direction:column; gap:8px; }
+
   /* ---------- Nested sub-accordions (Bonus / Recipe / Effect inside item cards) ---------- */
   .sub-acc-item{
     border:1px solid var(--border); border-radius:10px; overflow:hidden;
@@ -656,6 +690,61 @@
   </div>
 </div>
 
+<!-- INIT CRASH GUARD: shown if init() throws partway through — usually from a random OS/WebView
+     reload landing mid-load. Your save data itself is fine (it's already safely in IndexedDB by
+     the time this can happen); this just stops you from staring at a half-built, stuck page. -->
+<div id="initCrashGuard" style="display:none; position:fixed; inset:0; z-index:99999; background:#0a0a1a; color:#dee5ff; font-family:var(--mono, monospace); align-items:center; justify-content:center; padding:24px; text-align:center;">
+  <div style="max-width:520px;">
+    <div style="font-size:15px; letter-spacing:0.05em; color:#8888ff; font-weight:700; margin-bottom:14px;">SOMETHING GLITCHED</div>
+    <div style="font-size:14px; line-height:1.6; margin-bottom:18px;">
+      The page didn't load correctly (this usually happens after a random reload). Your save is safe — just refresh to try again.
+    </div>
+    <div style="font-size:14px; margin-bottom:18px;">
+      Auto refreshing in: <span id="initCrashGuardTimer" style="color:#8888ff; font-weight:700;">15</span> seconds
+    </div>
+    <button id="initCrashGuardRefreshBtn" type="button" style="font-family:inherit; font-size:13px; padding:8px 18px; background:#1a1a3a; color:#dee5ff; border:1px solid #8888ff; border-radius:6px; cursor:pointer; margin-bottom:22px;">Refresh now</button>
+    <div id="initCrashGuardDetail" style="font-size:10px; opacity:0.55; line-height:1.5; word-break:break-word;"></div>
+  </div>
+</div>
+
+<!-- STORAGE ENGINE CHOICE MODAL: asks the player to pick which save engine to use. Blocks init
+     until a choice is made (unless "don't ask again" was previously set). Also reachable later
+     via the logo's secret gesture to switch engines. -->
+<div id="storageEngineModal" class="modal-overlay" style="display:none;">
+  <div class="modal-content" style="max-width:480px;">
+    <h3>choose your save engine</h3>
+    <p style="margin-bottom:16px;">Pick how your save data is stored on this device. You can switch later from the logo.</p>
+    <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;">
+      <button type="button" class="btn" data-engine-choice="legacy" style="text-align:left; padding:14px 16px; display:flex; flex-direction:column; align-items:flex-start; gap:4px;">
+        <span style="font-weight:700;">Legacy (buggy)</span>
+        <span style="font-size:11px; opacity:0.7; font-weight:400;">IndexedDB. The original engine — mostly solid, but the one behind the rare crash/reset bugs.</span>
+      </button>
+      <button type="button" class="btn" data-engine-choice="modern" style="text-align:left; padding:14px 16px; display:flex; flex-direction:column; align-items:flex-start; gap:4px;">
+        <span style="font-weight:700;">Modern (stable)</span>
+        <span style="font-size:11px; opacity:0.7; font-weight:400;">localStorage. Newer, simpler, avoids the IndexedDB-related bugs above.</span>
+      </button>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; justify-content:center; font-size:12px; color:var(--text-dim); cursor:pointer; margin-bottom:4px;">
+      <input type="checkbox" id="storageEngineDontAsk" style="width:16px; height:16px;">
+      Don't ask again (you can re-enable this from the logo)
+    </label>
+  </div>
+</div>
+
+<!-- STORAGE ENGINE SWITCH MODAL: shown when switching engines later (via the logo), asks whether
+     to copy the current save into the newly-chosen engine. -->
+<div id="storageEngineSwitchModal" class="modal-overlay" style="display:none;">
+  <div class="modal-content" style="max-width:480px;">
+    <h3>copy your save?</h3>
+    <p id="storageEngineSwitchText" style="margin-bottom:18px;"></p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button type="button" class="btn" id="storageEngineSwitchCopyBtn">Copy my save, then switch</button>
+      <button type="button" class="btn secondary" id="storageEngineSwitchNoCopyBtn">Switch without copying (start fresh there)</button>
+      <button type="button" class="btn secondary" id="storageEngineSwitchCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- SIMULATION LOADING MODAL -->
 <div id="simModal" class="modal-overlay" style="display:none;">
   <div class="modal-content">
@@ -673,6 +762,11 @@
     <div class="brand">
       <h1 id="logoTitle" style="cursor:pointer; user-select:none;">Juni's RNG Game</h1>
       <button id="cacheResetBtn" class="cache-reset-btn" type="button">⟳ Force reload latest version (keeps your save)</button>
+      <button id="storageEngineChangeBtn" class="cache-reset-btn" type="button">💾 Change save engine</button>
+      <div id="storageEngineChangeChoices" style="display:none; gap:8px; margin-top:6px;">
+        <button id="storageEngineChangeToLegacy" class="cache-reset-btn" type="button">→ Legacy (buggy)</button>
+        <button id="storageEngineChangeToModern" class="cache-reset-btn" type="button">→ Modern (stable)</button>
+      </div>
     </div>
     <div class="stat-strip">
       <div class="s"><span class="label">Rolls</span><span class="val" id="statRolls">0</span></div>
@@ -711,6 +805,18 @@
   <div class="view" id="view-inventory">
     <div class="panel">
       <h2 class="ptitle">Inventory <span class="inv-summary" id="invSummary"></span></h2>
+
+      <div class="inv-mode-toggles" style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+        <div class="seg-toggle" id="invModeToggle" data-mode="list">
+          <button type="button" class="seg-btn active" data-inv-mode="list">☰ List</button>
+          <button type="button" class="seg-btn" data-inv-mode="folders">🗂️ Folders</button>
+        </div>
+        <div class="seg-toggle" id="invFolderNavToggle" style="display:none;" data-nav="accordion">
+          <button type="button" class="seg-btn active" data-folder-nav="accordion">Accordion</button>
+          <button type="button" class="seg-btn" data-folder-nav="breadcrumb">Breadcrumb</button>
+        </div>
+      </div>
+
       <div class="inv-filters" id="invFilters">
         <select id="filterWorld"><option value="">All worlds</option></select>
         <select id="filterArea"><option value="">All areas</option></select>
@@ -720,6 +826,8 @@
       <div class="inv-list" id="invList">
         <div class="inv-empty">Nothing collected yet. Go roll something.</div>
       </div>
+
+      <div class="inv-folders" id="invFolders" style="display:none;"></div>
     </div>
   </div>
 
@@ -773,6 +881,28 @@ document.addEventListener('touchend', (e)=>{
 }, { passive:false });
 </script>
 <script>
+/* ============================================================
+   GLOBAL CRASH SAFETY NET
+   Catches any uncaught error or unhandled promise rejection anywhere in the game, not just
+   inside init(). A random OS/WebView reload can land the page in a half-initialized state where
+   even a later click handler throws on undefined state — this is what "buggy data that shouldn't
+   be interacted with" looks like from the outside. Rather than leaving that broken interaction
+   silently stuck, this shows the same "refresh to fix it" guard used for init() crashes.
+   Debounced so a burst of related errors only shows the overlay once, not repeatedly.
+   ============================================================ */
+let globalCrashGuardShown = false;
+function handleGlobalCrash(err){
+  if(globalCrashGuardShown) return; // already showing — don't re-trigger from a cascade of errors
+  globalCrashGuardShown = true;
+  console.error('Uncaught error after init — showing crash guard.', err);
+  // showInitCrashGuard/initCrashGuard element are defined later in this same script block, but
+  // by the time any real error can fire (after init() runs), the whole script has already parsed
+  // and these are available.
+  if(typeof showInitCrashGuard === 'function') showInitCrashGuard(err);
+}
+window.addEventListener('error', (e)=>{ handleGlobalCrash(e.error || e.message); });
+window.addEventListener('unhandledrejection', (e)=>{ handleGlobalCrash(e.reason); });
+
 /* ============================================================
    DATA MODEL
    ============================================================ */
@@ -2087,8 +2217,596 @@ function effectiveBulk(){
 
 
 /* ============================================================
-   INDEXEDDB PERSISTENCE
+   STORAGE ENGINE CHOICE
+   The player picks between two save engines:
+     - 'legacy' : IndexedDB (the original engine — the one behind the rare crash/reset bugs)
+     - 'modern' : localStorage only (simpler, avoids the IndexedDB-specific failure modes)
+   The choice itself lives in localStorage (not IndexedDB) since it has to be readable before we
+   know which engine to trust, and localStorage is synchronous/always-available. Whichever engine
+   is active, dbSaveMeta/dbSaveInvItem/dbDeleteInvItem/dbLoadAll (defined further below) branch on
+   it — every other call site in the game is unaware this choice exists at all.
    ============================================================ */
+const STORAGE_ENGINE_KEY = 'junis_rng_storage_engine';
+const STORAGE_ENGINE_DONT_ASK_KEY = 'junis_rng_storage_engine_dont_ask';
+const MODERN_LS_META_KEY = 'junis_rng_modern_meta';
+const MODERN_LS_INV_KEY = 'junis_rng_modern_inv';
+
+function getStorageEngineChoice(){
+  try{ return localStorage.getItem(STORAGE_ENGINE_KEY); } // 'legacy' | 'modern' | null
+  catch(e){ return null; }
+}
+function setStorageEngineChoice(engine){
+  try{ localStorage.setItem(STORAGE_ENGINE_KEY, engine); }catch(e){ /* best-effort */ }
+}
+function getStorageEngineDontAsk(){
+  try{ return localStorage.getItem(STORAGE_ENGINE_DONT_ASK_KEY) === '1'; }
+  catch(e){ return false; }
+}
+function setStorageEngineDontAsk(val){
+  try{ localStorage.setItem(STORAGE_ENGINE_DONT_ASK_KEY, val ? '1' : '0'); }catch(e){ /* best-effort */ }
+}
+
+// Reads/writes for the MODERN engine. For this first pass these reuse the exact same JSON shape
+// as the existing localStorage backup (buildMetaSnapshot() + Object.values(inventory)) — just
+// under their own dedicated keys so they're never confused with the legacy engine's backup
+// mirror. The compact {itemId:{variantId:count}} format is a planned follow-up, not in this pass.
+/* ============================================================
+   COMPACT INVENTORY FORMAT (Modern engine only)
+   Instead of storing full item objects ({key,name,areaLabel,baseRng,tierKey,...} per entry),
+   the Modern engine stores inventory as { itemId: { variantId: [count, lastRng] } }. itemId and
+   variantId are small integers looked up against the versioned tables below, and every other
+   field (name, areaLabel, baseRng, tier info) is DERIVED at load time from the current game data
+   rather than stored — that's where the actual size savings come from.
+
+   STABILITY: ITEM_ID_TABLE is a frozen, versioned snapshot (ITEM_ID_TABLE_VERSION) generated
+   once from the item catalog that existed at the time it was written. It is intentionally NOT
+   regenerated from WORLDS at runtime — if it were, reordering or adding items to WORLDS later
+   would silently reassign IDs and corrupt every existing Modern-engine save. When new items are
+   added to the game in the future, new entries get appended to this table with new, never-before-
+   used IDs; existing IDs are never reused or reassigned, even if the original item is removed.
+   ============================================================ */
+const ITEM_ID_TABLE_VERSION = 1;
+// [id, areaLabel, name] — id is permanent once assigned, never reused even if an item is removed.
+const ITEM_ID_TABLE = [
+  [1,"2048","Tile 1"],
+  [2,"2048","Tile 128"],
+  [3,"2048","Tile 131k"],
+  [4,"2048","Tile 134m"],
+  [5,"2048","Tile 137b"],
+  [6,"2048","Tile 16"],
+  [7,"2048","Tile 16k"],
+  [8,"2048","Tile 16m"],
+  [9,"2048","Tile 17b"],
+  [10,"2048","Tile 1b"],
+  [11,"2048","Tile 1k"],
+  [12,"2048","Tile 1m"],
+  [13,"2048","Tile 1t"],
+  [14,"2048","Tile 2"],
+  [15,"2048","Tile 256"],
+  [16,"2048","Tile 262k"],
+  [17,"2048","Tile 268m"],
+  [18,"2048","Tile 274b"],
+  [19,"2048","Tile 2b"],
+  [20,"2048","Tile 2k"],
+  [21,"2048","Tile 2m"],
+  [22,"2048","Tile 32"],
+  [23,"2048","Tile 32k"],
+  [24,"2048","Tile 33m"],
+  [25,"2048","Tile 34b"],
+  [26,"2048","Tile 4"],
+  [27,"2048","Tile 4b"],
+  [28,"2048","Tile 4k"],
+  [29,"2048","Tile 4m"],
+  [30,"2048","Tile 512"],
+  [31,"2048","Tile 524k"],
+  [32,"2048","Tile 536m"],
+  [33,"2048","Tile 549b"],
+  [34,"2048","Tile 64"],
+  [35,"2048","Tile 65k"],
+  [36,"2048","Tile 67m"],
+  [37,"2048","Tile 68b"],
+  [38,"2048","Tile 8"],
+  [39,"2048","Tile 8b"],
+  [40,"2048","Tile 8k"],
+  [41,"2048","Tile 8m"],
+  [42,"404","Bad Request"],
+  [43,"404","DENIAL"],
+  [44,"404","FORBIDDEN."],
+  [45,"404","GONE."],
+  [46,"404","MISDIRECTED"],
+  [47,"404","NIL"],
+  [48,"404","NO CONTENT."],
+  [49,"404","NULL"],
+  [50,"404","NaN"],
+  [51,"404","TIMEOUT"],
+  [52,"404","UNAUTHORIZED."],
+  [53,"404","corruption"],
+  [54,"404","dreamcore"],
+  [55,"404","missing"],
+  [56,"404","not found"],
+  [57,"404","undefined"],
+  [58,"ABC","A"],
+  [59,"ABC","B"],
+  [60,"ABC","C"],
+  [61,"ABC","D"],
+  [62,"ABC","E"],
+  [63,"ABC","F"],
+  [64,"ABC","G"],
+  [65,"ABC","H"],
+  [66,"ABC","I"],
+  [67,"ABC","J"],
+  [68,"ABC","K"],
+  [69,"ABC","L"],
+  [70,"ABC","M"],
+  [71,"ABC","N"],
+  [72,"ABC","O"],
+  [73,"ABC","P"],
+  [74,"ABC","Q"],
+  [75,"ABC","R"],
+  [76,"ABC","S"],
+  [77,"ABC","T"],
+  [78,"ABC","U"],
+  [79,"ABC","V"],
+  [80,"ABC","W"],
+  [81,"ABC","X"],
+  [82,"ABC","Y"],
+  [83,"ABC","Z"],
+  [84,"Dreamland","Ascended"],
+  [85,"Dreamland","Aurora Borealis"],
+  [86,"Dreamland","Cloud"],
+  [87,"Dreamland","Destiny"],
+  [88,"Dreamland","Dream Powder"],
+  [89,"Dreamland","Dreamcore"],
+  [90,"Dreamland","Dreamstone"],
+  [91,"Dreamland","Galactic Harmony"],
+  [92,"Dreamland","Heavenly"],
+  [93,"Dreamland","Heavenly Mist"],
+  [94,"Dreamland","Illusion Crystal"],
+  [95,"Dreamland","Imaginary"],
+  [96,"Dreamland","Pearl"],
+  [97,"Dreamland","Pearlscence"],
+  [98,"Dreamland","Rainbow Fragment"],
+  [99,"Dreamland","Sparkles"],
+  [100,"Dreamland","Star"],
+  [101,"Dreamland","Starglass"],
+  [102,"Dreamland","Swirl"],
+  [103,"Factoritization","EIGHT"],
+  [104,"Factoritization","ELEVEN"],
+  [105,"Factoritization","FINALE"],
+  [106,"Factoritization","FIVE"],
+  [107,"Factoritization","FOUR"],
+  [108,"Factoritization","FOURTEEN"],
+  [109,"Factoritization","NINE"],
+  [110,"Factoritization","ONE"],
+  [111,"Factoritization","SEVEN"],
+  [112,"Factoritization","SIX"],
+  [113,"Factoritization","TEN"],
+  [114,"Factoritization","THIRTEEN"],
+  [115,"Factoritization","THREE"],
+  [116,"Factoritization","TWELVE"],
+  [117,"Factoritization","TWO"],
+  [118,"Gimmicks","3 AM Demon"],
+  [119,"Gimmicks","And Sand"],
+  [120,"Gimmicks","Axe in a Potted Plant"],
+  [121,"Gimmicks","Bedtime"],
+  [122,"Gimmicks","Bland Axe"],
+  [123,"Gimmicks","Bootleg Tier"],
+  [124,"Gimmicks","Coin Bag"],
+  [125,"Gimmicks","Crude Axe"],
+  [126,"Gimmicks","Dark Axe"],
+  [127,"Gimmicks","Day"],
+  [128,"Gimmicks","Default Axe"],
+  [129,"Gimmicks","Destructive Destroyed Destroyer"],
+  [130,"Gimmicks","Disaster Bringer"],
+  [131,"Gimmicks","Dreamers Prism"],
+  [132,"Gimmicks","Emblem of the Jackpot"],
+  [133,"Gimmicks","Explosive Axe Bomb"],
+  [134,"Gimmicks","Fishy Starsystem"],
+  [135,"Gimmicks","Food Eater"],
+  [136,"Gimmicks","Geomathaxe"],
+  [137,"Gimmicks","Gimmick Crystal"],
+  [138,"Gimmicks","Glowaxe"],
+  [139,"Gimmicks","God Axe"],
+  [140,"Gimmicks","Lord of Requirements"],
+  [141,"Gimmicks","Magic Wand"],
+  [142,"Gimmicks","Night"],
+  [143,"Gimmicks","Portable Rechargable Axenades"],
+  [144,"Gimmicks","Potato But Cold"],
+  [145,"Gimmicks","Pushpin"],
+  [146,"Gimmicks","Rage Axe"],
+  [147,"Gimmicks","Sakura Tree"],
+  [148,"Gimmicks","Sentient Watergun"],
+  [149,"Gimmicks","Silkinator"],
+  [150,"Gimmicks","Snek Eys"],
+  [151,"Gimmicks","Specific Minute"],
+  [152,"Gimmicks","Tail Zero"],
+  [153,"Gimmicks","Thumbtacks"],
+  [154,"Gimmicks","Trollstone"],
+  [155,"Gimmicks","Trophy"],
+  [156,"Gimmicks","U Win"],
+  [157,"Gimmicks","Universal Recipe Gloves"],
+  [158,"Gimmicks","Vitamin Axey"],
+  [159,"Gimmicks","Weakling"],
+  [160,"Gimmicks","Welcome Back"],
+  [161,"Gimmicks","Youre Winner"],
+  [162,"Gimmicks","nan.axe"],
+  [163,"LAME world","GO AWAY-IUM"],
+  [164,"LAME world","WASTELAND FROM WORLD 1 AREA 2"],
+  [165,"LAME world","boringest thingy ever"],
+  [166,"LAME world","boringite"],
+  [167,"LAME world","evil-ish rare boringite"],
+  [168,"LAME world","great an infinite tier we dont need"],
+  [169,"LAME world","lame crystal"],
+  [170,"LAME world","lightbulb"],
+  [171,"LAME world","nothing"],
+  [172,"LAME world","nothing but its GIANT"],
+  [173,"LAME world","something because nothing was boring"],
+  [174,"LAME world","weird concept of nothing"],
+  [175,"Natural","Apocalypse Crystal"],
+  [176,"Natural","Blade of Grass"],
+  [177,"Natural","Corruption"],
+  [178,"Natural","Creature"],
+  [179,"Natural","Crystal"],
+  [180,"Natural","Destiny"],
+  [181,"Natural","Dirt"],
+  [182,"Natural","Dirtiverse"],
+  [183,"Natural","Disaster"],
+  [184,"Natural","Fire"],
+  [185,"Natural","Flower"],
+  [186,"Natural","La Ville Perdue"],
+  [187,"Natural","Leviathan"],
+  [188,"Natural","Life"],
+  [189,"Natural","Lunar"],
+  [190,"Natural","Lunar Oblivion"],
+  [191,"Natural","Moon"],
+  [192,"Natural","Plant"],
+  [193,"Natural","Plasmaspark"],
+  [194,"Natural","Rock"],
+  [195,"Natural","Ruins"],
+  [196,"Natural","Silver"],
+  [197,"Natural","Sporebloom"],
+  [198,"Natural","Universal"],
+  [199,"Natural","Water"],
+  [200,"Natural","Wood"],
+  [201,"Placeholder Land","         "],
+  [202,"Placeholder Land","'Every Area Needs A Rare Ass Thing' Shut Up Bro"],
+  [203,"Placeholder Land","1 lb of Hair (eww)"],
+  [204,"Placeholder Land","A Trillionth Of A J"],
+  [205,"Placeholder Land","Air"],
+  [206,"Placeholder Land","Botl Cap"],
+  [207,"Placeholder Land","Canna Beans"],
+  [208,"Placeholder Land","Comic Book"],
+  [209,"Placeholder Land","ELECTRIC BLANKET!!!"],
+  [210,"Placeholder Land","Eel"],
+  [211,"Placeholder Land","GLOVE"],
+  [212,"Placeholder Land","GOLDEN TOILET AWARD"],
+  [213,"Placeholder Land","Goofy Gring"],
+  [214,"Placeholder Land","Granky"],
+  [215,"Placeholder Land","H-ium"],
+  [216,"Placeholder Land","Oumba\u00df"],
+  [217,"Placeholder Land","The Burger YOU Ate"],
+  [218,"Placeholder Land","The Rest Of The J"],
+  [219,"Placeholder Land","Toilet"],
+  [220,"Placeholder Land","Weird Fragment"],
+  [221,"Placeholder Land","Yummy Delicious Chocolate"],
+  [222,"Placeholder Land","\u2622\ufe0f"],
+  [223,"Placeholder Land","\ud83e\udd47"],
+  [224,"Placeholder Land","\ud83e\udd48"],
+  [225,"Placeholder Land","\ud83e\udd49"],
+  [226,"Scary Land","A"],
+  [227,"Scary Land","GHOST"],
+  [228,"Scary Land","Loser"],
+  [229,"Scary Land","Mosquito"],
+  [230,"Scary Land","Not So Epic"],
+  [231,"Scary Land","SCARY"],
+  [232,"Scary Land","So Epic!!!"],
+  [233,"Scary Land","The Probably Rarest Thing Ever"],
+  [234,"Scary Land","You Not Get This"],
+  [235,"The Fridge","A Cat"],
+  [236,"The Fridge","Cheese"],
+  [237,"The Fridge","Eggs"],
+  [238,"The Fridge","Fish"],
+  [239,"The Fridge","Fridge-ium"],
+  [240,"The Fridge","Fruits"],
+  [241,"The Fridge","Leftover Burger"],
+  [242,"The Fridge","Orange"],
+  [243,"The Fridge","PIZZA"],
+  [244,"The Fridge","Universe Sized Apple Made For Destroying Universes Without Orange"],
+  [245,"The Fridge","Water"],
+  [246,"Tiers","Colossal"],
+  [247,"Tiers","Common"],
+  [248,"Tiers","Decent"],
+  [249,"Tiers","Epic"],
+  [250,"Tiers","Good"],
+  [251,"Tiers","Grandiose"],
+  [252,"Tiers","Horizon"],
+  [253,"Tiers","Impossible"],
+  [254,"Tiers","Infinite"],
+  [255,"Tiers","Insanity"],
+  [256,"Tiers","Pelicular"],
+  [257,"Tiers","Rare"],
+  [258,"Tiers","Unusual"],
+  [259,"Tiers","Unworldly"],
+  [260,"Tiers","Usual"],
+  [261,"Tiers","Zenith"],
+  [262,"Wasteland","Beyond Recognition Object"],
+  [263,"Wasteland","Broken Device"],
+  [264,"Wasteland","Corruption Fragment"],
+  [265,"Wasteland","Decayal Device"],
+  [266,"Wasteland","Destiny"],
+  [267,"Wasteland","Destroyed Thing"],
+  [268,"Wasteland","Destruction"],
+  [269,"Wasteland","Doomcrystal"],
+  [270,"Wasteland","Electronic"],
+  [271,"Wasteland","Entropy"],
+  [272,"Wasteland","Fragments"],
+  [273,"Wasteland","Garbage Compacter"],
+  [274,"Wasteland","Goop Producer"],
+  [275,"Wasteland","Junk Producer"],
+  [276,"Wasteland","Obliterator"],
+  [277,"Wasteland","Pollution"],
+  [278,"Wasteland","Ruincrystal"],
+  [279,"Wasteland","Slop"],
+  [280,"Wasteland","Unfunctional Tool"]
+];
+
+// variantId: 1 = normal (no variant), 2..5 = VARIANT_CHAIN index+2. Also permanent/versioned —
+// VARIANT_CHAIN's current order (weird, odd, rainbow, grayscale) defines 2,3,4,5 respectively.
+const VARIANT_ID_NORMAL = 1;
+function variantKeyToId(variantKey){
+  if(!variantKey) return VARIANT_ID_NORMAL;
+  const idx = VARIANT_CHAIN.findIndex(v => v.key === variantKey);
+  return idx === -1 ? VARIANT_ID_NORMAL : idx + 2;
+}
+function variantIdToKey(variantId){
+  if(variantId === VARIANT_ID_NORMAL || variantId == null) return null;
+  const v = VARIANT_CHAIN[variantId - 2];
+  return v ? v.key : null;
+}
+
+let _itemIdLookupCache = null; // Map<"areaLabel|name", id> — built once, lazily, from ITEM_ID_TABLE
+function itemKeyToId(areaLabel, name){
+  if(!_itemIdLookupCache){
+    _itemIdLookupCache = new Map();
+    for(const [id, area, nm] of ITEM_ID_TABLE) _itemIdLookupCache.set(area + '|' + nm, id);
+  }
+  return _itemIdLookupCache.get(areaLabel + '|' + name) || null;
+}
+let _itemIdReverseCache = null; // Map<id, [areaLabel, name]> — built once, lazily
+function itemIdToKey(id){
+  if(!_itemIdReverseCache){
+    _itemIdReverseCache = new Map();
+    for(const [tid, area, nm] of ITEM_ID_TABLE) _itemIdReverseCache.set(tid, [area, nm]);
+  }
+  return _itemIdReverseCache.get(id) || null;
+}
+
+// Converts the live state.inventory object into the compact save shape. Items whose name/area
+// aren't found in ITEM_ID_TABLE (e.g. a secret rank, or something added after this table was
+// generated and not yet backfilled) are kept in a small "overflow" array of full objects instead
+// of being silently dropped — correctness over compactness for anything the table doesn't cover.
+function encodeCompactInventory(inventoryObj){
+  const compact = {};
+  const overflow = [];
+  for(const key in inventoryObj){
+    const it = inventoryObj[key];
+    if(it.isSecret){ overflow.push(it); continue; } // secrets aren't in the normal rank catalog
+    const itemId = itemKeyToId(it.areaLabel, it.name);
+    if(itemId == null){ overflow.push(it); continue; } // not in the table — preserve in full rather than lose it
+    const variantId = variantKeyToId(it.variant ? it.variant.key : null);
+    if(!compact[itemId]) compact[itemId] = {};
+    compact[itemId][variantId] = [it.count, it.lastRng != null ? it.lastRng : it.baseRng];
+  }
+  return { v: ITEM_ID_TABLE_VERSION, compact, overflow };
+}
+
+// Reverses encodeCompactInventory — rebuilds full state.inventory-shaped objects, deriving
+// name/areaLabel/baseRng/tier info from the current game data rather than trusting stored copies
+// (so a tier-color rebalance, for instance, is reflected correctly even for old compact saves).
+function decodeCompactInventory(saved){
+  const inventoryObj = {};
+  if(!saved) return inventoryObj;
+
+  const compact = saved.compact || {};
+  for(const itemIdStr in compact){
+    const itemId = Number(itemIdStr);
+    const loc = itemIdToKey(itemId);
+    if(!loc) continue; // ID from a newer table version this build doesn't know about — skip safely
+    const [areaLabel, name] = loc;
+    const baseRng = findRankRng(areaLabel, name);
+    if(baseRng == null) continue; // item since removed from the catalog — skip safely
+
+    const variants = compact[itemIdStr];
+    for(const variantIdStr in variants){
+      const variantId = Number(variantIdStr);
+      const [count, lastRng] = variants[variantIdStr];
+      const variantKey = variantIdToKey(variantId);
+      const variantDef = variantKey ? VARIANT_CHAIN.find(v => v.key === variantKey) : null;
+      const t = tierFor(baseRng);
+      const key = invKey(areaLabel, name, variantKey);
+      inventoryObj[key] = {
+        key, name, areaLabel, baseRng, lastRng: lastRng != null ? lastRng : baseRng,
+        tierKey: t.key, tierLabel: t.label, tierCls: t.cls,
+        variant: variantDef ? { key: variantDef.key, label: variantDef.label, mult: variantDef.mult } : null,
+        count, firstAt: Date.now(), isSecret: false,
+      };
+    }
+  }
+
+  // Overflow items (secrets, or anything not in ITEM_ID_TABLE) are stored as full objects as-is.
+  for(const it of (saved.overflow || [])){
+    inventoryObj[it.key] = it;
+  }
+
+  return inventoryObj;
+}
+
+function modernEngineSaveMeta(meta){
+  try{ localStorage.setItem(MODERN_LS_META_KEY, JSON.stringify(meta)); return true; }
+  catch(e){ console.error('Modern engine: failed to save meta', e); return false; }
+}
+function modernEngineSaveInventory(inventoryObj){
+  try{
+    const compact = encodeCompactInventory(inventoryObj);
+    localStorage.setItem(MODERN_LS_INV_KEY, JSON.stringify(compact));
+    return true;
+  }catch(e){ console.error('Modern engine: failed to save inventory', e); return false; }
+}
+function modernEngineLoad(){
+  let meta = null, items = null;
+  try{
+    const metaStr = localStorage.getItem(MODERN_LS_META_KEY);
+    if(metaStr) meta = JSON.parse(metaStr);
+  }catch(e){ console.error('Modern engine: failed to parse saved meta', e); }
+  try{
+    const invStr = localStorage.getItem(MODERN_LS_INV_KEY);
+    if(invStr){
+      const saved = JSON.parse(invStr);
+      const inventoryObj = decodeCompactInventory(saved);
+      items = Object.values(inventoryObj);
+    }
+  }catch(e){ console.error('Modern engine: failed to parse saved inventory', e); }
+  return { meta, items };
+}
+function modernEngineHasData(){
+  try{ return !!localStorage.getItem(MODERN_LS_META_KEY); }
+  catch(e){ return false; }
+}
+
+// Reads a full save snapshot from a GIVEN engine, regardless of which engine is currently active.
+// Used when copying a save across engines (both the initial choice screen has nothing to copy
+// from yet, and the later logo-triggered switch, which does).
+async function readSnapshotFromEngine(engine){
+  if(engine === 'modern'){
+    const { meta, items } = modernEngineLoad();
+    return { meta, items: items || [] };
+  }
+  // engine === 'legacy' — read directly from IndexedDB, independent of whichever engine is
+  // currently "active" in state (this function is explicitly told which one to read).
+  try{
+    const db = await openDB();
+    const metaTx = db.transaction(STORE_META, 'readonly');
+    const metaReq = metaTx.objectStore(STORE_META).get('state');
+    const meta = await new Promise((res,rej)=>{
+      metaReq.onsuccess = ()=> res(metaReq.result || null);
+      metaReq.onerror = (e)=> rej(e);
+    });
+    const invTx = db.transaction(STORE_INV, 'readonly');
+    const invReq = invTx.objectStore(STORE_INV).getAll();
+    const items = await new Promise((res,rej)=>{
+      invReq.onsuccess = ()=> res(invReq.result || []);
+      invReq.onerror = (e)=> rej(e);
+    });
+    return { meta, items };
+  }catch(err){
+    console.error('Failed to read legacy engine snapshot for copy', err);
+    return { meta: null, items: [] };
+  }
+}
+
+// Writes a full save snapshot INTO a given engine. Used the same way as readSnapshotFromEngine —
+// for copying a save across engines, independent of which one is currently active.
+async function writeSnapshotToEngine(engine, meta, items){
+  if(!meta) return; // nothing to copy
+  if(engine === 'modern'){
+    modernEngineSaveMeta(meta);
+    const invObj = {};
+    for(const it of items) invObj[it.key] = it;
+    modernEngineSaveInventory(invObj);
+    return;
+  }
+  // engine === 'legacy' — write directly to IndexedDB.
+  try{
+    await withDbRetry(async (db)=>{
+      const tx = db.transaction(STORE_META, 'readwrite');
+      tx.objectStore(STORE_META).put(Object.assign({ id:'state' }, meta));
+    });
+    await withDbRetry(async (db)=>{
+      const tx = db.transaction(STORE_INV, 'readwrite');
+      const store = tx.objectStore(STORE_INV);
+      for(const it of items) store.put(it);
+    });
+  }catch(err){
+    console.error('Failed to write legacy engine snapshot for copy', err);
+  }
+}
+
+// Blocks (via the returned Promise) until the player has an active storage engine choice.
+// Skips the modal entirely if a choice already exists AND "don't ask again" is set.
+function ensureStorageEngineChosen(){
+  return new Promise((resolve)=>{
+    const existing = getStorageEngineChoice();
+    if(existing && getStorageEngineDontAsk()){
+      resolve();
+      return;
+    }
+
+    const modal = document.getElementById('storageEngineModal');
+    if(!modal){ resolve(); return; } // markup missing somehow — don't hang init() forever
+
+    modal.style.display = 'flex';
+    const dontAskCheckbox = document.getElementById('storageEngineDontAsk');
+    if(dontAskCheckbox) dontAskCheckbox.checked = false;
+
+    const buttons = modal.querySelectorAll('[data-engine-choice]');
+    function onChoose(engine){
+      setStorageEngineChoice(engine);
+      setStorageEngineDontAsk(dontAskCheckbox ? dontAskCheckbox.checked : false);
+      buttons.forEach(b=> b.removeEventListener('click', clickHandler));
+      modal.style.display = 'none';
+      resolve();
+    }
+    function clickHandler(e){
+      onChoose(e.currentTarget.getAttribute('data-engine-choice'));
+    }
+    buttons.forEach(b=> b.addEventListener('click', clickHandler));
+  });
+}
+
+// Shows the switch-engine modal (Copy / Don't copy / Cancel), reachable from the logo's secret
+// gesture. targetEngine is the engine to switch TO; the current engine is read live.
+function showStorageEngineSwitchModal(targetEngine){
+  const currentEngine = getStorageEngineChoice() || 'legacy';
+  if(currentEngine === targetEngine) return; // already on it, nothing to switch
+
+  const modal = document.getElementById('storageEngineSwitchModal');
+  if(!modal) return;
+
+  const label = (e)=> e === 'modern' ? 'Modern (stable)' : 'Legacy (buggy)';
+  const textEl = document.getElementById('storageEngineSwitchText');
+  if(textEl) textEl.textContent = `Switching from ${label(currentEngine)} to ${label(targetEngine)}. Copy your current save over? The old engine's save is left untouched either way — you can always switch back.`;
+
+  modal.style.display = 'flex';
+
+  const copyBtn = document.getElementById('storageEngineSwitchCopyBtn');
+  const noCopyBtn = document.getElementById('storageEngineSwitchNoCopyBtn');
+  const cancelBtn = document.getElementById('storageEngineSwitchCancelBtn');
+
+  function cleanup(){
+    modal.style.display = 'none';
+    if(copyBtn) copyBtn.removeEventListener('click', onCopy);
+    if(noCopyBtn) noCopyBtn.removeEventListener('click', onNoCopy);
+    if(cancelBtn) cancelBtn.removeEventListener('click', onCancel);
+  }
+  async function onCopy(){
+    cleanup();
+    const { meta, items } = await readSnapshotFromEngine(currentEngine);
+    await writeSnapshotToEngine(targetEngine, meta, items);
+    setStorageEngineChoice(targetEngine);
+    location.reload();
+  }
+  function onNoCopy(){
+    cleanup();
+    setStorageEngineChoice(targetEngine);
+    location.reload();
+  }
+  function onCancel(){
+    cleanup();
+  }
+  if(copyBtn) copyBtn.addEventListener('click', onCopy);
+  if(noCopyBtn) noCopyBtn.addEventListener('click', onNoCopy);
+  if(cancelBtn) cancelBtn.addEventListener('click', onCancel);
+}
 
 /* ============================================================
    PERSISTENCE WORKER WIRING
@@ -2395,6 +3113,11 @@ function dbSaveMeta(){
 
   const meta = buildMetaSnapshot();
 
+  if(getStorageEngineChoice() === 'modern'){
+    modernEngineSaveMeta(meta);
+    return;
+  }
+
   if(persistenceWorker){
     // Fire-and-forget: structured-cloned to the worker, which does the IndexedDB write AND
     // schedules the (throttled) localStorage backup. Returns immediately — no blocking.
@@ -2409,6 +3132,14 @@ function dbSaveMeta(){
 }
 
 function dbSaveInvItem(item){
+  if(getStorageEngineChoice() === 'modern'){
+    // localStorage has no per-key store like IndexedDB's object store — the Modern engine just
+    // writes the whole current in-memory inventory each time. state.inventory is already kept
+    // up to date by the caller (addToInventory etc.) before this runs, so this is always current.
+    modernEngineSaveInventory(state.inventory);
+    return;
+  }
+
   if(persistenceWorker){
     persistenceWorker.postMessage({ type:'save-inv-item', item });
   } else {
@@ -2421,6 +3152,11 @@ function dbSaveInvItem(item){
 }
 
 function dbDeleteInvItem(key){
+  if(getStorageEngineChoice() === 'modern'){
+    modernEngineSaveInventory(state.inventory);
+    return;
+  }
+
   if(persistenceWorker){
     persistenceWorker.postMessage({ type:'delete-inv-item', key });
   } else {
@@ -2457,6 +3193,23 @@ function applyMetaToState(meta){
 }
 
 async function dbLoadAll(){
+  // MODERN ENGINE: skip IndexedDB entirely, load straight from its own localStorage keys.
+  if(getStorageEngineChoice() === 'modern'){
+    try{
+      const { meta, items } = modernEngineLoad();
+      if(meta) applyMetaToState(meta);
+      if(items && Array.isArray(items) && items.length > 0){
+        state.inventory = {};
+        for(const it of items) state.inventory[it.key] = it;
+      }
+      await migrateMisattributedInventory();
+    }catch(err){
+      console.error('Modern engine: fatal load error, initiating safe mode (saving disabled until manual action)', err);
+      saveLoadedSuccessfully = false;
+    }
+    return;
+  }
+
   try{
     let loadedFromIDB = false;
     try {
@@ -3240,6 +3993,11 @@ function renderAreaSelect(){
    ============================================================ */
 
 function renderInventory(){
+  // Keep the folder view in sync too, independent of the flat-list logic below (and its early
+  // returns) — cheap to always call; it only actually re-renders DOM if that mode is currently
+  // active would be nice, but re-rendering an off-screen (display:none) tree is harmless anyway.
+  if(invViewMode === 'folders') renderInventoryFolders();
+
   const list = document.getElementById('invList');
   const summary = document.getElementById('invSummary');
   const allItems = Object.values(state.inventory);
@@ -3327,6 +4085,258 @@ function setupInventoryFilters(){
     const el = document.getElementById(id);
     if(el) el.addEventListener('change', renderInventory);
   });
+}
+
+/* ============================================================
+   FOLDER-STYLE INVENTORY BROWSER
+   An alternate view of the same state.inventory data, laid out like a directory tree:
+     junisrng/game/userdata/inventory/ranks/{all|weird|odd|rainbow|grayscale}/{world}/{area}/{tier}
+   The first four segments are decorative flavor text (always shown, never navigated — there's
+   nothing to branch on there). Real navigable levels start at the variant filter and go down to
+   tier, where the actual items are listed. Empty branches are skipped entirely rather than shown
+   as empty folders. Supports two navigation styles (accordion / breadcrumb), user-selectable.
+   ============================================================ */
+const FOLDER_DECOR_PATH = 'junisrng/game/userdata/inventory';
+
+// variant folder key -> display label. 'all' isn't a real variant — it's every item regardless
+// of variant, included alongside the real variant-only folders.
+const FOLDER_VARIANT_KEYS = ['all', ...VARIANT_CHAIN.map(v=>v.key)];
+function folderVariantLabel(vKey){
+  if(vKey === 'all') return 'All';
+  const v = VARIANT_CHAIN.find(x=>x.key===vKey);
+  return v ? v.label : vKey;
+}
+
+// Builds the full tree from state.inventory: { variantKey: { worldLabel: { areaLabel: { tierKey: [items] } } } }
+// Empty branches are never created in the first place (rather than created-then-filtered), since
+// we only ever iterate the items that actually exist.
+function buildInventoryFolderTree(){
+  const areaWorldMap = {};
+  for(const world of WORLDS){
+    for(const area of world.areas) areaWorldMap[area.label] = world.label;
+  }
+
+  const tree = {};
+  for(const vKey of FOLDER_VARIANT_KEYS) tree[vKey] = {};
+
+  for(const key in state.inventory){
+    const it = state.inventory[key];
+    const worldLabel = areaWorldMap[it.areaLabel] || 'Unknown World';
+    const itemVariantKey = it.variant ? it.variant.key : null;
+    const tierKey = it.isSecret ? 'secret' : it.tierKey;
+
+    // Always files under 'all', plus its specific variant folder if it has one.
+    const targets = itemVariantKey ? ['all', itemVariantKey] : ['all'];
+    for(const vKey of targets){
+      const branch = tree[vKey];
+      if(!branch[worldLabel]) branch[worldLabel] = {};
+      if(!branch[worldLabel][it.areaLabel]) branch[worldLabel][it.areaLabel] = {};
+      if(!branch[worldLabel][it.areaLabel][tierKey]) branch[worldLabel][it.areaLabel][tierKey] = [];
+      branch[worldLabel][it.areaLabel][tierKey].push(it);
+    }
+  }
+  return tree;
+}
+
+function folderTierLabel(tierKey){
+  if(tierKey === 'secret') return 'Secret';
+  const t = TIERS.find(x=>x.key===tierKey);
+  return t ? t.label : tierKey;
+}
+
+// Renders the leaf-level item list (same row style as the flat List view, reused for consistency).
+function folderLeafItemsHtml(items){
+  const sorted = [...items].sort((a,b)=> b.lastRng - a.lastRng);
+  return `<div class="folder-leaf-list">` + sorted.map(it=>{
+    const variantTxt = it.variant ? ` · ${it.variant.label}` : '';
+    const suffix = it.variant ? ' ✦' : (it.isSecret ? ' 🔒' : '');
+    const nameEl = rankNameHtml(it.name, it.tierCls, it.variant, '', it.isSecret ? null : it.tierKey);
+    return `
+      <div class="inv-row">
+        <div>
+          <div class="iname">${nameEl}${suffix}</div>
+          <div class="imeta">${it.areaLabel} · ${fmtRngForResult(it)} · ${it.tierLabel}${variantTxt}</div>
+        </div>
+        <span class="icount">×${it.count.toLocaleString()}</span>
+      </div>
+    `;
+  }).join('') + `</div>`;
+}
+
+function folderItemCount(items){
+  return items.reduce((s,it)=> s + it.count, 0);
+}
+
+/* ---------- Accordion navigation mode: whole tree, nested collapsible sections ---------- */
+function renderInventoryFoldersAccordion(){
+  const el = document.getElementById('invFolders');
+  if(!el) return;
+  const tree = buildInventoryFolderTree();
+
+  let html = `<div class="folder-decor-path">${FOLDER_DECOR_PATH}/ranks/</div><div class="accordion">`;
+  for(const vKey of FOLDER_VARIANT_KEYS){
+    const worlds = tree[vKey];
+    const worldLabels = Object.keys(worlds);
+    if(worldLabels.length === 0) continue; // skip empty variant folder entirely
+
+    let worldsHtml = '';
+    for(const worldLabel of worldLabels){
+      const areas = worlds[worldLabel];
+      const areaLabels = Object.keys(areas);
+      let areasHtml = '';
+      for(const areaLabel of areaLabels){
+        const tiers = areas[areaLabel];
+        const tierKeys = Object.keys(tiers);
+        let tiersHtml = '';
+        for(const tierKey of tierKeys){
+          const items = tiers[tierKey];
+          tiersHtml += `
+            <div class="acc-item sub-acc-item" data-acc="tier">
+              <div class="acc-head"><span>${folderTierLabel(tierKey)} <span class="folder-count">(${folderItemCount(items)})</span></span><span class="chev">▾</span></div>
+              <div class="acc-body">${folderLeafItemsHtml(items)}</div>
+            </div>`;
+        }
+        areasHtml += `
+          <div class="acc-item sub-acc-item" data-acc="area">
+            <div class="acc-head"><span>${escapeHtml(areaLabel)}</span><span class="chev">▾</span></div>
+            <div class="acc-body">${tiersHtml}</div>
+          </div>`;
+      }
+      worldsHtml += `
+        <div class="acc-item sub-acc-item" data-acc="world">
+          <div class="acc-head"><span>${escapeHtml(worldLabel)}</span><span class="chev">▾</span></div>
+          <div class="acc-body">${areasHtml}</div>
+        </div>`;
+    }
+
+    html += `
+      <div class="acc-item" data-acc="variant">
+        <div class="acc-head"><span>📁 ${folderVariantLabel(vKey)}</span><span class="chev">▾</span></div>
+        <div class="acc-body">${worldsHtml}</div>
+      </div>`;
+  }
+  html += `</div>`;
+
+  if(Object.values(tree).every(w => Object.keys(w).length === 0)){
+    html = `<div class="folder-decor-path">${FOLDER_DECOR_PATH}/ranks/</div><div class="inv-empty">Nothing collected yet. Go roll something.</div>`;
+  }
+
+  el.innerHTML = html;
+  el.querySelectorAll('.acc-head').forEach(head=>{
+    head.addEventListener('click', ()=>{
+      head.parentElement.classList.toggle('open');
+    });
+  });
+}
+
+/* ---------- Breadcrumb navigation mode: one level deep at a time ---------- */
+let folderBreadcrumbPath = []; // e.g. ['all', 'World 1', 'Natural'] — grows as you tap in
+function renderInventoryFoldersBreadcrumb(){
+  const el = document.getElementById('invFolders');
+  if(!el) return;
+  const tree = buildInventoryFolderTree();
+
+  // Walk the tree down to the current path, clamping if a selected folder disappeared (e.g. the
+  // last item of that kind got consumed/removed since navigating in).
+  let node = tree;
+  const validPath = [];
+  for(const seg of folderBreadcrumbPath){
+    if(node && Object.prototype.hasOwnProperty.call(node, seg)){
+      validPath.push(seg);
+      node = node[seg];
+    } else break;
+  }
+  folderBreadcrumbPath = validPath;
+
+  const crumbLabels = ['ranks', ...folderBreadcrumbPath.map((seg,i)=> i===0 ? folderVariantLabel(seg) : seg)];
+  const crumbHtml = `<div class="folder-decor-path">${FOLDER_DECOR_PATH}/</div><div class="folder-breadcrumb">` +
+    crumbLabels.map((label, i)=>{
+      const isLast = i === crumbLabels.length - 1;
+      const sep = i > 0 ? `<span class="folder-crumb-sep">/</span>` : '';
+      return `${sep}<span class="folder-crumb ${isLast?'current':''}" data-crumb-depth="${i}">${escapeHtml(label)}</span>`;
+    }).join('') + `</div>`;
+
+  const depth = folderBreadcrumbPath.length; // 0=variant list, 1=world list, 2=area list, 3=tier list, 4=leaf items
+  let bodyHtml = '';
+
+  if(depth === 0){
+    const rows = FOLDER_VARIANT_KEYS.filter(vKey => Object.keys(tree[vKey]).length > 0);
+    bodyHtml = rows.length
+      ? rows.map(vKey => folderRowHtml('📁', folderVariantLabel(vKey), vKey)).join('')
+      : `<div class="inv-empty">Nothing collected yet. Go roll something.</div>`;
+  } else if(depth === 1){
+    const worldLabels = Object.keys(node);
+    bodyHtml = worldLabels.map(w => folderRowHtml('🌍', w, w)).join('');
+  } else if(depth === 2){
+    const areaLabels = Object.keys(node);
+    bodyHtml = areaLabels.map(a => folderRowHtml('📂', a, a)).join('');
+  } else if(depth === 3){
+    const tierKeys = Object.keys(node);
+    bodyHtml = tierKeys.map(t => folderRowHtml('📄', folderTierLabel(t) + ` (${folderItemCount(node[t])})`, t)).join('');
+  } else if(depth === 4){
+    bodyHtml = folderLeafItemsHtml(node);
+  }
+
+  el.innerHTML = crumbHtml + bodyHtml;
+
+  el.querySelectorAll('.folder-crumb[data-crumb-depth]').forEach(crumb=>{
+    crumb.addEventListener('click', ()=>{
+      const d = Number(crumb.getAttribute('data-crumb-depth'));
+      if(d >= crumbLabels.length - 1) return; // already at this depth, no-op
+      folderBreadcrumbPath = folderBreadcrumbPath.slice(0, d);
+      renderInventoryFoldersBreadcrumb();
+    });
+  });
+  el.querySelectorAll('.folder-row[data-folder-key]').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      folderBreadcrumbPath.push(row.getAttribute('data-folder-key'));
+      renderInventoryFoldersBreadcrumb();
+    });
+  });
+}
+
+function folderRowHtml(icon, label, key){
+  return `<div class="folder-row" data-folder-key="${escapeHtml(key)}"><span><span class="folder-icon">${icon}</span>${escapeHtml(label)}</span></div>`;
+}
+
+let invFolderNavMode = 'accordion'; // 'accordion' | 'breadcrumb'
+function renderInventoryFolders(){
+  if(invFolderNavMode === 'breadcrumb') renderInventoryFoldersBreadcrumb();
+  else renderInventoryFoldersAccordion();
+}
+
+let invViewMode = 'list'; // 'list' | 'folders'
+function setupInventoryModeToggles(){
+  const modeToggle = document.getElementById('invModeToggle');
+  const navToggle = document.getElementById('invFolderNavToggle');
+  const filtersEl = document.getElementById('invFilters');
+  const listEl = document.getElementById('invList');
+  const foldersEl = document.getElementById('invFolders');
+  if(!modeToggle) return;
+
+  modeToggle.querySelectorAll('[data-inv-mode]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      invViewMode = btn.getAttribute('data-inv-mode');
+      modeToggle.querySelectorAll('.seg-btn').forEach(b=> b.classList.toggle('active', b===btn));
+      const showFolders = invViewMode === 'folders';
+      if(filtersEl) filtersEl.style.display = showFolders ? 'none' : '';
+      if(listEl) listEl.style.display = showFolders ? 'none' : '';
+      if(foldersEl) foldersEl.style.display = showFolders ? '' : 'none';
+      if(navToggle) navToggle.style.display = showFolders ? 'inline-flex' : 'none';
+      if(showFolders) renderInventoryFolders();
+    });
+  });
+
+  if(navToggle){
+    navToggle.querySelectorAll('[data-folder-nav]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        invFolderNavMode = btn.getAttribute('data-folder-nav');
+        navToggle.querySelectorAll('.seg-btn').forEach(b=> b.classList.toggle('active', b===btn));
+        folderBreadcrumbPath = []; // reset navigation position when switching nav styles
+        renderInventoryFolders();
+      });
+    });
+  }
 }
 
 // Toggles which card list (Axes, Consumables, or Equippables) is visible in the Items view — a
@@ -4789,14 +5799,17 @@ function initMobileAutoRollUI(){
 initMobileAutoRollUI();
 
 /* ============================================================
-   HIDDEN CACHE-RESET BUTTON
-   Tap the logo 5 times within 3 seconds to reveal a button that force-reloads the page with a
-   cache-busting query param. This only forces the browser/PWA to re-fetch fresh HTML/JS/CSS —
-   your save data lives in IndexedDB, entirely separate from the page cache, so it's untouched.
+   HIDDEN CACHE-RESET BUTTON + STORAGE ENGINE CHANGE
+   Tap the logo 5 times within 3 seconds to reveal the cache-reset button AND a "Change save
+   engine" button (lets you re-open the Legacy/Modern choice later, e.g. if you set "don't ask
+   again" and want to switch). This only forces the browser/PWA to re-fetch fresh HTML/JS/CSS —
+   your save data lives in IndexedDB/localStorage, entirely separate from the page cache, so it's
+   untouched by the cache-reset action itself.
    ============================================================ */
 (function initCacheResetButton(){
   const logo = document.getElementById('logoTitle');
   const btn = document.getElementById('cacheResetBtn');
+  const engineBtn = document.getElementById('storageEngineChangeBtn');
   if(!logo || !btn) return;
 
   let tapTimes = [];
@@ -4806,6 +5819,7 @@ initMobileAutoRollUI();
     tapTimes = tapTimes.filter(t => now - t < 3000); // only count taps within the last 3s
     if(tapTimes.length >= 5){
       btn.classList.add('show');
+      if(engineBtn) engineBtn.classList.add('show');
       tapTimes = [];
     }
   });
@@ -4815,6 +5829,29 @@ initMobileAutoRollUI();
     const url = new URL(window.location.href);
     url.searchParams.set('_cb', Date.now().toString());
     window.location.href = url.toString();
+  });
+})();
+
+(function initStorageEngineChangeButton(){
+  const engineBtn = document.getElementById('storageEngineChangeBtn');
+  const choices = document.getElementById('storageEngineChangeChoices');
+  const toLegacyBtn = document.getElementById('storageEngineChangeToLegacy');
+  const toModernBtn = document.getElementById('storageEngineChangeToModern');
+  if(!engineBtn || !choices) return;
+
+  engineBtn.addEventListener('click', ()=>{
+    // Clear "don't ask again" so future launches prompt again too, matching the request that
+    // this button lets you "disable don't ask again" as well as switch right now.
+    setStorageEngineDontAsk(false);
+    choices.style.display = choices.style.display === 'flex' ? 'none' : 'flex';
+  });
+  if(toLegacyBtn) toLegacyBtn.addEventListener('click', ()=>{
+    choices.style.display = 'none';
+    showStorageEngineSwitchModal('legacy');
+  });
+  if(toModernBtn) toModernBtn.addEventListener('click', ()=>{
+    choices.style.display = 'none';
+    showStorageEngineSwitchModal('modern');
   });
 })();
 
@@ -5569,6 +6606,7 @@ function looksLikeVanishedSave(){
 
 let dataLossGuardTimerHandle = null;
 function showDataLossGuard(){
+  globalCrashGuardShown = true; // shares the gate with handleGlobalCrash so overlays can't stack
   const overlay = document.getElementById('dataLossGuard');
   if(!overlay) return;
   overlay.style.display = 'flex';
@@ -5595,7 +6633,48 @@ function showDataLossGuard(){
   }
 }
 
-async function init(){
+let initCrashGuardTimerHandle = null;
+function showInitCrashGuard(err){
+  // Hide whatever half-built DOM init() left behind before it threw — otherwise the crash
+  // overlay would just be layered on top of a visibly broken page instead of replacing it.
+  const wrap = document.querySelector('.wrap');
+  if(wrap) wrap.style.display = 'none';
+
+  const overlay = document.getElementById('initCrashGuard');
+  if(!overlay) return;
+  overlay.style.display = 'flex';
+
+  const detailEl = document.getElementById('initCrashGuardDetail');
+  if(detailEl && err) detailEl.textContent = `(${(err && err.message) || err})`;
+
+  let secondsLeft = 15;
+  const timerEl = document.getElementById('initCrashGuardTimer');
+  if(timerEl) timerEl.textContent = secondsLeft;
+
+  initCrashGuardTimerHandle = setInterval(()=>{
+    secondsLeft--;
+    if(timerEl) timerEl.textContent = Math.max(0, secondsLeft);
+    if(secondsLeft <= 0){
+      clearInterval(initCrashGuardTimerHandle);
+      location.reload();
+    }
+  }, 1000);
+
+  const refreshBtn = document.getElementById('initCrashGuardRefreshBtn');
+  if(refreshBtn){
+    refreshBtn.addEventListener('click', ()=>{
+      if(initCrashGuardTimerHandle) clearInterval(initCrashGuardTimerHandle);
+      location.reload();
+    });
+  }
+}
+
+async function initInner(){
+  // STORAGE ENGINE CHOICE: must happen before dbLoadAll(), since dbLoadAll branches on it.
+  // Blocks (via an awaited Promise) until the player picks, unless a choice was already made
+  // AND "don't ask again" is set.
+  await ensureStorageEngineChosen();
+
   await dbLoadAll();
 
   // DATA-LOSS GUARD: if it looks like a real save vanished, stop here. Don't render the game,
@@ -5643,12 +6722,27 @@ async function init(){
   renderLog();
   renderInventory();
   setupInventoryFilters();
+  setupInventoryModeToggles();
   renderItemCards();
   renderConsumableCards();
   renderEquipCards();
   setupItemCategorySelect();
   updateStatStrip();
   if(report) renderOfflineBanner(report);
+}
+
+// init() itself must never throw uncaught — an unhandled error here (often triggered by a random
+// OS/WebView reload landing mid-load) previously left whatever half-built DOM was on screen at
+// that point stuck and frozen, with no indication anything was wrong. The save data itself was
+// never actually at risk in this scenario (dbLoadAll either succeeds or the data-loss guard above
+// catches the empty-state case) — this is purely about not showing a broken, silent dead page.
+async function init(){
+  try{
+    await initInner();
+  }catch(err){
+    console.error('init() failed — showing crash guard instead of a stuck half-rendered page.', err);
+    handleGlobalCrash(err);
+  }
 }
 init();
 
