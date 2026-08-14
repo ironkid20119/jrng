@@ -735,11 +735,10 @@
      to copy the current save into the newly-chosen engine. -->
 <div id="storageEngineSwitchModal" class="modal-overlay" style="display:none;">
   <div class="modal-content" style="max-width:480px;">
-    <h3>copy your save?</h3>
+    <h3>switch save engine?</h3>
     <p id="storageEngineSwitchText" style="margin-bottom:18px;"></p>
     <div style="display:flex; flex-direction:column; gap:10px;">
-      <button type="button" class="btn" id="storageEngineSwitchCopyBtn">Copy my save, then switch</button>
-      <button type="button" class="btn secondary" id="storageEngineSwitchNoCopyBtn">Switch without copying (start fresh there)</button>
+      <button type="button" class="btn" id="storageEngineSwitchCopyBtn">Switch (syncs automatically)</button>
       <button type="button" class="btn secondary" id="storageEngineSwitchCancelBtn">Cancel</button>
     </div>
   </div>
@@ -2682,26 +2681,49 @@ async function readSnapshotFromEngine(engine){
     return { meta, items: items || [] };
   }
   // engine === 'legacy' — read directly from IndexedDB, independent of whichever engine is
-  // currently "active" in state (this function is explicitly told which one to read).
+  // currently "active" in state (this function is explicitly told which one to read). Falls back
+  // to the legacy engine's own localStorage backup mirror if IndexedDB is empty/unavailable —
+  // same resilience dbLoadAll already has, so a sync can still recover a genuinely real Legacy
+  // save even when IndexedDB itself is the thing that's broken.
+  let meta = null, items = [];
   try{
     const db = await openDB();
     const metaTx = db.transaction(STORE_META, 'readonly');
     const metaReq = metaTx.objectStore(STORE_META).get('state');
-    const meta = await new Promise((res,rej)=>{
+    meta = await new Promise((res,rej)=>{
       metaReq.onsuccess = ()=> res(metaReq.result || null);
       metaReq.onerror = (e)=> rej(e);
     });
     const invTx = db.transaction(STORE_INV, 'readonly');
     const invReq = invTx.objectStore(STORE_INV).getAll();
-    const items = await new Promise((res,rej)=>{
+    items = await new Promise((res,rej)=>{
       invReq.onsuccess = ()=> res(invReq.result || []);
       invReq.onerror = (e)=> rej(e);
     });
-    return { meta, items };
   }catch(err){
-    console.error('Failed to read legacy engine snapshot for copy', err);
-    return { meta: null, items: [] };
+    console.warn('Failed to read legacy engine snapshot from IndexedDB, trying localStorage backup...', err);
   }
+
+  if(!meta || meta.rolls === 0){
+    try{
+      const lsMetaStr = localStorage.getItem('junis_rng_backup_meta');
+      if(lsMetaStr){
+        const lsMeta = JSON.parse(lsMetaStr);
+        if(lsMeta && (!meta || lsMeta.rolls > meta.rolls)) meta = lsMeta;
+      }
+      if(!items.length){
+        const lsInvStr = localStorage.getItem('junis_rng_backup_inv');
+        if(lsInvStr){
+          const lsItems = JSON.parse(lsInvStr);
+          if(lsItems && Array.isArray(lsItems)) items = lsItems;
+        }
+      }
+    }catch(lsErr){
+      console.error('Legacy engine localStorage backup fallback also failed', lsErr);
+    }
+  }
+
+  return { meta, items };
 }
 
 // Writes a full save snapshot INTO a given engine. Used the same way as readSnapshotFromEngine —
@@ -2731,6 +2753,18 @@ async function writeSnapshotToEngine(engine, meta, items){
   }
 }
 
+// Auto-syncs the current save INTO targetEngine, pulling from whichever engine actually has real
+// data (checked via junis_rng_has_played plus each engine's own emptiness check — NOT just "the
+// other engine" blindly, since on a first-ever pick there's nothing to copy from either side).
+// This is what keeps Legacy and Modern in sync on every switch, rather than treating them as two
+// independent saves the player has to manually reconcile.
+async function syncSaveIntoEngine(targetEngine){
+  const otherEngine = targetEngine === 'modern' ? 'legacy' : 'modern';
+  const { meta, items } = await readSnapshotFromEngine(otherEngine);
+  if(!meta) return; // other engine has no real save yet — nothing to copy, target starts fresh legitimately
+  await writeSnapshotToEngine(targetEngine, meta, items);
+}
+
 // Blocks (via the returned Promise) until the player has an active storage engine choice.
 // Skips the modal entirely if a choice already exists AND "don't ask again" is set.
 function ensureStorageEngineChosen(){
@@ -2749,10 +2783,15 @@ function ensureStorageEngineChosen(){
     if(dontAskCheckbox) dontAskCheckbox.checked = false;
 
     const buttons = modal.querySelectorAll('[data-engine-choice]');
-    function onChoose(engine){
+    async function onChoose(engine){
+      buttons.forEach(b=> b.removeEventListener('click', clickHandler));
+      // Auto-copy whatever save exists on the other engine into this one BEFORE resolving, so
+      // the game never proceeds into a state where the just-chosen engine looks emptier than it
+      // should — that mismatch is what previously triggered a false "your save vanished" lockout
+      // right after picking/switching engines.
+      await syncSaveIntoEngine(engine);
       setStorageEngineChoice(engine);
       setStorageEngineDontAsk(dontAskCheckbox ? dontAskCheckbox.checked : false);
-      buttons.forEach(b=> b.removeEventListener('click', clickHandler));
       modal.style.display = 'none';
       resolve();
     }
@@ -2774,37 +2813,28 @@ function showStorageEngineSwitchModal(targetEngine){
 
   const label = (e)=> e === 'modern' ? 'Modern (stable)' : 'Legacy (buggy)';
   const textEl = document.getElementById('storageEngineSwitchText');
-  if(textEl) textEl.textContent = `Switching from ${label(currentEngine)} to ${label(targetEngine)}. Copy your current save over? The old engine's save is left untouched either way — you can always switch back.`;
+  if(textEl) textEl.textContent = `Switch from ${label(currentEngine)} to ${label(targetEngine)}? Your save will be copied over automatically, so both stay in sync — nothing is lost either way.`;
 
   modal.style.display = 'flex';
 
   const copyBtn = document.getElementById('storageEngineSwitchCopyBtn');
-  const noCopyBtn = document.getElementById('storageEngineSwitchNoCopyBtn');
   const cancelBtn = document.getElementById('storageEngineSwitchCancelBtn');
 
   function cleanup(){
     modal.style.display = 'none';
-    if(copyBtn) copyBtn.removeEventListener('click', onCopy);
-    if(noCopyBtn) noCopyBtn.removeEventListener('click', onNoCopy);
+    if(copyBtn) copyBtn.removeEventListener('click', onSwitch);
     if(cancelBtn) cancelBtn.removeEventListener('click', onCancel);
   }
-  async function onCopy(){
+  async function onSwitch(){
     cleanup();
-    const { meta, items } = await readSnapshotFromEngine(currentEngine);
-    await writeSnapshotToEngine(targetEngine, meta, items);
-    setStorageEngineChoice(targetEngine);
-    location.reload();
-  }
-  function onNoCopy(){
-    cleanup();
+    await syncSaveIntoEngine(targetEngine);
     setStorageEngineChoice(targetEngine);
     location.reload();
   }
   function onCancel(){
     cleanup();
   }
-  if(copyBtn) copyBtn.addEventListener('click', onCopy);
-  if(noCopyBtn) noCopyBtn.addEventListener('click', onNoCopy);
+  if(copyBtn) copyBtn.addEventListener('click', onSwitch);
   if(cancelBtn) cancelBtn.addEventListener('click', onCancel);
 }
 
