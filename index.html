@@ -791,13 +791,6 @@
         <button class="btn" id="rollBtn">ROLL</button>
       </div>
     </div>
-
-    <div class="panel">
-      <h2 class="ptitle">Recent rolls <button class="btn small secondary" id="clearLog" style="float:right;">clear</button></h2>
-      <div class="log" id="log">
-        <div class="log-empty">No rolls yet.</div>
-      </div>
-    </div>
   </div>
 
   <!-- INVENTORY VIEW -->
@@ -871,9 +864,25 @@
 </nav>
 
 <script>
-document.addEventListener('dblclick', (e)=>{ e.preventDefault(); }, { passive:false });
+// Prevents iOS's double-tap-to-zoom gesture on genuine double-taps against the page background.
+// IMPORTANT: this must NOT apply to interactive elements (buttons, links, inputs, etc.) — this
+// game's core interaction is rapid, repeated tapping on the ROLL button, and preventDefault() on
+// a touchend suppresses the synthetic click event that would otherwise follow it. Applying this
+// document-wide (as it originally did) meant any two taps on the ROLL button within 300ms of each
+// other had the second one's click silently swallowed — exactly the "clicks sometimes just don't
+// register" symptom, and exactly the opposite of what a clicker game needs. Scoping the check to
+// only fire when the tap target is NOT inside any interactive element fixes this while still
+// blocking the zoom gesture everywhere it's actually needed (empty background, panels, text).
+function isInteractiveTarget(el){
+  return !!(el && el.closest('button, a, input, select, textarea, [role="button"], .btn, .seg-btn, .folder-row, .folder-crumb, .acc-head'));
+}
+document.addEventListener('dblclick', (e)=>{
+  if(isInteractiveTarget(e.target)) return;
+  e.preventDefault();
+}, { passive:false });
 let lastTouchEnd = 0;
 document.addEventListener('touchend', (e)=>{
+  if(isInteractiveTarget(e.target)) return; // never swallow taps on buttons/controls
   const now = Date.now();
   if(now - lastTouchEnd <= 300){ e.preventDefault(); }
   lastTouchEnd = now;
@@ -3127,7 +3136,7 @@ function backupToLocalStorageInline(){
   }
 }
 
-function dbSaveMeta(){
+function dbSaveMetaImmediate(){
   // SAFETY GUARD: If we never loaded successfully and state is empty/default, DO NOT overwrite!
   if(!saveLoadedSuccessfully && state.rolls === 0 && Object.keys(state.inventory).length === 0){
     console.warn('Refusing to save empty state over uninitialized load to prevent permanent data loss.');
@@ -3161,7 +3170,7 @@ function dbSaveMeta(){
   }
 }
 
-function dbSaveInvItem(item){
+function dbSaveInvItemImmediate(item){
   if(getStorageEngineChoice() === 'modern'){
     // localStorage has no per-key store like IndexedDB's object store — the Modern engine just
     // writes the whole current in-memory inventory each time. state.inventory is already kept
@@ -3181,7 +3190,7 @@ function dbSaveInvItem(item){
   }
 }
 
-function dbDeleteInvItem(key){
+function dbDeleteInvItemImmediate(key){
   if(getStorageEngineChoice() === 'modern'){
     modernEngineSaveInventory(state.inventory);
     return;
@@ -3196,6 +3205,58 @@ function dbDeleteInvItem(key){
       tx.objectStore(STORE_INV).delete(key);
     }).catch(err=> console.error('Failed to delete inventory item', err));
   }
+}
+
+/* ============================================================
+   SAVE DEBOUNCING
+   Rapid clicking (bulk rolls, mashing ROLL, the mobile auto-roll skillcheck) used to trigger a
+   full save — dbSaveMeta AND a dbSaveInvItem PER distinct item touched — on every single click,
+   which is what was slowing the game down under load. Saves are now debounced: each call just
+   marks what's dirty (meta itself, and/or which inventory keys changed) and (re)starts a 0.33s
+   timer. Only once 0.33s pass with NO further save calls does everything dirty actually get
+   flushed to storage in one go. state/state.inventory themselves are still updated immediately
+   and synchronously by their callers (addToInventory etc.) — only the PERSISTENCE step is
+   deferred, so the UI never lags behind what you actually rolled.
+   ============================================================ */
+const SAVE_DEBOUNCE_MS = 330;
+let saveDebounceTimer = null;
+let pendingMetaSave = false;
+let pendingInvSaves = new Map(); // key -> item (or null for a pending delete)
+
+function flushPendingSaves(){
+  saveDebounceTimer = null;
+  if(pendingMetaSave){
+    pendingMetaSave = false;
+    dbSaveMetaImmediate();
+  }
+  if(pendingInvSaves.size > 0){
+    const toFlush = pendingInvSaves;
+    pendingInvSaves = new Map();
+    for(const [key, item] of toFlush){
+      if(item === null) dbDeleteInvItemImmediate(key);
+      else dbSaveInvItemImmediate(item);
+    }
+  }
+}
+
+function scheduleSaveFlush(){
+  if(saveDebounceTimer) clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(flushPendingSaves, SAVE_DEBOUNCE_MS);
+}
+
+function dbSaveMeta(){
+  pendingMetaSave = true;
+  scheduleSaveFlush();
+}
+
+function dbSaveInvItem(item){
+  pendingInvSaves.set(item.key, item);
+  scheduleSaveFlush();
+}
+
+function dbDeleteInvItem(key){
+  pendingInvSaves.set(key, null); // null marks "this key should be deleted", not saved
+  scheduleSaveFlush();
 }
 
 function applyMetaToState(meta){
@@ -3957,27 +4018,13 @@ function renderStage(result, count, trollOverride, clicksNote){
   }
 }
 
+// Recent Rolls UI panel was removed (rebuilding its DOM on every single click was a real cost
+// under rapid clicking). state.log itself is kept — headless, no rendering — because the '&'
+// secret rank's condition reads the last 4 rolls to check a letter pattern; only the display
+// layer (renderLog/the #log panel) is gone, not the underlying tracking.
 function pushLog(result){
   state.log.unshift(result);
-  if(state.log.length > 40) state.log.pop();
-  renderLog();
-}
-
-function renderLog(){
-  const log = document.getElementById('log');
-  if(state.log.length === 0){
-    log.innerHTML = `<div class="log-empty">No rolls yet.</div>`;
-    return;
-  }
-  log.innerHTML = state.log.map(r => {
-    const baseTier = r.isSecret ? SECRET_TIER : tierFor(r.baseRng);
-    const suffix = r.variant ? ' ✦' : (r.isSecret ? ' 🔒' : '');
-    return `
-    <div class="log-row">
-      <span class="lname">${rankNameHtml(r.name, baseTier.cls, r.variant, '', r.isSecret ? null : baseTier.key)}${suffix}</span>
-      <span class="lrng">${fmtRngForResult(r)}</span>
-    </div>
-  `}).join('');
+  if(state.log.length > 4) state.log.pop(); // only the last 4 are ever actually read (see '&' secret)
 }
 
 function updateStatStrip(){
@@ -5198,7 +5245,6 @@ function useConsumable(key){
     state.errRedirectorUntil = base + CONSUMABLES.errredirector.durationSeconds * 1000;
     dbSaveMeta();
     renderConsumableCards();
-    renderLog();
     renderInventory();
     return;
   }
@@ -5884,11 +5930,6 @@ initMobileAutoRollUI();
     showStorageEngineSwitchModal('modern');
   });
 })();
-
-document.getElementById('clearLog').addEventListener('click', ()=>{
-  state.log = [];
-  renderLog();
-});
 
 /* ============================================================
    PARALLEL WEB WORKER ENGINE FOR OFFLINE PROGRESS
@@ -6749,7 +6790,6 @@ async function initInner(){
   buildSecretsAccordion();
   const titleEl0 = document.getElementById('indexPanelTitle');
   if(titleEl0) titleEl0.textContent = `Rank index — ${WORLDS[state.worldIdx].label}`;
-  renderLog();
   renderInventory();
   setupInventoryFilters();
   setupInventoryModeToggles();
@@ -6778,7 +6818,9 @@ init();
 
 window.addEventListener('beforeunload', ()=>{
   state.lastSeenAt = Date.now();
-  dbSaveMeta();
+  pendingMetaSave = true;
+  if(saveDebounceTimer){ clearTimeout(saveDebounceTimer); saveDebounceTimer = null; }
+  flushPendingSaves(); // force an immediate flush — no time to wait out the debounce here
   if(persistenceWorker) persistenceWorker.postMessage({ type:'flush' });
 });
 
@@ -6806,14 +6848,15 @@ setInterval(()=>{
   const nowActive = isErrRedirectorActive();
   if(nowActive !== wasErrRedirectorActive){
     wasErrRedirectorActive = nowActive;
-    renderLog();
     renderInventory();
   }
 }, 1000);
 document.addEventListener('visibilitychange', async ()=>{
   if(document.visibilityState === 'hidden'){
     state.lastSeenAt = Date.now();
-    dbSaveMeta();
+    pendingMetaSave = true;
+    if(saveDebounceTimer){ clearTimeout(saveDebounceTimer); saveDebounceTimer = null; }
+    flushPendingSaves(); // force an immediate flush rather than waiting out the debounce
     if(persistenceWorker) persistenceWorker.postMessage({ type:'flush' });
   } else {
     await runAnticheat();
