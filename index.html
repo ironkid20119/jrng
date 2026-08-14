@@ -637,6 +637,25 @@
 
 <div class="flash-bg" id="flashBg"></div>
 
+<!-- DATA-LOSS GUARD: shown INSTEAD of the game if we detect a save that has vanished
+     (localStorage says you've played before, but the fresh load came back empty). Prevents
+     dbSaveMeta() from ever overwriting real save data with an accidental blank state. -->
+<div id="dataLossGuard" style="display:none; position:fixed; inset:0; z-index:99999; background:#1a0505; color:#ffdede; font-family:var(--mono, monospace); align-items:center; justify-content:center; padding:24px; text-align:center;">
+  <div style="max-width:520px;">
+    <div style="font-size:15px; letter-spacing:0.05em; color:#ff5555; font-weight:700; margin-bottom:14px;">WARNING!</div>
+    <div style="font-size:14px; line-height:1.6; margin-bottom:18px;">
+      This has appeared to stop POTENTIAL DATA LOSS! If you see this, you are COMPLETELY FINE to refresh the page and play the game again.
+    </div>
+    <div style="font-size:14px; margin-bottom:18px;">
+      Auto refreshing in: <span id="dataLossGuardTimer" style="color:#ff5555; font-weight:700;">15</span> seconds
+    </div>
+    <button id="dataLossGuardRefreshBtn" type="button" style="font-family:inherit; font-size:13px; padding:8px 18px; background:#3a1010; color:#ffdede; border:1px solid #ff5555; border-radius:6px; cursor:pointer; margin-bottom:22px;">Refresh now</button>
+    <div style="font-size:10px; opacity:0.55; line-height:1.5;">
+      (this message appeared to prevent a whole game wipe from my poor coding, sorry lol!!)
+    </div>
+  </div>
+</div>
+
 <!-- SIMULATION LOADING MODAL -->
 <div id="simModal" class="modal-overlay" style="display:none;">
   <div class="modal-content">
@@ -2248,9 +2267,9 @@ try{
       try{
         if(msg.metaStr) localStorage.setItem('junis_rng_backup_meta', msg.metaStr);
         if(msg.invStr) localStorage.setItem('junis_rng_backup_inv', msg.invStr);
-      }catch(e){ console.warn('LocalStorage backup write failed:', e); }
+      }catch(e){ console.warn(`LocalStorage backup write failed: ${(e && e.message) || e}`); }
     } else if(msg.type === 'error'){
-      console.error(`Persistence worker error during ${msg.op}:`, msg.message);
+      console.error(`Persistence worker error during ${msg.op}: ${msg.message}`);
     }
   };
   persistenceWorker.onerror = (e)=>{
@@ -2259,18 +2278,24 @@ try{
     // message rather than throwing synchronously from `new Worker(...)` above. Log everything
     // available so it's diagnosable, then fall back to running persistence on the main thread —
     // the game still works correctly, it just loses the off-main-thread benefit.
-    console.error('Persistence worker crashed — falling back to main-thread persistence.', {
-      message: e && e.message,
-      filename: e && e.filename,
-      lineno: e && e.lineno,
-      colno: e && e.colno,
-      error: e && e.error,
-    });
+    //
+    // NOTE: logged as ONE pre-formatted string rather than console.error(msg, {details}) —
+    // some log-capture tooling (embedded WebViews, remote-debug bridges) flattens multi-arg
+    // console.error calls with String(arg), which turns an object into "[object Object]"
+    // instead of expanding it. A single string avoids that regardless of the log sink.
+    const details = [
+      `message=${(e && e.message) || '(none)'}`,
+      `filename=${(e && e.filename) || '(none)'}`,
+      `lineno=${(e && e.lineno) || '(none)'}`,
+      `colno=${(e && e.colno) || '(none)'}`,
+      `error=${e && e.error ? (e.error.stack || e.error.message || String(e.error)) : '(none)'}`,
+    ].join(', ');
+    console.error(`Persistence worker crashed — falling back to main-thread persistence. [${details}]`);
     if(e && typeof e.preventDefault === 'function') e.preventDefault();
     persistenceWorker = null;
   };
 }catch(e){
-  console.warn('Web Worker unavailable, persistence will run on the main thread as a fallback.', e);
+  console.warn(`Web Worker unavailable, persistence will run on the main thread as a fallback. ${(e && e.message) || e}`);
   persistenceWorker = null;
 }
 
@@ -2322,7 +2347,7 @@ function openDB(){
       db.onversionchange = ()=>{ db.close(); dbPromise = null; };
       resolve(db);
     };
-    req.onerror = (e)=>{ dbPromise = null; console.error('IndexedDB open failed', e); reject(e); };
+    req.onerror = (e)=>{ dbPromise = null; console.error(`IndexedDB open failed: ${(e && e.target && e.target.error) || e}`); reject(e); };
   });
   return dbPromise;
 }
@@ -2359,6 +2384,13 @@ function dbSaveMeta(){
   if(!saveLoadedSuccessfully && state.rolls === 0 && Object.keys(state.inventory).length === 0){
     console.warn('Refusing to save empty state over uninitialized load to prevent permanent data loss.');
     return;
+  }
+
+  // Mark that this browser has real save data, independent of the (larger, more fragile) backup
+  // blobs. Used by the data-loss guard on next load: if this marker is set but a fresh load comes
+  // back completely empty, that's a strong signal something broke rather than a new player.
+  if(state.rolls > 0 || Object.keys(state.inventory).length > 0){
+    try{ localStorage.setItem('junis_rng_has_played', '1'); }catch(e){ /* best-effort only */ }
   }
 
   const meta = buildMetaSnapshot();
@@ -5514,8 +5546,68 @@ function anticheatLockRemaining(){
 /* ============================================================
    INIT
    ============================================================ */
+
+// Returns true if this looks like a save that VANISHED rather than a genuinely new player:
+// localStorage remembers this browser has played before (real rolls/inventory saved at some
+// point), but the load we just did came back completely empty. Could be a corrupted/blocked
+// IndexedDB connection, a storage-eviction race, or similar — a refresh often clears it. Rather
+// than silently treating it as a fresh save (and then dbSaveMeta() locking that blank state in
+// permanently), we stop and ask the person to refresh instead.
+function looksLikeVanishedSave(){
+  let hasPlayedBefore = false;
+  try{ hasPlayedBefore = localStorage.getItem('junis_rng_has_played') === '1'; }
+  catch(e){ return false; } // no localStorage access at all — can't make this determination safely, don't false-trigger
+
+  if(!hasPlayedBefore) return false; // genuinely new player, nothing to protect
+
+  const stateLooksEmpty = state.rolls === 0
+    && Object.keys(state.inventory).length === 0
+    && (!state.ownedAxes || (state.ownedAxes.length === 1 && state.ownedAxes[0] === 'default'));
+
+  return stateLooksEmpty;
+}
+
+let dataLossGuardTimerHandle = null;
+function showDataLossGuard(){
+  const overlay = document.getElementById('dataLossGuard');
+  if(!overlay) return;
+  overlay.style.display = 'flex';
+
+  let secondsLeft = 15;
+  const timerEl = document.getElementById('dataLossGuardTimer');
+  if(timerEl) timerEl.textContent = secondsLeft;
+
+  dataLossGuardTimerHandle = setInterval(()=>{
+    secondsLeft--;
+    if(timerEl) timerEl.textContent = Math.max(0, secondsLeft);
+    if(secondsLeft <= 0){
+      clearInterval(dataLossGuardTimerHandle);
+      location.reload();
+    }
+  }, 1000);
+
+  const refreshBtn = document.getElementById('dataLossGuardRefreshBtn');
+  if(refreshBtn){
+    refreshBtn.addEventListener('click', ()=>{
+      if(dataLossGuardTimerHandle) clearInterval(dataLossGuardTimerHandle);
+      location.reload();
+    });
+  }
+}
+
 async function init(){
   await dbLoadAll();
+
+  // DATA-LOSS GUARD: if it looks like a real save vanished, stop here. Don't render the game,
+  // don't run anticheat/offline-progress, and CRITICALLY don't let dbSaveMeta() run — that's
+  // what would permanently overwrite the real (still very possibly recoverable) save with a
+  // blank one. Just show the warning and auto-refresh; the actual fix is usually just retrying
+  // the load, which a refresh does for free.
+  if(looksLikeVanishedSave()){
+    console.error('Data-loss guard triggered: save data appears to have vanished. Halting init to avoid overwriting it. Refresh to retry the load.');
+    showDataLossGuard();
+    return;
+  }
 
   // Safety: if the page reloaded/crashed mid-detonation, "detonating" would be stuck true with
   // no simulation loop actually running (that loop only exists in-memory). Clear the flag so the
