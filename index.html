@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Juni's RNG Game</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#08070c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Juni's RNG">
+<link rel="apple-touch-icon" href="data:image/png;base64,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">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Cinzel:wght@600;700;900&family=Playfair+Display:wght@600;700;800;900&family=Bebas+Neue&family=Caveat:wght@600;700&family=UnifrakturMaguntia&family=Press+Start+2P&family=Orbitron:wght@600;700;800;900&family=Pacifico&family=Rubik+Mono+One&family=Abril+Fatface&family=VT323&family=Righteous&display=swap');
 
@@ -709,6 +715,19 @@
     </div>
     <button id="initCrashGuardRefreshBtn" type="button" style="font-family:inherit; font-size:13px; padding:8px 18px; background:#1a1a3a; color:#dee5ff; border:1px solid #8888ff; border-radius:6px; cursor:pointer; margin-bottom:22px;">Refresh now</button>
     <div id="initCrashGuardDetail" style="font-size:10px; opacity:0.55; line-height:1.5; word-break:break-word;"></div>
+  </div>
+</div>
+
+<!-- OFFLINE-ON-LEGACY GUARD: offline play is only supported on the Modern engine (kept simple —
+     Legacy's IndexedDB technically works offline too, but supporting dual offline paths wasn't
+     worth the complexity). Shown when the game detects no network while Legacy is active. -->
+<div id="offlineLegacyGuard" style="display:none; position:fixed; inset:0; z-index:99999; background:#0a1a12; color:#dfffe8; font-family:var(--mono, monospace); align-items:center; justify-content:center; padding:24px; text-align:center;">
+  <div style="max-width:480px;">
+    <div style="font-size:15px; letter-spacing:0.05em; color:#5cff9c; font-weight:700; margin-bottom:14px;">YOU'RE OFFLINE</div>
+    <div style="font-size:14px; line-height:1.6; margin-bottom:22px;">
+      Offline play is only supported on the Modern (stable) save engine. You're currently on Legacy. Switch to Modern to keep playing — your save will be copied over automatically.
+    </div>
+    <button id="offlineLegacyGuardSwitchBtn" type="button" style="font-family:inherit; font-size:13px; padding:10px 20px; background:#123a24; color:#dfffe8; border:1px solid #5cff9c; border-radius:6px; cursor:pointer; font-weight:700;">Switch to Modern &amp; continue</button>
   </div>
 </div>
 
@@ -6708,6 +6727,9 @@ function showDataLossGuard(){
     });
   }
 
+  const loadLegacyBtn = document.getElementById('dataLossGuardLoadLegacyBtn');
+  const loadModernBtn = document.getElementById('dataLossGuardLoadModernBtn');
+
   // Let the player explicitly force which engine to load from, rather than just refreshing and
   // hoping the same (possibly genuinely broken) engine behaves differently next time. Also syncs
   // from the OTHER engine first (same as a normal engine switch) — otherwise forcing a load into
@@ -6727,10 +6749,35 @@ function showDataLossGuard(){
     setStorageEngineDontAsk(true);
     location.reload();
   }
-  const loadLegacyBtn = document.getElementById('dataLossGuardLoadLegacyBtn');
-  const loadModernBtn = document.getElementById('dataLossGuardLoadModernBtn');
   if(loadLegacyBtn) loadLegacyBtn.addEventListener('click', ()=> forceLoadEngine('legacy'));
   if(loadModernBtn) loadModernBtn.addEventListener('click', ()=> forceLoadEngine('modern'));
+}
+
+// Shown when the game detects no network while the Legacy engine is active — offline play is
+// only supported on Modern (kept simple; see offlineLegacyGuard markup for the reasoning). The
+// switch button syncs the current save into Modern and reloads, same as any other engine switch.
+function showOfflineLegacyGuard(){
+  const wrap = document.querySelector('.wrap');
+  if(wrap) wrap.style.display = 'none';
+
+  const overlay = document.getElementById('offlineLegacyGuard');
+  if(!overlay) return;
+  overlay.style.display = 'flex';
+
+  const btn = document.getElementById('offlineLegacyGuardSwitchBtn');
+  if(btn){
+    btn.addEventListener('click', async ()=>{
+      btn.disabled = true;
+      btn.textContent = 'Switching…';
+      try{
+        await syncSaveIntoEngine('modern');
+      }catch(err){
+        console.error('Offline-legacy switch: sync failed, switching anyway', err);
+      }
+      setStorageEngineChoice('modern');
+      location.reload();
+    });
+  }
 }
 
 let initCrashGuardTimerHandle = null;
@@ -6774,6 +6821,14 @@ async function initInner(){
   // Blocks (via an awaited Promise) until the player picks, unless a choice was already made
   // AND "don't ask again" is set.
   await ensureStorageEngineChosen();
+
+  // OFFLINE-ON-LEGACY GUARD: offline play is only supported on Modern (see offlineLegacyGuard
+  // markup for why). Checked here — after an engine choice exists, before dbLoadAll — so a cold
+  // launch that's already offline on Legacy is caught immediately rather than partially loading.
+  if(!navigator.onLine && getStorageEngineChoice() === 'legacy'){
+    showOfflineLegacyGuard();
+    return;
+  }
 
   await dbLoadAll();
 
@@ -6903,6 +6958,28 @@ document.addEventListener('visibilitychange', async ()=>{
     }
   }
 });
+
+// Going offline MID-SESSION on Legacy: the cold-launch check in initInner() only covers loading
+// while already offline — this covers losing connection while actively playing. Legacy's own
+// IndexedDB reads/writes aren't actually affected by network loss, but the offline rule is kept
+// simple on purpose (see offlineLegacyGuard markup), so this still blocks the same way.
+window.addEventListener('offline', ()=>{
+  if(getStorageEngineChoice() === 'legacy'){
+    showOfflineLegacyGuard();
+  }
+});
+
+// Registering the service worker is what actually makes offline loading possible at all (see
+// sw.js) — this just tells the browser it exists. Failure here (unsupported browser, blocked,
+// running from file:// instead of a real origin) is non-fatal; the game works identically online,
+// it just won't be installable/offline-capable in that environment.
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').catch(err=>{
+      console.warn('Service worker registration failed (game still works online):', err);
+    });
+  });
+}
 </script>
 </body>
 </html>
