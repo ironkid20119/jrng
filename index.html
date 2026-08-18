@@ -584,6 +584,32 @@
   .flash-bg.go{ animation:flashfade 0.6s ease-out; }
   @keyframes flashfade{ 0%{opacity:0.55;} 100%{opacity:0;} }
 
+  /* LOW-STIM MODE: chosen from the photosensitivity disclaimer's second option. Overrides the
+     game's flashiest effects (rapid hue-cycling gradients, the stepped jitter shake on Insanity-
+     tier text, the full-screen flash-bg pulse, the skillcheck's fast shrink ring) with static or
+     slowed equivalents instead of just using a darker background — the actual strobe/flash risk
+     lives in these specific animations, not in how dark the base UI is. Deliberately scoped to
+     just these selectors rather than a blanket animation-kill, since other transitions (like the
+     Aberration area's color inversion) are slow/smooth and not a photosensitivity concern.
+     */
+  html.low-stim .t-infinite,
+  html.low-stim .t-insanity,
+  html.low-stim .t-impossible,
+  html.low-stim [style*="hueflow"]{
+    animation:none !important;
+    background:none !important;
+    -webkit-text-fill-color:var(--accent) !important;
+    color:var(--accent) !important;
+    text-shadow:none !important;
+  }
+  html.low-stim .flash-bg.go{
+    animation:none !important;
+    opacity:0 !important;
+  }
+  html.low-stim [style*="secretpulse"]{
+    animation:none !important;
+  }
+
   /* ---------- Simulation Modal ---------- */
   .modal-overlay {
     position: fixed;
@@ -686,6 +712,30 @@
 </head>
 <body>
 
+
+<!-- PHOTOSENSITIVITY DISCLAIMER: shown FIRST, on every single load (not just once) — before the
+     game, before the storage-engine choice, before anything else. Blocks all interaction with
+     the rest of the page until one of the three buttons is pressed. -->
+<div id="photosensitivityDisclaimer" style="display:flex; position:fixed; inset:0; z-index:999999; background:#050408; color:#e9e5f5; font-family:var(--mono, monospace); align-items:center; justify-content:center; padding:24px; text-align:center;">
+  <div style="max-width:520px;">
+    <div style="font-size:14px; line-height:1.7; margin-bottom:26px;">
+      yo bro this game contains some flashy lights if you have some problems related to that please leave. oh yeah also dont leave the game too fast after rolling it has to save a few seconds later
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button type="button" id="disclaimerOkBtn" class="btn" style="font-family:inherit;">ok ium</button>
+      <button type="button" id="disclaimerDarkBtn" class="btn secondary" style="font-family:inherit;">no sorry but i understand the save data stuff</button>
+      <button type="button" id="disclaimerNoBtn" class="btn secondary" style="font-family:inherit;">no sorry</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shown only if "no sorry" is pressed — replaces the disclaimer, permanently blocks play for
+     this page session (only a real refresh/reopen gets back to the disclaimer). -->
+<div id="disclaimerBlocked" style="display:none; position:fixed; inset:0; z-index:999999; background:#050408; color:#e9e5f5; font-family:var(--mono, monospace); align-items:center; justify-content:center; padding:24px; text-align:center;">
+  <div style="max-width:480px; font-size:14px; line-height:1.7;">
+    Totally understandable — take care of yourself. Refresh or reopen the page whenever you want to see this again.
+  </div>
+</div>
 
 <div class="flash-bg" id="flashBg"></div>
 
@@ -1207,37 +1257,40 @@ const SECRET_RANKS = [
   {
     key:'ampersand',
     name:'&',
-    trueRng: 26900000,
+    // Displayed/competing rarity reflects the real compound odds: ~1-in-26 for the first-five-
+    // digits-divisible-by-26 condition, times the explicit 1/26.9 per-click roll = ~1-in-700.
+    // The actual gating logic lives in condition() below (see _ampersandGateDidPass), not here —
+    // this trueRng value only affects what rarity the item displays as and how it competes
+    // against other secrets that fire on the same roll, not whether it can trigger at all.
+    trueRng: 700,
+    conditionAlreadyRolled: true, // the 1/26.9 click roll already happened inside condition() — see below
     worldKey: 'world0', areaKey: 'abc', // must be in Fun -> ABC
     condition(world, area){
-      // "&" stands in for "and" — the connector between letters. It used to just check the last
-      // two log entries, but with high-bulk axes almost every click's BEST result in ABC is some
-      // plain letter anyway, so "two different plain letters in a row" was trivial to satisfy on
-      // repeat clicks. The real condition now requires a genuinely specific alignment instead:
-      //   1) Your last FOUR logged catches in this area must alternate consonant/vowel/consonant/vowel
-      //      (or vowel/consonant/vowel/consonant) — i.e. a real A-B-A-B letter-TYPE pattern, not just
-      //      "any two different letters" — and all four must be plain (no variants).
-      //   2) Those four letters, read in order, must spell out something whose combined alphabet
-      //      positions sum to a multiple of 26 (a full trip around the alphabet) — ties the trigger
-      //      to the actual VALUES of the letters you rolled, not just their type pattern.
-      //   3) Your total rolls at the moment of check must be a multiple of 26.
-      if(state.log.length < 4) return false;
-      if(state.rolls % 26 !== 0) return false;
+      // "&" stands in for "and" — the connector between letters.
+      //
+      // Simplified per-click condition (previous version required a specific 4-letter
+      // consonant/vowel alternation pattern PLUS an alphabet-position-sum check PLUS a rolls%26
+      // check, all at once — decided to be too punishing to realistically land on):
+      //   1) The first five digits of your total roll count must be evenly divisible by 26.
+      //   2) A fresh 1-in-26.9 chance, rolled ONCE PER CLICK — not once per individual roll
+      //      within that click's bulk, which would make high-bulk axes trivialize it.
 
-      const VOWELS = new Set(['A','E','I','O','U']);
-      const four = state.log.slice(0, 4);
-      const isPlainLetter = (r) => !r.isSecret && !r.variant && r.areaLabel === area.label && /^[A-Z]$/.test(r.name);
-      if(!four.every(isPlainLetter)) return false;
+      // First five digits of state.rolls, divisible by 26. For fewer than 5 digits, use the
+      // whole number as-is (e.g. rolls=260 -> "260" -> 260, still checked against %26).
+      const rollsStr = String(state.rolls);
+      const firstFive = Number(rollsStr.slice(0, 5));
+      if(firstFive === 0 || firstFive % 26 !== 0) return false;
 
-      const types = four.map(r => VOWELS.has(r.name) ? 'V' : 'C');
-      const alternatesCV = types[0]==='C' && types[1]==='V' && types[2]==='C' && types[3]==='V';
-      const alternatesVC = types[0]==='V' && types[1]==='C' && types[2]==='V' && types[3]==='C';
-      if(!alternatesCV && !alternatesVC) return false;
-
-      const posSum = four.reduce((sum, r) => sum + (r.name.charCodeAt(0) - 64), 0); // A=1..Z=26
-      if(posSum % 26 !== 0) return false;
-
-      return true;
+      // Cache the 1/26.9 roll per CLICK (keyed by state.clickCount) so bulk doesn't turn this
+      // into effectively many independent chances within the same click — every roll inside one
+      // click shares the same outcome, decided once. This IS the real gate; rollSecretForArea's
+      // own Math.random() check (using trueRng above) runs AFTER this and would otherwise apply
+      // a second, redundant chance — see _ampersandGateDidPass below for how that's handled.
+      if(state._ampersandCheckedClick !== state.clickCount){
+        state._ampersandCheckedClick = state.clickCount;
+        state._ampersandClickResult = Math.random() < 1/26.9;
+      }
+      return state._ampersandClickResult;
     },
   },
   {
@@ -1273,7 +1326,13 @@ function rollSecretForArea(world, area){
     if(secret.areaKey && secret.areaKey !== area.key) continue;
     if(!secret.condition(world, area)) continue;
     const resolvedTrueRng = typeof secret.trueRng === 'function' ? secret.trueRng(world, area) : secret.trueRng;
-    if(Math.random() < 1 / resolvedTrueRng){
+    // conditionAlreadyRolled: some secrets (like '&') do their own Math.random() check INSIDE
+    // condition() itself, keyed to something other than "once per roll" (e.g. once per click).
+    // For those, a passed condition() IS the trigger — applying another independent
+    // Math.random() < 1/trueRng check here on top would silently multiply the odds far stricter
+    // than intended. trueRng above is still used for display/tier/winner-priority purposes.
+    const alreadyRolled = !!secret.conditionAlreadyRolled;
+    if(alreadyRolled || Math.random() < 1 / resolvedTrueRng){
       if(!winner || resolvedTrueRng > winnerTrueRng){
         winner = secret;
         winnerTrueRng = resolvedTrueRng;
@@ -1826,8 +1885,8 @@ const AXES = {
   geomathaxe: {
     key:'geomathaxe', name:'GeomathAxe',
     desc:'It does math. That\'s it. That\'s the axe.',
-    stats:{ luckMult:0.314, bulk:1618, rps:628 },
-    bonus:'[Addition] Offline every minute: +628 rolls at ×314 luck. [Division] Every 5th click: +300 rolls at ÷0.02 luck and ÷0.666667 mutation luck (that\'s ×50 luck and ×1.5 mutation luck once you flip the exponent — not a nerf). [Multiplication] Every minute: 1/5 for +5n rolls at ×16.18 luck, where n = (hours offline so far) × 5, capped at 1,000 rolls per trigger.',
+    stats:{ luckMult:0.628, bulk:2718, rps:1618 },
+    bonus:'[Addition] Offline every minute: +628 rolls at ×314 luck. [Division] Every 5th click: +628 rolls at ×62.8 luck and ×3.14 mutation luck. [Multiplication] Every minute: 1/5 for +5n rolls at ×16.18 luck, where n = (hours offline so far) × 5, capped at 1,000 rolls per trigger.',
     offlineBonus:[
       { intervalSeconds:60, chancePerInterval:1, minRolls:628, maxRolls:628, bonusLuckMult:314 },
       {
@@ -1842,10 +1901,7 @@ const AXES = {
       },
     ],
     clickBonus:[
-      // [Division]: ÷0.02 luck === ×50 luck, ÷0.666667 mutation luck === ×1.5 mutation luck
-      // (dividing by x is the same as multiplying by x^-1 — the axe's whole gimmick is doing
-      // this the long way around). Only affects this specific bonus, nothing else on the axe.
-      { everyNClicks:5, chance:1, rolls:300, luckMult:50, mutationLuckMult:1.5 },
+      { everyNClicks:5, chance:1, rolls:628, luckMult:62.8, mutationLuckMult:3.14 },
     ],
     // Rank value: 2×Moon(800M) + 1×Garbage Compacter(200M) + 20×Unstable Core(150M) + 1×Leviathan(30M) + 8×Glitchite(20M) = 1,200,000,000 exactly ✓
     requires:[
@@ -1859,18 +1915,18 @@ const AXES = {
   rageaxe: {
     key:'rageaxe', name:'Rage Axe',
     desc:'wow! totally expensive and op, is it even WORTH??? STOP!!!! THIS IS SUCH AN ANGRY AXE!!! *scream.mp3*',
-    stats:{ luckMult:17.5, bulk:35, rps:325 },
-    bonus:'[Angriness] Offline every 5s: 1/50 for +700 rolls at ×13.33 luck. [Tableflip] On click: 1/25 for +300 rolls at ×20 luck. [Angst] Offline every hour: 1/5 for +100k rolls at ×6.5 luck. [Fist O\' Hurt] Every 3rd click: 1/150 for +5 rolls at ×1,750 luck. [Anger] Every 70th click: +600 rolls at ×3.33 luck (×1.25 mutation luck). [Slam] Every 20th click: +5 rolls at ×10,000 luck. [Frustration] Offline every hour: +7,500 rolls at ×125 luck. [Irritation] Each full day idle: +27.5% efficiency to every OTHER idle bonus on this axe (resets the moment you\'re active again).',
+    stats:{ luckMult:40, bulk:65, rps:475 },
+    bonus:'[Angriness] Offline every 5s: 1/50 for +1,050 rolls at ×26.66 luck. [Tableflip] On click: 1/25 for +450 rolls at ×40 luck. [Angst] Offline every hour: 1/5 for +150k rolls at ×13 luck. [Fist O\' Hurt] Every 3rd click: 1/150 for +7 rolls at ×3,500 luck. [Anger] Every 70th click: +900 rolls at ×6.66 luck (×1.25 mutation luck). [Slam] Every 20th click: +7 rolls at ×20,000 luck. [Frustration] Offline every hour: +11,250 rolls at ×250 luck. [Irritation] Each full day idle: +27.5% efficiency to every OTHER idle bonus on this axe (resets the moment you\'re active again).',
     offlineBonus:[
-      { intervalSeconds:5, chancePerInterval:1/50, minRolls:700, maxRolls:700, bonusLuckMult:13.33, irritationScales:true },
-      { intervalSeconds:3600, chancePerInterval:1/5, minRolls:100000, maxRolls:100000, bonusLuckMult:6.5, irritationScales:true },
-      { intervalSeconds:3600, chancePerInterval:1, minRolls:7500, maxRolls:7500, bonusLuckMult:125, irritationScales:true },
+      { intervalSeconds:5, chancePerInterval:1/50, minRolls:1050, maxRolls:1050, bonusLuckMult:26.66, irritationScales:true },
+      { intervalSeconds:3600, chancePerInterval:1/5, minRolls:150000, maxRolls:150000, bonusLuckMult:13, irritationScales:true },
+      { intervalSeconds:3600, chancePerInterval:1, minRolls:11250, maxRolls:11250, bonusLuckMult:250, irritationScales:true },
     ],
     clickBonus:[
-      { oneIn:25, rolls:300, luckMult:20 },                                              // Tableflip: every click
-      { everyNClicks:3, oneIn:150, rolls:5, luckMult:1750 },                             // Fist O' Hurt: every 3rd click, still needs the roll
-      { everyNClicks:70, chance:1, rolls:600, luckMult:3.33, mutationLuckMult:1.25 },     // Anger: every 70th click, guaranteed
-      { everyNClicks:20, chance:1, rolls:5, luckMult:10000 },                            // Slam: every 20th click, guaranteed
+      { oneIn:25, rolls:450, luckMult:40 },                                              // Tableflip: every click
+      { everyNClicks:3, oneIn:150, rolls:7, luckMult:3500 },                             // Fist O' Hurt: every 3rd click, still needs the roll
+      { everyNClicks:70, chance:1, rolls:900, luckMult:6.66, mutationLuckMult:1.25 },     // Anger: every 70th click, guaranteed
+      { everyNClicks:20, chance:1, rolls:7, luckMult:20000 },                            // Slam: every 20th click, guaranteed
     ],
     irritation:{ perDayPct:27.5, appliesToRps:true }, // rps also scales as an "idle bonus" per Irritation's wording
     // Rank value: 5×Moon(2B) + 3×Obliterator(2.25B) + 5×Imaginary(3.4B) + 1×PIZZA(9.3B) + 100×The Probably Rarest Thing Ever(1B) = 17.95B > 15B ✓
@@ -6935,7 +6991,40 @@ async function init(){
     handleGlobalCrash(err);
   }
 }
-init();
+
+// Photosensitivity disclaimer — shown FIRST, every single load, blocking the game entirely until
+// answered. Three outcomes: proceed normally, proceed with low-stim mode active, or hard-block
+// (never calls init() at all — only a real refresh/reopen can get back to the disclaimer).
+(function initPhotosensitivityDisclaimer(){
+  const overlay = document.getElementById('photosensitivityDisclaimer');
+  const blockedOverlay = document.getElementById('disclaimerBlocked');
+  const okBtn = document.getElementById('disclaimerOkBtn');
+  const darkBtn = document.getElementById('disclaimerDarkBtn');
+  const noBtn = document.getElementById('disclaimerNoBtn');
+
+  function dismiss(){
+    if(overlay) overlay.style.display = 'none';
+  }
+
+  if(okBtn) okBtn.addEventListener('click', ()=>{
+    dismiss();
+    init();
+  });
+
+  if(darkBtn) darkBtn.addEventListener('click', ()=>{
+    document.documentElement.classList.add('low-stim');
+    dismiss();
+    init();
+  });
+
+  if(noBtn) noBtn.addEventListener('click', ()=>{
+    dismiss();
+    if(blockedOverlay) blockedOverlay.style.display = 'flex';
+    // Deliberately never calling init() here — this is the hard block. Nothing short of an
+    // actual page refresh/reopen can get back to a playable state from this path.
+  });
+})();
+
 
 window.addEventListener('beforeunload', ()=>{
   state.lastSeenAt = Date.now();
