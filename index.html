@@ -6602,6 +6602,9 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
 }
 
 async function resolveOfflineProgress(){
+  // Defense in depth: every caller must have a current trusted-time verification before this
+  // function is allowed to create any idle rewards or offline bonus rolls.
+  if(!canAwardIdleGains()) return null;
   const axe = currentAxe();
   const equip = currentEquip();
   const rps = effectiveRps();
@@ -6844,18 +6847,25 @@ async function resolveOfflineProgress(){
   };
 }
 
-function renderCheatBanner(remainMs){
+function renderTimeVerificationBanner(status){
   const el = document.getElementById('offlineBanner');
   if(!el) return;
-  const timeStr = fmtDuration(Math.ceil(remainMs / 1000));
+  const detail = status && status.reason === 'unavailable'
+    ? 'Idle rolling requires a trusted-time check. Reconnect to the internet and try again.'
+    : `Your device clock differs from trusted time by ${fmtDuration(Math.ceil((status && status.skewMs ? Math.abs(status.skewMs) : 0) / 1000))}. Set it within 30 seconds to enable idle rolling.`;
   el.innerHTML = `
-    <div class="offline-banner cheat-banner">
-      <h3>⚠️ you dirty CHEATER!</h3>
-      <p>your axe has sensed a time change and you've lost access to idle rolling for <b>${timeStr}</b>!</p>
-      <button class="btn small secondary" id="dismissCheat">ok fine</button>
+    <div class="offline-banner cheat-banner time-verification-banner">
+      <h3>⚠️ Idle rolling paused</h3>
+      <p>${detail}</p>
+      <button class="btn small secondary" id="dismissTimeVerification">Got it</button>
     </div>
   `;
-  document.getElementById('dismissCheat').addEventListener('click', ()=>{ el.innerHTML=''; });
+  document.getElementById('dismissTimeVerification').addEventListener('click', ()=>{ el.innerHTML=''; });
+}
+
+function clearTimeVerificationBanner(){
+  const el = document.getElementById('offlineBanner');
+  if(el && el.querySelector('.time-verification-banner')) el.innerHTML = '';
 }
 
 function renderOfflineBanner(report){
@@ -6901,29 +6911,45 @@ async function fetchCloudflareTime(){
   return null;
 }
 
+const MAX_TRUSTED_TIME_SKEW_MS = 30 * 1000;
+let latestTimeVerification = { valid:false, reason:'unverified', skewMs:null, checkedAt:0 };
+
+// Idle rewards are valid only when the device clock is within 30 seconds of Cloudflare's trusted
+// time. This is deliberately bidirectional: both forward and backward clock changes pause idle
+// rewards. Correcting the device clock restores eligibility immediately on the next verification.
 async function runAnticheat(){
   const cfTime = await fetchCloudflareTime();
-  if(cfTime == null) return; // can't verify, allow through
+  const checkedAt = Date.now();
+  if(cfTime == null){
+    latestTimeVerification = { valid:false, reason:'unavailable', skewMs:null, checkedAt };
+    return latestTimeVerification;
+  }
 
-  const localTime = Date.now();
-  const skewMs = localTime - cfTime; // positive = local is ahead of real time
+  const skewMs = checkedAt - cfTime;
+  latestTimeVerification = {
+    valid: Math.abs(skewMs) <= MAX_TRUSTED_TIME_SKEW_MS,
+    reason: Math.abs(skewMs) <= MAX_TRUSTED_TIME_SKEW_MS ? 'valid' : 'skewed',
+    skewMs,
+    checkedAt,
+  };
 
-  if(skewMs >= 60 * 1000){
-    // Player skipped time forward by at least 1 minute
-    const lockMs = skewMs;
-    state.anticheatLockUntil = cfTime + lockMs; // lock for as long as they skipped
+  // Clear the old, duration-based lock on the first successful valid check. Existing saves migrate
+  // automatically: a player who fixed their clock is no longer punished for the earlier skew.
+  if(latestTimeVerification.valid && state.anticheatLockUntil){
+    state.anticheatLockUntil = null;
     dbSaveMeta();
   }
+  return latestTimeVerification;
 }
 
-function isAnticheatLocked(){
-  if(!state.anticheatLockUntil) return false;
-  return Date.now() < state.anticheatLockUntil;
+function canAwardIdleGains(){
+  return !!latestTimeVerification.valid;
 }
 
-function anticheatLockRemaining(){
-  if(!state.anticheatLockUntil) return 0;
-  return Math.max(0, state.anticheatLockUntil - Date.now());
+function recordIdleBaseline(){
+  // Reset the baseline after every attempted return, including an invalid-clock return. This prevents
+  // a later clock correction from retroactively granting idle time accumulated while unverified.
+  state.lastSeenAt = Date.now();
 }
 /* ============================================================
    INIT
@@ -7103,18 +7129,19 @@ async function initInner(){
     delete state.nullBombCharge.progress;
   }
 
-  // Run anticheat before offline progress
-  await runAnticheat();
+  // Verify the current clock before awarding any offline progress. A bad or unavailable trusted
+  // time pauses idle rewards rather than creating a duration-based punishment.
+  const timeVerification = await runAnticheat();
 
   let report = null;
-  if(isAnticheatLocked()){
-    const remainMs = anticheatLockRemaining();
-    renderCheatBanner(remainMs);
-  } else {
+  if(canAwardIdleGains()){
     report = await resolveOfflineProgress();
+    clearTimeVerificationBanner();
+  } else {
+    renderTimeVerificationBanner(timeVerification);
   }
 
-  state.lastSeenAt = Date.now();
+  recordIdleBaseline();
   dbSaveMeta();
 
   renderAxeStrip();
@@ -7185,12 +7212,27 @@ async function init(){
 
 
 window.addEventListener('beforeunload', ()=>{
-  state.lastSeenAt = Date.now();
+  recordIdleBaseline();
   pendingMetaSave = true;
   if(saveDebounceTimer){ clearTimeout(saveDebounceTimer); saveDebounceTimer = null; }
   flushPendingSaves(); // force an immediate flush — no time to wait out the debounce here
   if(persistenceWorker) persistenceWorker.postMessage({ type:'flush' });
 });
+
+// Keep the latest trusted-time verdict fresh while the game is open. Any newly detected skew
+// immediately pauses future idle rewards; correcting the clock restores eligibility on the next check.
+let timeVerificationCheckInFlight = false;
+setInterval(async ()=>{
+  if(document.visibilityState !== 'visible' || timeVerificationCheckInFlight) return;
+  timeVerificationCheckInFlight = true;
+  try{
+    const status = await runAnticheat();
+    if(!status.valid) renderTimeVerificationBanner(status);
+    else clearTimeVerificationBanner();
+  } finally {
+    timeVerificationCheckInFlight = false;
+  }
+}, 30000);
 
 // Live countdown for bomb charge timer
 let wasErrRedirectorActive = isErrRedirectorActive();
@@ -7221,24 +7263,30 @@ setInterval(()=>{
 }, 1000);
 document.addEventListener('visibilitychange', async ()=>{
   if(document.visibilityState === 'hidden'){
-    state.lastSeenAt = Date.now();
+    recordIdleBaseline();
     pendingMetaSave = true;
     if(saveDebounceTimer){ clearTimeout(saveDebounceTimer); saveDebounceTimer = null; }
     flushPendingSaves(); // force an immediate flush rather than waiting out the debounce
     if(persistenceWorker) persistenceWorker.postMessage({ type:'flush' });
   } else {
-    await runAnticheat();
-    if(isAnticheatLocked()){
-      renderCheatBanner(anticheatLockRemaining());
-    } else {
-      const report = await resolveOfflineProgress();
-      state.lastSeenAt = Date.now();
+    const timeVerification = await runAnticheat();
+    if(!canAwardIdleGains()){
+      // A skipped clock period earns nothing. Resetting immediately means a corrected clock starts
+      // fresh, with future idle time available straight away rather than carrying an old lockout.
+      renderTimeVerificationBanner(timeVerification);
+      recordIdleBaseline();
       dbSaveMeta();
-      if(report){
-        renderInventory();
-        updateStatStrip();
-        renderOfflineBanner(report);
-      }
+      return;
+    }
+
+    const report = await resolveOfflineProgress();
+    recordIdleBaseline();
+    dbSaveMeta();
+    clearTimeVerificationBanner();
+    if(report){
+      renderInventory();
+      updateStatStrip();
+      renderOfflineBanner(report);
     }
   }
 });
