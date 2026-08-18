@@ -2161,8 +2161,41 @@ const EQUIPS = {
       { key:'bomb', amount:2 },
     ],
   },
+  axinator: {
+    key:'axinator', name:'Axinator',
+    desc:'A high-speed active accessory that turns precision clicks into heavy bonus batches.',
+    luckMult:1.5, rpsMult:0.125, rankValue:800000000,
+    bonus:'Every 10th click: 1/2 chance for +500 rolls at ×10 luck and ×1.25 mutation luck. Every click: 1/10 chance for +10 rolls at ×500 luck and ×5 mutation luck. Every 50th click: +2,500 rolls at ×25 luck and ×2.5 mutation luck.',
+    clickBonus:[
+      { everyNClicks:10, oneIn:2, rolls:500, luckMult:10, mutationLuckMult:1.25 },
+      { oneIn:10, rolls:10, luckMult:500, mutationLuckMult:5 },
+      { everyNClicks:50, chance:1, rolls:2500, luckMult:25, mutationLuckMult:2.5 },
+    ],
+    // Rank value: 1×Obliterator (750M) + 1×Entropy (50M) = 800,000,000 exactly.
+    requires:[
+      { name:'Obliterator', area:'Wasteland', amount:1 },
+      { name:'Entropy', area:'Wasteland', amount:1 },
+    ],
+  },
+  exponentia: {
+    key:'exponentia', name:'Exponentia',
+    desc:'It refuses to idle. Its luck only grows by raising itself to a higher power.',
+    luckMult:1.5, luckExponent:1.15, rpsMult:0, rankValue:25000000000,
+    bonus:'No offline RPS. Your total equipped luck is raised to the power of 1.15. Every 3rd click: 1/25 chance for +250 rolls with (current luck)^1.5. Every 75th click: +750 rolls with (current luck)^1.33.',
+    clickBonus:[
+      { everyNClicks:3, oneIn:25, rolls:250, dynamicLuckMultFn:()=> Math.pow(effectiveLuckMult(), 1.5) },
+      { everyNClicks:75, chance:1, rolls:750, dynamicLuckMultFn:()=> Math.pow(effectiveLuckMult(), 1.33) },
+    ],
+    // Rank value: 2×PIZZA (18.6B) + 8×Moon (3.2B) + 4×Obliterator (3B) + 4×Entropy (0.2B) = 25B exactly.
+    requires:[
+      { name:'PIZZA', area:'The Fridge', amount:2 },
+      { name:'Moon', area:'Natural', amount:8 },
+      { name:'Obliterator', area:'Wasteland', amount:4 },
+      { name:'Entropy', area:'Wasteland', amount:4 },
+    ],
+  },
 };
-const EQUIP_ORDER = ['punything','vitaminaxey','coinbag','twohandedbook','fishystarsystem','axenades'];
+const EQUIP_ORDER = ['punything','vitaminaxey','coinbag','twohandedbook','fishystarsystem','axenades','axinator','exponentia'];
 
 const CONSUMABLES = {
   pushpin: {
@@ -2244,8 +2277,51 @@ const CONSUMABLES = {
       { name:'not found',   area:'404', amount:40400 },
     ],
   },
+  nukinamachina: {
+    key:'nukinamachina', name:'Nukina Machina',
+    desc:'A reactor-sized roll engine. It burns a startling amount of rare material in one use.',
+    effect:'On use: adds 2,500,000 rolls in your current area at ×50 luck and ×2.5 mutation luck. The batch is processed safely over multiple frames.',
+    useWithoutPin:true, instantRollBatch:true, rollCount:2500000, luckMult:50, mutationLuckMult:2.5,
+    requires:[
+      { name:'Obliterator', area:'Wasteland', amount:1 },
+      { name:'Corruption', area:'Natural', amount:250 },
+      { name:'Blank', area:'Aberration', amount:4 },
+      { name:'☢️', area:'Placeholder Land', amount:500000 },
+    ],
+  },
+  juniaxeswing: {
+    key:'juniaxeswing', name:"One Swing of Juni's Axe",
+    desc:"A single stored swing. Each eligible area contributes exactly 20 billion rank value to forge it.",
+    effect:'On use: adds 1 roll in your current area at ×1,000,000,000 luck.',
+    useWithoutPin:true, instantRollBatch:true, rollCount:1, luckMult:1000000000, mutationLuckMult:1,
+    // Each listed area contributes exactly 20B rank value. Excluded: Gimmicks, LAME world, Tiers, ABC, and 2048.
+    requires:[
+      { name:'Moon', area:'Natural', amount:50 },
+      { name:'Obliterator', area:'Wasteland', amount:26 },
+      { name:'Entropy', area:'Wasteland', amount:10 },
+      { name:'Spectral', area:'Aberration', amount:28 },
+      { name:'Unstable Core', area:'Aberration', amount:128 },
+      { name:'PIZZA', area:'The Fridge', amount:2 },
+      { name:'A Cat', area:'The Fridge', amount:4 },
+      { name:'Cheese', area:'The Fridge', amount:1000 },
+      { name:'The Probably Rarest Thing Ever', area:'Scary Land', amount:2000 },
+      { name:'DENIAL', area:'404', amount:1 },
+      { name:'UNAUTHORIZED.', area:'404', amount:50 },
+      { name:'THIRTEEN', area:'Factoritization', amount:3 },
+      { name:'TWELVE', area:'Factoritization', amount:2 },
+      { name:'ELEVEN', area:'Factoritization', amount:9 },
+      { name:'NINE', area:'Factoritization', amount:4 },
+      { name:'EIGHT', area:'Factoritization', amount:5 },
+      { name:'SEVEN', area:'Factoritization', amount:5 },
+      { name:'SIX', area:'Factoritization', amount:6 },
+      { name:'FIVE', area:'Factoritization', amount:4 },
+      { name:'FOUR', area:'Factoritization', amount:3 },
+      { name:'TWO', area:'Factoritization', amount:4 },
+      { name:'GOLDEN TOILET AWARD', area:'Placeholder Land', amount:100 },
+    ],
+  },
 };
-const CONSUMABLE_ORDER = ['pushpin','gloves','bomb','nullbomb','watergun','errredirector'];
+const CONSUMABLE_ORDER = ['pushpin','gloves','bomb','nullbomb','watergun','errredirector','nukinamachina','juniaxeswing'];
 
 /* ============================================================
    STATE
@@ -2267,6 +2343,7 @@ let state = {
   activeBuffs: {},          // { pushpin: { rollsLeft }, gloves: { rollsLeft } } — rollsLeft is a CLICKS counter for these two, despite the name
   bombCharge: null,         // { chargingUntil: timestamp }
   nullBombCharge: null,     // { chargingUntil: timestamp } — separate from bombCharge, can charge alongside it
+  instantConsumableBatch: null, // { key, progress } while a direct-use high-volume roll consumable is processing
   clickCount: 0,
   anticheatLockUntil: null,
   wgunStacks: [],           // array of { expiresAt: timestamp }, max 3
@@ -2298,6 +2375,8 @@ function effectiveLuckMult(){
   const equip = currentEquip();
   let mult = axe.stats.luckMult;
   if(equip && equip.luckMult) mult *= equip.luckMult;
+  // [Exponentia] raises its complete equipped luck value to a power after applying its ×1.5 multiplier.
+  if(equip && equip.luckExponent) mult = Math.pow(mult, equip.luckExponent);
   // [Coin Bag] (equip): active stacks add their luck% ADDITIVELY on top of everything else so
   // far (not another flat multiplier stacking multiplicatively), matching "+5% of your current
   // luck" — i.e. current luck grows by a percentage of itself, then that becomes the new total.
@@ -4932,8 +5011,9 @@ function renderEquipCards(){
     // Equips show their MODIFIERS (relative to the axe), not absolute stats
     const statParts = [];
     if(item.luckMult) statParts.push(`<span class="stat">luck <b>×${item.luckMult}</b></span>`);
+    if(item.luckExponent) statParts.push(`<span class="stat">luck <b>^${item.luckExponent}</b></span>`);
     if(item.bulkAdd) statParts.push(`<span class="stat">bulk <b>+${item.bulkAdd}</b></span>`);
-    if(item.rpsMult) statParts.push(`<span class="stat">rps <b>×${item.rpsMult}</b></span>`);
+    if(item.rpsMult != null) statParts.push(`<span class="stat">rps <b>×${item.rpsMult}</b></span>`);
     if(item.idleEfficiencyMult) statParts.push(`<span class="stat">idle efficiency <b>×${item.idleEfficiencyMult}</b></span>`);
     const statsHtml = statParts.length ? `<div class="istats">${statParts.join('')}</div>` : '';
 
@@ -5139,6 +5219,10 @@ function renderConsumableCards(){
       const msLeft = state.errRedirectorUntil - now;
       statusHtml = `<div class="buff-active">📡 404 static cleared — ${fmtDuration(Math.ceil(msLeft/1000))} left</div>`;
     }
+    if(item.instantRollBatch && state.instantConsumableBatch && state.instantConsumableBatch.key === key){
+      const pct = Math.floor((state.instantConsumableBatch.progress || 0) * 100);
+      statusHtml = `<div class="buff-active">⚙️ Rolling… ${pct}%</div>`;
+    }
 
     // Action buttons
     let actionHtml = '';
@@ -5177,8 +5261,10 @@ function renderConsumableCards(){
         <button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>
       `;
     } else {
-      const useDisabled = count <= 0 || !state.pinnedRecipe;
-      const useTitle = !state.pinnedRecipe ? 'Pin a recipe first' : (count <= 0 ? 'None owned' : '');
+      const needsPinnedRecipe = !item.useWithoutPin;
+      const batchInProgress = item.instantRollBatch && state.instantConsumableBatch && state.instantConsumableBatch.key === key;
+      const useDisabled = count <= 0 || batchInProgress || (needsPinnedRecipe && !state.pinnedRecipe);
+      const useTitle = batchInProgress ? 'Roll batch in progress' : (needsPinnedRecipe && !state.pinnedRecipe ? 'Pin a recipe first' : (count <= 0 ? 'None owned' : ''));
       actionHtml = `
         <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft</button>
         ${key !== 'bomb' || !state.bombCharge
@@ -5288,7 +5374,8 @@ function effectiveRps(){
   const stacks = wgunActiveStacks();
   const wgunMult = stacks === 0 ? 1 : Math.min(1 + stacks * CONSUMABLES.watergun.stackMult, CONSUMABLES.watergun.capMult);
   const equip = currentEquip();
-  const equipMult = (equip && equip.rpsMult) ? equip.rpsMult : 1;
+  // rpsMult may intentionally be zero (Exponentia), so test for presence instead of truthiness.
+  const equipMult = (equip && equip.rpsMult != null) ? equip.rpsMult : 1;
   const idleEffMult = (equip && equip.idleEfficiencyMult) ? equip.idleEfficiencyMult : 1;
   return base * wgunMult * equipMult * idleEffMult;
 }
@@ -5354,6 +5441,11 @@ function useConsumable(key){
     dbSaveMeta();
     renderConsumableCards();
     renderInventory();
+    return;
+  }
+
+  if(CONSUMABLES[key] && CONSUMABLES[key].instantRollBatch){
+    triggerInstantConsumableBatch(key);
     return;
   }
 
@@ -5486,11 +5578,74 @@ function triggerBomb(){
   processChunk();
 }
 
-// null_bomb's detonation: 40.4 million rolls (before any future multipliers). Looping that many
-// rollOnceForArea() calls synchronously would freeze/crash the tab, so this simulates the same
-// chunked-across-frames way triggerBomb does — just spread across more frames given the size.
-// Progress is reflected in the consumable card ("Detonating… X%") so it's clearly still working,
-// not frozen.
+// Resolves a direct-use roll consumable (for example, Nukina Machina) in short animation-frame
+// chunks. It preserves current-area rolls, luck, mutation luck, inventory aggregation, and the
+// live roll display without blocking the browser while a multi-million-roll batch is processed.
+function triggerInstantConsumableBatch(key){
+  const cfg = CONSUMABLES[key];
+  if(!cfg || !cfg.instantRollBatch || getConsumableCount(key) <= 0) return;
+  if(state.instantConsumableBatch) {
+    alertUser('A consumable roll batch is already in progress.');
+    return;
+  }
+
+  state.consumables[key]--;
+  state.instantConsumableBatch = { key, progress:0 };
+  dbSaveMeta();
+  renderConsumableCards();
+
+  const world = WORLDS[state.worldIdx];
+  const area = world.areas[state.areaIdx];
+  const totalPlanned = cfg.rollCount;
+  let best = null;
+  const counts = {};
+  let totalRollsFired = 0;
+  let i = 0;
+  let lastUiUpdate = 0;
+
+  function processChunk(){
+    const chunkStart = performance.now();
+    while(i < totalPlanned && (performance.now() - chunkStart) < DETONATION_CHUNK_BUDGET_MS){
+      const r = rollOnceForArea(world, area, cfg.luckMult, { mutationLuckMult: cfg.mutationLuckMult || 1, isBomb:true });
+      const inv = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
+      if(!counts[inv]) counts[inv] = { result:r, count:0 };
+      counts[inv].count++;
+      totalRollsFired++;
+      if(!best || r.finalRng > best.finalRng) best = r;
+      i++;
+    }
+
+    if(i < totalPlanned){
+      const now = performance.now();
+      if(now - lastUiUpdate > 200){
+        state.instantConsumableBatch.progress = i / totalPlanned;
+        renderConsumableCards();
+        lastUiUpdate = now;
+      }
+      requestAnimationFrame(processChunk);
+      return;
+    }
+
+    for(const inv in counts) addToInventory(counts[inv].result, counts[inv].count);
+    state.rolls += totalRollsFired;
+    state.instantConsumableBatch = null;
+    if(best){
+      pushLog(best);
+      renderStage(best, totalRollsFired);
+      if(!state.best || best.finalRng > state.best.finalRng) state.best = best;
+    }
+    renderInventory();
+    refreshLiveViews();
+    updateStatStrip();
+    renderConsumableCards();
+    dbSaveMeta();
+  }
+
+  processChunk();
+}
+
+// null_bomb's detonation: 40.4 million rolls are processed in animation-frame chunks so the
+// browser remains responsive; progress is reflected in the consumable card while it runs.
 function triggerNullBomb(){
   if(!state.nullBombCharge) return;
   if(Date.now() < state.nullBombCharge.chargingUntil) return;
