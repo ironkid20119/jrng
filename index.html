@@ -1915,18 +1915,21 @@ const AXES = {
   rageaxe: {
     key:'rageaxe', name:'Rage Axe',
     desc:'wow! totally expensive and op, is it even WORTH??? STOP!!!! THIS IS SUCH AN ANGRY AXE!!! *scream.mp3*',
-    stats:{ luckMult:40, bulk:65, rps:475 },
-    bonus:'[Angriness] Offline every 5s: 1/50 for +1,050 rolls at ×26.66 luck. [Tableflip] On click: 1/25 for +450 rolls at ×40 luck. [Angst] Offline every hour: 1/5 for +150k rolls at ×13 luck. [Fist O\' Hurt] Every 3rd click: 1/150 for +7 rolls at ×3,500 luck. [Anger] Every 70th click: +900 rolls at ×6.66 luck (×1.25 mutation luck). [Slam] Every 20th click: +7 rolls at ×20,000 luck. [Frustration] Offline every hour: +11,250 rolls at ×250 luck. [Irritation] Each full day idle: +27.5% efficiency to every OTHER idle bonus on this axe (resets the moment you\'re active again).',
+    stats:{ luckMult:100, bulk:163, rps:475 },
+    bonus:'[Angriness] Offline every 5s: 1/50 for +1,050 rolls at ×26.66 luck. [Tableflip] On click: 1/25 for +450 rolls at ×100 luck. [Angst] Offline every hour: 1/5 for +150k rolls at ×13 luck. [Fist O\' Hurt] Every 3rd click: 1/150 for +7 rolls at ×8,750 luck. [Anger] Every 70th click: +900 rolls at ×16.65 luck (×1.25 mutation luck). [Slam] Every 20th click: +7 rolls at ×50,000 luck. [Frustration] Offline every hour: +11,250 rolls at ×250 luck. [Irritation] Each full day idle: +27.5% efficiency to every OTHER idle bonus on this axe (resets the moment you\'re active again).',
     offlineBonus:[
       { intervalSeconds:5, chancePerInterval:1/50, minRolls:1050, maxRolls:1050, bonusLuckMult:26.66, irritationScales:true },
       { intervalSeconds:3600, chancePerInterval:1/5, minRolls:150000, maxRolls:150000, bonusLuckMult:13, irritationScales:true },
       { intervalSeconds:3600, chancePerInterval:1, minRolls:11250, maxRolls:11250, bonusLuckMult:250, irritationScales:true },
     ],
     clickBonus:[
-      { oneIn:25, rolls:450, luckMult:40 },                                              // Tableflip: every click
-      { everyNClicks:3, oneIn:150, rolls:7, luckMult:3500 },                             // Fist O' Hurt: every 3rd click, still needs the roll
-      { everyNClicks:70, chance:1, rolls:900, luckMult:6.66, mutationLuckMult:1.25 },     // Anger: every 70th click, guaranteed
-      { everyNClicks:20, chance:1, rolls:7, luckMult:20000 },                            // Slam: every 20th click, guaranteed
+      // Manual-click power boost: base luckMult/bulk x2.5, and each click bonus's LUCK x2.5
+      // (roll counts unchanged) — Rage Axe costs ~15x GeomathAxe, this is meant to make that
+      // premium actually pay off for active/manual clicking instead of barely matching it.
+      { oneIn:25, rolls:450, luckMult:100 },                                              // Tableflip: every click (was x40)
+      { everyNClicks:3, oneIn:150, rolls:7, luckMult:8750 },                              // Fist O' Hurt: every 3rd click (was x3500)
+      { everyNClicks:70, chance:1, rolls:900, luckMult:16.65, mutationLuckMult:1.25 },     // Anger: every 70th click (was x6.66)
+      { everyNClicks:20, chance:1, rolls:7, luckMult:50000 },                             // Slam: every 20th click (was x20000)
     ],
     irritation:{ perDayPct:27.5, appliesToRps:true }, // rps also scales as an "idle bonus" per Irritation's wording
     // Rank value: 5×Moon(2B) + 3×Obliterator(2.25B) + 5×Imaginary(3.4B) + 1×PIZZA(9.3B) + 100×The Probably Rarest Thing Ever(1B) = 17.95B > 15B ✓
