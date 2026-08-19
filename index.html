@@ -99,6 +99,13 @@
     width:fit-content;
   }
   .cache-reset-btn.show{ display:block; }
+  .rank-style-toggle{
+    display:flex; align-items:center; gap:7px; width:fit-content; margin-top:7px;
+    font-family:var(--mono); font-size:10px; color:var(--text-dim); cursor:pointer;
+    user-select:none;
+  }
+  .rank-style-toggle input{ accent-color:var(--accent); cursor:pointer; }
+  .rank-style-toggle b{ color:var(--text); font-weight:700; }
   .brand .eyebrow{
     font-family:var(--mono);
     font-size:11px;
@@ -846,6 +853,10 @@
   <header class="top">
     <div class="brand">
       <h1 id="logoTitle" style="cursor:pointer; user-select:none;">Juni's RNG Game</h1>
+      <label class="rank-style-toggle" title="Use the original tier-based colors, fonts, and effects instead of modern per-rank random styling.">
+        <input id="legacyColorFontToggle" type="checkbox">
+        <span><b>legacycolorfont</b> · legacy tier visuals</span>
+      </label>
       <button id="cacheResetBtn" class="cache-reset-btn" type="button">⟳ Force reload latest version (keeps your save)</button>
       <button id="storageEngineChangeBtn" class="cache-reset-btn" type="button">💾 Change save engine</button>
       <div id="storageEngineChangeChoices" style="display:none; gap:8px; margin-top:6px;">
@@ -1145,7 +1156,14 @@ function rankVisualIdentity(name, tierKey){
 
 // Builds an inline `style` attribute string applying a rank's unique color/font. If the rank is
 // gradient-worthy, this includes background-clip text tricks; otherwise a flat color.
+function isLegacyColorFontEnabled(){
+  return state.rankVisualStyle === 'legacycolorfont';
+}
+
 function rankVisualStyleAttr(name, tierKey){
+  // Legacy mode intentionally leaves the shared .t-* class in complete control, restoring the
+  // original tier-based color, font, gradient, animation, and glow behavior from the supplied file.
+  if(isLegacyColorFontEnabled()) return '';
   const v = rankVisualIdentity(name, tierKey);
   const base = `font-family:${v.fontFamily}; font-weight:${v.fontWeight}; font-style:${v.fontStyle}; letter-spacing:${v.letterSpacing};`;
   if(v.isGradient){
@@ -1161,6 +1179,7 @@ function rankVisualStyleAttr(name, tierKey){
 // without this, the overlay would render in some other ambient font and visibly peek out from
 // behind the base text as extra, misaligned characters.
 function rankVisualFontOnlyStyleAttr(name){
+  if(isLegacyColorFontEnabled()) return '';
   // tierKey doesn't affect font selection (only color/gradient does), so any tierKey value works
   // here — font choice is purely a function of the rank's name via hashRankName.
   const v = rankVisualIdentity(name, null);
@@ -1727,7 +1746,61 @@ const WORLD0 = {
   ]
 };
 
-const WORLDS = [WORLD1, SUBWORLD1, WORLD0];
+const WORLD2 = {
+  key:'world2',
+  label:'World 2',
+  global:[
+    { name:'crazy tate', rng:75000000000 },
+    // The user-supplied "999.999...e15" is represented as the practical JavaScript limit of 1e18.
+    { name:'Was A Second World Necessary? Probably Yeah But This Is The Rarest Rank Ingame and It Has The LONGEST NAME EVER Itll Probably STRETCH EVERYTHING SO FAR ITLL BE FUNNY MAYBE Lol AND It Only Spawns In This God Damn World of Unseriousness and Seriousness And No One Will PROBABLY EVER NEVER GET THIS RANK EVER', rng:1000000000000000000 },
+  ],
+  areas:[
+    {
+      key:'winterstone', label:'winterstone',
+      ranks:[
+        { name:'snowflake', rng:1 },
+        { name:'borealium', rng:75 },
+        { name:'raindrops', rng:180 },
+        { name:'ice crystal', rng:700 },
+        { name:'snowstorm', rng:2500, mutations:[{ name:'raging blizzard', rng:800000000000 }] },
+        { name:'ice fragments', rng:12745 },
+        { name:'permafrost', rng:47200 },
+        { name:'slush', rng:78533 },
+        { name:'frozen lapis', rng:122000 },
+        { name:'0c', rng:273150, mutations:[{ name:'Subzero', rng:273150000 }] },
+        { name:'frigid', rng:749999.5 },
+        { name:'vermeil', rng:1761700 },
+        { name:'lavandite', rng:7920000 },
+        { name:'freezecrystal', rng:26180000 },
+        { name:'frozen', rng:78000000 },
+        { name:'amazing ice cold stone', rng:250000000 },
+      ],
+    },
+    {
+      key:'boiworld', label:'Boi World',
+      ranks:[
+        {
+          name:'Boi', rng:1,
+          // The current rank engine stores mutation chains as outcomes of their base rank. The
+          // supplied Boi progression is therefore represented as one ordered mutation chain.
+          mutations:[
+            { name:'Boi Crystal', rng:70000 },
+            { name:'Boi Stone', rng:900000 },
+            { name:'Omega Boi', rng:7000000 },
+            { name:'Super Boi', rng:95000000 },
+            { name:'CRAZY Boi', rng:600000000 },
+            { name:'Universal Boi', rng:2500000000 },
+            { name:'ALMOST RAREST Boi', rng:7500000000 },
+            { name:'Boi-Ultimate', rng:25000000000 },
+            { name:'RAREST Boi', rng:100000000000 },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const WORLDS = [WORLD1, SUBWORLD1, WORLD0, WORLD2];
 
 /* ---------- Craftable items (axes) ---------- */
 const AXES = {
@@ -2349,6 +2422,7 @@ let state = {
   wgunStacks: [],           // array of { expiresAt: timestamp }, max 3
   coinBagStacks: [],        // array of { expiresAt: timestamp } — Coin Bag's 15s luck/mutation-luck stacks
   discoveredSecrets: {},    // { secretKey: firstDiscoveredAtTimestamp }
+  rankVisualStyle: 'modernrandom', // 'modernrandom' or 'legacycolorfont'
   errRedirectorUntil: null, // timestamp — while in the future, the 404 area's rarity-truncation gimmick is suppressed
 };
 
@@ -3251,6 +3325,7 @@ function buildMetaSnapshot(){
     wgunStacks: state.wgunStacks,
     coinBagStacks: state.coinBagStacks,
     discoveredSecrets: state.discoveredSecrets,
+    rankVisualStyle: state.rankVisualStyle,
   };
 }
 
@@ -3454,6 +3529,7 @@ function applyMetaToState(meta){
   state.wgunStacks = meta.wgunStacks || [];
   state.coinBagStacks = meta.coinBagStacks || [];
   state.discoveredSecrets = meta.discoveredSecrets || {};
+  state.rankVisualStyle = meta.rankVisualStyle === 'legacycolorfont' ? 'legacycolorfont' : 'modernrandom';
   saveLoadedSuccessfully = true;
 }
 
@@ -4145,7 +4221,10 @@ function renderAxeStrip(){
   `;
 }
 
+let lastRenderedStage = null;
+
 function renderStage(result, count, trollOverride, clicksNote){
+  lastRenderedStage = { result, count, trollOverride, clicksNote };
   const stage = document.getElementById('stage');
   const baseTier = result.isSecret ? SECRET_TIER : tierFor(result.baseRng);
   const glowCls = result.isSecret ? 'glow-secret' : (['epic','pelicular','horizon','grandiose','zenith','unworldly'].includes(baseTier.key) ? `glow-${baseTier.key}` : '');
@@ -4199,6 +4278,30 @@ function renderStage(result, count, trollOverride, clicksNote){
 function pushLog(result){
   state.log.unshift(result);
   if(state.log.length > 4) state.log.pop(); // only the last 4 are ever actually read (see '&' secret)
+}
+
+function setupLegacyColorFontToggle(){
+  const toggle = document.getElementById('legacyColorFontToggle');
+  if(!toggle) return;
+  toggle.checked = isLegacyColorFontEnabled();
+  toggle.addEventListener('change', ()=>{
+    state.rankVisualStyle = toggle.checked ? 'legacycolorfont' : 'modernrandom';
+    document.documentElement.classList.toggle('legacycolorfont-active', toggle.checked);
+    dbSaveMeta();
+
+    // Re-render every rank-bearing surface immediately so the choice takes effect without a reload.
+    if(lastRenderedStage) renderStage(lastRenderedStage.result, lastRenderedStage.count, lastRenderedStage.trollOverride, lastRenderedStage.clicksNote);
+    renderInventory();
+    buildIndexAccordion();
+    buildSecretsAccordion();
+  });
+}
+
+function applyRankVisualStyle(){
+  const enabled = isLegacyColorFontEnabled();
+  document.documentElement.classList.toggle('legacycolorfont-active', enabled);
+  const toggle = document.getElementById('legacyColorFontToggle');
+  if(toggle) toggle.checked = enabled;
 }
 
 function updateStatStrip(){
@@ -7107,6 +7210,8 @@ async function initInner(){
   }
 
   await dbLoadAll();
+  applyRankVisualStyle();
+  setupLegacyColorFontToggle();
 
   // DATA-LOSS GUARD: if it looks like a real save vanished, stop here. Don't render the game,
   // don't run anticheat/offline-progress, and CRITICALLY don't let dbSaveMeta() run — that's
