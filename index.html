@@ -1318,16 +1318,8 @@ const SECRET_RANKS = [
     trueRng: 50000000,
     worldKey: 'world0', areaKey: 'tiers', // must be in Fun -> Tiers
     condition(world, area){
-      // Requires the FULL collection of every OTHER secret rank — the plain version AND all 4
-      // variants (weird/odd/rainbow/grayscale) of each. Excludes itself, or this would be
-      // permanently impossible to obtain (you'd need to already have it to be eligible for it).
-      for(const other of SECRET_RANKS){
-        if(other.key === 'secret_tier') continue;
-        if(!isSecretDiscovered(other.key, null)) return false;
-        for(const v of VARIANT_CHAIN){
-          if(!isSecretDiscovered(other.key, v.key)) return false;
-        }
-      }
+      // Variant eligibility is checked after this base Secret Tier roll determines its own
+      // variant. The matching-variant rule lives in isSecretTierVariantUnlocked().
       return true;
     },
   },
@@ -1340,6 +1332,8 @@ const SECRET_RANKS = [
 function rollSecretForArea(world, area){
   let winner = null;
   let winnerTrueRng = null;
+  let winnerVariant = null;
+  let winnerHasPreRolledVariant = false;
   for(const secret of SECRET_RANKS){
     if(secret.worldKey && secret.worldKey !== world.key) continue;
     if(secret.areaKey && secret.areaKey !== area.key) continue;
@@ -1352,14 +1346,21 @@ function rollSecretForArea(world, area){
     // than intended. trueRng above is still used for display/tier/winner-priority purposes.
     const alreadyRolled = !!secret.conditionAlreadyRolled;
     if(alreadyRolled || Math.random() < 1 / resolvedTrueRng){
+      // Secret Tier's prerequisite is intentionally variant-specific: plain secrets unlock the
+      // plain Secret Tier, Weird secrets unlock Weird Secret Tier, and so on. Its own discoveries
+      // are never prerequisites, preventing it from self-blocking at any variant.
+      const candidateVariant = secret.key === 'secret_tier' ? rollVariant() : null;
+      if(secret.key === 'secret_tier' && !isSecretTierVariantUnlocked(candidateVariant ? candidateVariant.key : null)) continue;
       if(!winner || resolvedTrueRng > winnerTrueRng){
         winner = secret;
         winnerTrueRng = resolvedTrueRng;
+        winnerVariant = candidateVariant;
+        winnerHasPreRolledVariant = secret.key === 'secret_tier';
       }
     }
   }
   if(!winner) return null;
-  const variant = rollVariant();
+  const variant = winnerHasPreRolledVariant ? winnerVariant : rollVariant();
   const finalRng = variant ? winnerTrueRng * variant.totalMult : winnerTrueRng;
   return {
     name: winner.name,
@@ -1377,6 +1378,16 @@ function isSecretDiscovered(key, variantKey){
   if(!state.discoveredSecrets) return false;
   const lookupKey = variantKey ? `${key}|${variantKey}` : key;
   return !!state.discoveredSecrets[lookupKey];
+}
+
+// Requires every OTHER secret in the same exact variant state. `null` means normal/plain.
+// Secret Tier itself is always excluded, including when checking Weird/Odd/Rainbow/Grayscale.
+function isSecretTierVariantUnlocked(variantKey){
+  for(const other of SECRET_RANKS){
+    if(other.key === 'secret_tier') continue;
+    if(!isSecretDiscovered(other.key, variantKey)) return false;
+  }
+  return true;
 }
 
 function markSecretDiscovered(key, variantKey){
