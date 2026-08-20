@@ -2393,8 +2393,32 @@ const CONSUMABLES = {
       { name:'GOLDEN TOILET AWARD', area:'Placeholder Land', amount:100 },
     ],
   },
+  doublinator: {
+    key:'doublinator', name:'Doublinator',
+    desc:'2',
+    effect:'On use: doubles bulk rolls, luck, and rolls per second for 12 hours. Only one can be active at a time; after it ends, this item has a 2-day cooldown.',
+    useWithoutPin:true, durationSeconds:12*3600, cooldownSeconds:2*24*3600,
+    requires:[
+      { name:'Universal Boi', area:'Boi World', amount:1 },
+      { name:'Fruits', area:'The Fridge', amount:750 },
+      { name:'Unstable Core', area:'Aberration', amount:200 },
+    ],
+  },
+  boiconsumable: {
+    key:'boiconsumable', name:'Boi Consumable',
+    desc:'Boi', effect:'Boi', useWithoutPin:true, scalesRecipePerUse:true,
+    requires:[
+      { name:'Boi', area:'Boi World', amount:5000000000 },
+      { name:'Boi Crystal', area:'Boi World', amount:71428 },
+      { name:'Boi Stone', area:'Boi World', amount:5555 },
+      { name:'Omega Boi', area:'Boi World', amount:714 },
+      { name:'Super Boi', area:'Boi World', amount:52 },
+      { name:'CRAZY Boi', area:'Boi World', amount:9 },
+      { name:'Universal Boi', area:'Boi World', amount:2 },
+    ],
+  },
 };
-const CONSUMABLE_ORDER = ['pushpin','gloves','bomb','nullbomb','watergun','errredirector','nukinamachina','juniaxeswing'];
+const CONSUMABLE_ORDER = ['pushpin','gloves','bomb','nullbomb','watergun','errredirector','nukinamachina','juniaxeswing','doublinator','boiconsumable'];
 
 /* ============================================================
    STATE
@@ -2424,10 +2448,36 @@ let state = {
   discoveredSecrets: {},    // { secretKey: firstDiscoveredAtTimestamp }
   rankVisualStyle: 'modernrandom', // 'modernrandom' or 'legacycolorfont'
   errRedirectorUntil: null, // timestamp — while in the future, the 404 area's rarity-truncation gimmick is suppressed
+  doublinatorUntil: null, // timestamp — ×2 bulk/luck/rps while in the future
+  doublinatorCooldownUntil: null, // timestamp — cannot activate another Doublinator before this time
+  boiConsumableUses: 0, // permanent Boi Consumables used; each adds ×0.1 luck and one recipe multiplier step
 };
 
 function isErrRedirectorActive(){
   return !!state.errRedirectorUntil && Date.now() < state.errRedirectorUntil;
+}
+
+function isDoublinatorActive(){
+  return !!state.doublinatorUntil && Date.now() < state.doublinatorUntil;
+}
+
+function isDoublinatorCoolingDown(){
+  return !!state.doublinatorCooldownUntil && Date.now() < state.doublinatorCooldownUntil;
+}
+
+function boiConsumableUses(){
+  return Math.max(0, Number(state.boiConsumableUses) || 0);
+}
+
+function boiConsumableLuckMult(){
+  return 1 + boiConsumableUses() * 0.1;
+}
+
+function consumableRequirements(key){
+  const item = CONSUMABLES[key];
+  if(!item) return [];
+  const recipeMult = item.scalesRecipePerUse ? (1 + boiConsumableUses()) : 1;
+  return item.requires.map(req => ({ ...req, amount:req.amount * recipeMult }));
 }
 
 const MAX_OFFLINE_SECONDS = 7 * 24 * 60 * 60; // 7 day cap
@@ -2458,6 +2508,8 @@ function effectiveLuckMult(){
     const bonus = coinBagBonus();
     if(bonus.luckAddPct > 0) mult *= (1 + bonus.luckAddPct / 100);
   }
+  mult *= boiConsumableLuckMult();
+  if(isDoublinatorActive()) mult *= 2;
   return mult;
 }
 
@@ -2468,6 +2520,7 @@ function effectiveBulk(){
   let bulk = axe.stats.bulk;
   if(equip && equip.bulkMult) bulk *= equip.bulkMult;
   if(equip && equip.bulkAdd) bulk += equip.bulkAdd;
+  if(isDoublinatorActive()) bulk *= 2;
   return bulk;
 }
 
@@ -3326,6 +3379,10 @@ function buildMetaSnapshot(){
     coinBagStacks: state.coinBagStacks,
     discoveredSecrets: state.discoveredSecrets,
     rankVisualStyle: state.rankVisualStyle,
+    errRedirectorUntil: state.errRedirectorUntil,
+    doublinatorUntil: state.doublinatorUntil,
+    doublinatorCooldownUntil: state.doublinatorCooldownUntil,
+    boiConsumableUses: state.boiConsumableUses,
   };
 }
 
@@ -3530,6 +3587,10 @@ function applyMetaToState(meta){
   state.coinBagStacks = meta.coinBagStacks || [];
   state.discoveredSecrets = meta.discoveredSecrets || {};
   state.rankVisualStyle = meta.rankVisualStyle === 'legacycolorfont' ? 'legacycolorfont' : 'modernrandom';
+  state.errRedirectorUntil = meta.errRedirectorUntil || null;
+  state.doublinatorUntil = meta.doublinatorUntil || null;
+  state.doublinatorCooldownUntil = meta.doublinatorCooldownUntil || null;
+  state.boiConsumableUses = Math.max(0, Number(meta.boiConsumableUses) || 0);
   saveLoadedSuccessfully = true;
 }
 
@@ -5265,8 +5326,9 @@ function renderConsumableCards(){
     const count = getConsumableCount(key);
     const isPinned = state.pinnedRecipe && state.pinnedRecipe.kind === 'consumable' && state.pinnedRecipe.key === key;
 
+    const requirements = consumableRequirements(key);
     let canCraft = true;
-    const reqHtml = item.requires.map(req=>{
+    const reqHtml = requirements.map(req=>{
       const have = getReqOwnedCount(req);
       const ok = have >= req.amount;
       if(!ok) canCraft = false;
@@ -5322,6 +5384,17 @@ function renderConsumableCards(){
       const msLeft = state.errRedirectorUntil - now;
       statusHtml = `<div class="buff-active">📡 404 static cleared — ${fmtDuration(Math.ceil(msLeft/1000))} left</div>`;
     }
+    if(key === 'doublinator'){
+      if(isDoublinatorActive()){
+        statusHtml = `<div class="buff-active">×2 bulk · ×2 luck · ×2 rps — ${fmtDuration(Math.ceil((state.doublinatorUntil-now)/1000))} left</div>`;
+      } else if(isDoublinatorCoolingDown()){
+        statusHtml = `<div class="buff-active ready">⏳ Cooldown: ${fmtDuration(Math.ceil((state.doublinatorCooldownUntil-now)/1000))} left</div>`;
+      }
+    }
+    if(key === 'boiconsumable'){
+      const uses = boiConsumableUses();
+      statusHtml = `<div class="buff-active">Boi uses: ${uses.toLocaleString()} · permanent luck ×${boiConsumableLuckMult().toFixed(1)} · next recipe ×${(1+uses).toLocaleString()}</div>`;
+    }
     if(item.instantRollBatch && state.instantConsumableBatch && state.instantConsumableBatch.key === key){
       const pct = Math.floor((state.instantConsumableBatch.progress || 0) * 100);
       statusHtml = `<div class="buff-active">⚙️ Rolling… ${pct}%</div>`;
@@ -5359,6 +5432,15 @@ function renderConsumableCards(){
     } else if(key === 'errredirector'){
       const useDisabled = count <= 0;
       const useTitle = count <= 0 ? 'None owned' : (isErrRedirectorActive() ? 'Extends the current 12h window' : '');
+      actionHtml = `
+        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft</button>
+        <button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>
+      `;
+    } else if(key === 'doublinator'){
+      const active = isDoublinatorActive();
+      const cooling = isDoublinatorCoolingDown();
+      const useDisabled = count <= 0 || active || cooling;
+      const useTitle = count <= 0 ? 'None owned' : active ? 'Already active' : cooling ? 'Cooling down' : '';
       actionHtml = `
         <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft</button>
         <button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>
@@ -5480,7 +5562,8 @@ function effectiveRps(){
   // rpsMult may intentionally be zero (Exponentia), so test for presence instead of truthiness.
   const equipMult = (equip && equip.rpsMult != null) ? equip.rpsMult : 1;
   const idleEffMult = (equip && equip.idleEfficiencyMult) ? equip.idleEfficiencyMult : 1;
-  return base * wgunMult * equipMult * idleEffMult;
+  const doublinatorMult = isDoublinatorActive() ? 2 : 1;
+  return base * wgunMult * equipMult * idleEffMult * doublinatorMult;
 }
 
 // [Irritation] (Rage Axe only): for every FULL day the player has been continuously idle, every
@@ -5497,10 +5580,11 @@ function irritationMultiplier(axe, idleSeconds){
 function craftConsumable(key){
   const item = CONSUMABLES[key];
   if(!item) return;
-  for(const req of item.requires){
+  const requirements = consumableRequirements(key);
+  for(const req of requirements){
     if(getReqOwnedCount(req) < req.amount) return;
   }
-  for(const req of item.requires){
+  for(const req of requirements){
     if(req.consumable){
       state.consumables[req.consumable] -= req.amount;
     } else {
@@ -5544,6 +5628,36 @@ function useConsumable(key){
     dbSaveMeta();
     renderConsumableCards();
     renderInventory();
+    return;
+  }
+
+  if(key === 'doublinator'){
+    const now = Date.now();
+    if(isDoublinatorActive()){
+      alertUser('Doublinator is already active. Only one can be active at a time.');
+      return;
+    }
+    if(isDoublinatorCoolingDown()){
+      alertUser(`Doublinator is cooling down for ${fmtDuration(Math.ceil((state.doublinatorCooldownUntil - now) / 1000))}.`);
+      return;
+    }
+    state.consumables.doublinator--;
+    state.doublinatorUntil = now + CONSUMABLES.doublinator.durationSeconds * 1000;
+    state.doublinatorCooldownUntil = state.doublinatorUntil + CONSUMABLES.doublinator.cooldownSeconds * 1000;
+    dbSaveMeta();
+    renderConsumableCards();
+    renderAxeStrip();
+    updateStatStrip();
+    return;
+  }
+
+  if(key === 'boiconsumable'){
+    state.consumables.boiconsumable--;
+    state.boiConsumableUses = boiConsumableUses() + 1;
+    dbSaveMeta();
+    renderConsumableCards();
+    renderAxeStrip();
+    updateStatStrip();
     return;
   }
 
@@ -6559,6 +6673,27 @@ function simulateOfflineBonusRules(offlineBonus, seconds, pool, variantChain, TI
   return { counts, bestFind, bonusRollsFired, bonusTriggers };
 }
 
+// Scales a simulated distribution to a target roll count without losing or inventing any rolls.
+// Largest-remainder allocation preserves the exact total even when sampled counts are extrapolated.
+function scaleCountsToExactTotal(counts, targetTotal){
+  const entries = Object.values(counts);
+  if(targetTotal <= 0 || entries.length === 0) return;
+  const sourceTotal = entries.reduce((sum, entry)=> sum + entry.count, 0);
+  if(sourceTotal <= 0) return;
+
+  const factor = targetTotal / sourceTotal;
+  let allocated = 0;
+  const remainders = entries.map((entry, index)=>{
+    const scaled = entry.count * factor;
+    const floor = Math.floor(scaled);
+    entry.count = floor;
+    allocated += floor;
+    return { entry, index, remainder:scaled - floor };
+  });
+  remainders.sort((a,b)=> b.remainder - a.remainder || a.index - b.index);
+  for(let i = 0; i < targetTotal - allocated; i++) remainders[i % remainders.length].entry.count++;
+}
+
 async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult, offlineBonus) {
   return new Promise((resolve, reject) => {
     const simModal = document.getElementById('simModal');
@@ -6569,14 +6704,17 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
     progressBar.style.width = '0%';
     progressText.textContent = `initializing simulation setup...`;
 
-    const numWorkers = 10;
+    const MAX_SIM_WORKERS = 10;
     const SIMULATION_CEILING = 2000000;
     const actualSimTotal = Math.min(totalRolls, SIMULATION_CEILING);
-    const extrapolationFactor = totalRolls > actualSimTotal ? totalRolls / actualSimTotal : 1;
-
-    const rollsPerWorker = Math.floor(actualSimTotal / numWorkers);
+    // Use no more workers than actual rolls, then distribute the remainder one-by-one. The prior
+    // floor(total/10) scheme silently discarded any remainder (and every roll when total < 10).
+    const numWorkers = Math.max(1, Math.min(MAX_SIM_WORKERS, actualSimTotal || 1));
+    const baseRollsPerWorker = Math.floor(actualSimTotal / numWorkers);
+    const workerRemainder = actualSimTotal % numWorkers;
 
     let workersFinished = 0;
+    let sampledRollsFinished = 0;
     const accumulatedCounts = {};
     let absoluteBest = null;
 
@@ -6591,6 +6729,7 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
     }
 
     for (let i = 0; i < numWorkers; i++) {
+      const workerRolls = baseRollsPerWorker + (i < workerRemainder ? 1 : 0);
       let worker;
       try {
         worker = new Worker(workerUrl);
@@ -6619,18 +6758,19 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
         }
 
         workersFinished++;
+        sampledRollsFinished += workerRolls;
         const pct = Math.round((workersFinished / numWorkers) * 100);
         progressBar.style.width = `${pct}%`;
-        progressText.textContent = `running threads: ${Math.round(actualSimTotal * (workersFinished / numWorkers)).toLocaleString()} / ${actualSimTotal.toLocaleString()} rolls completed`;
+        progressText.textContent = totalRolls > actualSimTotal
+          ? `sampling ${sampledRollsFinished.toLocaleString()} / ${actualSimTotal.toLocaleString()} rolls to resolve ${totalRolls.toLocaleString()} offline rolls`
+          : `running threads: ${sampledRollsFinished.toLocaleString()} / ${totalRolls.toLocaleString()} offline rolls completed`;
 
         if (workersFinished === numWorkers) {
           cleanup();
 
-          if (extrapolationFactor > 1) {
-            for (const key in accumulatedCounts) {
-              accumulatedCounts[key].count = Math.round(accumulatedCounts[key].count * extrapolationFactor);
-            }
-          }
+          // Extrapolation must conserve the exact requested total, not independently round every
+          // item bucket (which can make offline inventory gains appear to vanish or drift).
+          scaleCountsToExactTotal(accumulatedCounts, totalRolls);
 
           // Bonus triggers are computed once here, against the TRUE total elapsed time —
           // never split across workers, so no interval ever gets fragmented into zero-trigger chunks.
@@ -6694,7 +6834,7 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
       };
 
       worker.postMessage({
-        rollsToRun: rollsPerWorker,
+        rollsToRun: workerRolls,
         pool: pool,
         luckMult: luckMult,
         variantChain: VARIANT_CHAIN,
@@ -6871,12 +7011,9 @@ async function resolveOfflineProgress(){
       }
     }
 
-    if(remaining > 0 && directCount > 0){
-      const scale = remaining / directCount;
-      for(const k in counts){
-        counts[k].count += Math.round(counts[k].count * scale);
-      }
-    }
+    // Preserve the exact base offline total even in the worker-fallback path. Per-bucket rounding
+    // previously let counts drift away from state.rolls, making some offline gains look lost.
+    if(directCount > 0) scaleCountsToExactTotal(counts, totalRolls);
 
     // Bonus triggers computed once against the true total wholeSeconds — same shared function
     // used by the worker path, so both paths can never diverge or reintroduce fragmentation bugs.
@@ -7339,14 +7476,18 @@ setInterval(async ()=>{
   }
 }, 30000);
 
-// Live countdown for bomb charge timer
+// Live countdowns and timed-effect recovery. All timer timestamps are persisted in meta, so this
+// loop rehydrates their UI/effects after a refresh instead of treating them as session-only state.
 let wasErrRedirectorActive = isErrRedirectorActive();
+let wasDoublinatorActive = isDoublinatorActive();
 setInterval(()=>{
+  const now = Date.now();
   if(currentView === 'items'){
     if(state.bombCharge) renderConsumableCards();
     if(state.nullBombCharge) renderConsumableCards();
     if(state.wgunStacks && state.wgunStacks.length) renderConsumableCards();
     if(state.errRedirectorUntil) renderConsumableCards();
+    if(state.doublinatorUntil || state.doublinatorCooldownUntil) renderConsumableCards();
   }
   // Expire old watergun stacks and update strip if changed
   if(state.wgunStacks && state.wgunStacks.length){
@@ -7360,11 +7501,32 @@ setInterval(()=>{
   }
   // When err.redirector's window lapses, the 404 gimmick kicks back in — refresh any views
   // showing rarity numbers so they re-garble immediately rather than on the next roll.
-  const nowActive = isErrRedirectorActive();
-  if(nowActive !== wasErrRedirectorActive){
-    wasErrRedirectorActive = nowActive;
+  const nowErrRedirectorActive = isErrRedirectorActive();
+  if(nowErrRedirectorActive !== wasErrRedirectorActive){
+    wasErrRedirectorActive = nowErrRedirectorActive;
     renderInventory();
   }
+  if(state.errRedirectorUntil && state.errRedirectorUntil <= now){
+    state.errRedirectorUntil = null;
+    dbSaveMeta();
+  }
+
+  const nowDoublinatorActive = isDoublinatorActive();
+  if(nowDoublinatorActive !== wasDoublinatorActive){
+    wasDoublinatorActive = nowDoublinatorActive;
+    renderAxeStrip();
+    updateStatStrip();
+  }
+  let doublinatorStateChanged = false;
+  if(state.doublinatorUntil && state.doublinatorUntil <= now){
+    state.doublinatorUntil = null;
+    doublinatorStateChanged = true;
+  }
+  if(state.doublinatorCooldownUntil && state.doublinatorCooldownUntil <= now){
+    state.doublinatorCooldownUntil = null;
+    doublinatorStateChanged = true;
+  }
+  if(doublinatorStateChanged) dbSaveMeta();
 }, 1000);
 document.addEventListener('visibilitychange', async ()=>{
   if(document.visibilityState === 'hidden'){
