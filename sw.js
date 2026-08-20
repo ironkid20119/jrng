@@ -15,7 +15,7 @@
    whether the page's own HTML/CSS/JS can load without a network connection.
    ============================================================ */
 
-const CACHE_VERSION = 'junis-rng-shell-v8';
+const CACHE_VERSION = 'junis-rng-shell-v9';
 const APP_SHELL = [
   './',
   './index.html',

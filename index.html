@@ -6441,24 +6441,21 @@ initMobileAutoRollUI();
 function createWorkerBlob() {
   const workerCode = `
     self.onmessage = function(e) {
-      const { rollsToRun, pool, luckMult, variantChain, TIERS } = e.data;
+      const { rollsToRun, pool, luckMult, maxRollChance, variantChain, TIERS } = e.data;
       const counts = {};
       let bestFind = null;
 
-      // Find highest guaranteed item for skipped checks
+      // The main thread dispatches at most 200,000 rolls per message. A worker completes its
+      // assigned full batch, returns the exact results, then waits for the main thread to yield
+      // five frames before it can receive another batch.
       let highestGuaranteedRng = 0;
       for (const item of pool) {
         if (item.rng !== Infinity) {
           const effectiveChance = luckMult / item.rng;
-          if (effectiveChance >= 1) {
-            if (item.rng > highestGuaranteedRng) {
-              highestGuaranteedRng = item.rng;
-            }
-          }
+          if (effectiveChance >= 1 && item.rng > highestGuaranteedRng) highestGuaranteedRng = item.rng;
         }
       }
 
-      // Simulation loop
       for (let i = 0; i < rollsToRun; i++) {
         let normalWinner = null;
         let bypassedWinner = null;
@@ -6471,38 +6468,23 @@ function createWorkerBlob() {
             continue;
           }
 
-          const isSkipped = item.rng < highestGuaranteedRng;
-          if (isSkipped) {
+          if (item.rng < highestGuaranteedRng) {
             if (Math.random() < 0.2) {
-              if (!bypassedWinner || item.rng > bypassedWinner.rng) {
-                bypassedWinner = item;
-              }
+              if (!bypassedWinner || item.rng > bypassedWinner.rng) bypassedWinner = item;
             }
-          } else {
-            const effectiveChance = luckMult / item.rng;
-            if (Math.random() < effectiveChance) {
-              if (!normalWinner || item.rng > normalWinner.rng) {
-                normalWinner = item;
-              }
-            }
+          } else if (Math.random() < Math.min(luckMult / item.rng, maxRollChance)) {
+            if (!normalWinner || item.rng > normalWinner.rng) normalWinner = item;
           }
         }
 
         let winner = normalWinner;
-        if (bypassedWinner) {
-          if (!winner || winner.rng <= highestGuaranteedRng) {
-            winner = bypassedWinner;
-          }
-        }
-        if (!winner) {
-          winner = pool[0];
-        }
+        if (bypassedWinner && (!winner || winner.rng <= highestGuaranteedRng)) winner = bypassedWinner;
+        if (!winner) winner = pool[0];
 
-        // Roll variant
         let variant = null;
         let totalMult = 1;
         for (const v of variantChain) {
-          if (Math.random() < 1/v.rng) {
+          if (Math.random() < 1 / v.rng) {
             variant = v;
             totalMult *= v.mult;
           } else {
@@ -6511,50 +6493,29 @@ function createWorkerBlob() {
         }
 
         const finalRng = variant ? winner.rng * totalMult : winner.rng;
-        
         let tier = null;
         for (const t of TIERS) {
-          if (finalRng > t.min && finalRng <= t.max) {
-            tier = t;
-            break;
-          }
+          if (finalRng > t.min && finalRng <= t.max) { tier = t; break; }
         }
-        if (!tier) {
-          tier = finalRng <= 1 ? TIERS[0] : TIERS[TIERS.length - 1];
-        }
+        if (!tier) tier = finalRng <= 1 ? TIERS[0] : TIERS[TIERS.length - 1];
 
-        // Note: winner.rng here may be a temporarily debuffed/injected value (e.g. the "All"
-        // area's x200 debuff, or Reach-injected cross-area items). We carry winner.injectedAreaLabel
-        // through so the main thread can resolve true rng/true home area after merging, the same
-        // way rollOnceForArea already does for manual rolls — never trust rng/area from inside
-        // the worker as final truth.
         const key = winner.name + '|' + (variant ? variant.key : 'none') + '|' + (winner.injectedAreaLabel || '');
         if (!counts[key]) {
           counts[key] = {
             name: winner.name,
             baseRng: winner.rng,
-            finalRng: finalRng,
-            tier: tier,
+            finalRng,
+            tier,
             variant: variant ? { key: variant.key, label: variant.label, cls: variant.cls, totalMult } : null,
             injectedAreaLabel: winner.injectedAreaLabel || null,
             count: 0
           };
         }
         counts[key].count++;
-
-        if (!bestFind || finalRng > bestFind.finalRng) {
-          bestFind = counts[key];
-        }
+        if (!bestFind || finalRng > bestFind.finalRng) bestFind = counts[key];
       }
 
-      // NOTE: Offline bonus triggers (e.g. Dark Axe surges, Emblem's 7 Leaf Clover) are
-      // intentionally NOT simulated here. Splitting elapsed time across N parallel workers and
-      // computing Math.floor(seconds / intervalSeconds) independently per chunk silently drops
-      // triggers whenever a chunk's slice is shorter than the bonus interval (e.g. a 7-minute
-      // interval over 42 minutes split into 10 workers gives each worker only ~4.2 minutes,
-      // which floors to zero triggers per chunk — losing all 6 real triggers). Bonus triggers are
-      // computed once on the main thread against the true total elapsed time instead.
-      self.postMessage({ counts, bestFind });
+      self.postMessage({ counts, bestFind, rollsCompleted: rollsToRun });
     };
   `;
   return new Blob([workerCode], { type: 'application/javascript' });
@@ -6684,25 +6645,47 @@ function simulateOfflineBonusRules(offlineBonus, seconds, pool, variantChain, TI
   return { counts, bestFind, bonusRollsFired, bonusTriggers };
 }
 
-// Scales a simulated distribution to a target roll count without losing or inventing any rolls.
-// Largest-remainder allocation preserves the exact total even when sampled counts are extrapolated.
+// Preserves an exact total when the browser cannot start workers and must use the bounded
+// synchronous fallback. The normal worker path below never samples or scales base offline rolls.
 function scaleCountsToExactTotal(counts, targetTotal){
   const entries = Object.values(counts);
   if(targetTotal <= 0 || entries.length === 0) return;
-  const sourceTotal = entries.reduce((sum, entry)=> sum + entry.count, 0);
+  const sourceTotal = entries.reduce((sum, entry) => sum + entry.count, 0);
   if(sourceTotal <= 0) return;
 
   const factor = targetTotal / sourceTotal;
   let allocated = 0;
-  const remainders = entries.map((entry, index)=>{
+  const remainders = entries.map((entry, index) => {
     const scaled = entry.count * factor;
-    const floor = Math.floor(scaled);
-    entry.count = floor;
-    allocated += floor;
-    return { entry, index, remainder:scaled - floor };
+    entry.count = Math.floor(scaled);
+    allocated += entry.count;
+    return { entry, index, remainder: scaled - entry.count };
   });
-  remainders.sort((a,b)=> b.remainder - a.remainder || a.index - b.index);
+  remainders.sort((a, b) => b.remainder - a.remainder || a.index - b.index);
   for(let i = 0; i < targetTotal - allocated; i++) remainders[i % remainders.length].entry.count++;
+}
+
+// Runs EVERY computed offline base roll. Work is divided among up to ten persistent workers;
+// each worker receives a maximum 200,000-roll batch and is only dispatched another batch after
+// the main thread yields five animation frames, keeping the interface responsive without sampling.
+const OFFLINE_WORKER_COUNT = 10;
+const OFFLINE_ROLL_BATCH_SIZE = 200000;
+const OFFLINE_BATCH_YIELD_FRAMES = 5;
+
+function waitForAnimationFrames(frameCount){
+  return new Promise(resolve => {
+    if(typeof requestAnimationFrame !== 'function'){
+      setTimeout(resolve, frameCount * 16);
+      return;
+    }
+    let framesLeft = frameCount;
+    function nextFrame(){
+      framesLeft--;
+      if(framesLeft <= 0) resolve();
+      else requestAnimationFrame(nextFrame);
+    }
+    requestAnimationFrame(nextFrame);
+  });
 }
 
 async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult, offlineBonus) {
@@ -6713,19 +6696,15 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
 
     simModal.style.display = 'flex';
     progressBar.style.width = '0%';
-    progressText.textContent = `initializing simulation setup...`;
+    progressText.textContent = `initializing 10-worker full offline simulation...`;
 
-    const MAX_SIM_WORKERS = 10;
-    const SIMULATION_CEILING = 2000000;
-    const actualSimTotal = Math.min(totalRolls, SIMULATION_CEILING);
-    // Use no more workers than actual rolls, then distribute the remainder one-by-one. The prior
-    // floor(total/10) scheme silently discarded any remainder (and every roll when total < 10).
-    const numWorkers = Math.max(1, Math.min(MAX_SIM_WORKERS, actualSimTotal || 1));
-    const baseRollsPerWorker = Math.floor(actualSimTotal / numWorkers);
-    const workerRemainder = actualSimTotal % numWorkers;
-
-    let workersFinished = 0;
-    let sampledRollsFinished = 0;
+    const workerCount = totalRolls > 0 ? Math.min(OFFLINE_WORKER_COUNT, totalRolls) : 0;
+    const currentArea = WORLDS[state.worldIdx].areas[state.areaIdx];
+    const maxRollChance = currentArea.isUniversalPool ? (1/3) : 1;
+    let undispatchedRolls = totalRolls;
+    let completedRolls = 0;
+    let finishedWorkers = 0;
+    let settled = false;
     const accumulatedCounts = {};
     let absoluteBest = null;
 
@@ -6733,124 +6712,147 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
     const workerUrl = URL.createObjectURL(workerBlob);
     const workers = [];
 
-    function cleanup() {
-      workers.forEach(w => w.terminate());
+    function cleanup(){
+      workers.forEach(worker => worker.terminate());
       URL.revokeObjectURL(workerUrl);
       simModal.style.display = 'none';
     }
 
-    for (let i = 0; i < numWorkers; i++) {
-      const workerRolls = baseRollsPerWorker + (i < workerRemainder ? 1 : 0);
+    function mergeBatch(counts, bestFind){
+      for(const key in counts){
+        if(!accumulatedCounts[key]) accumulatedCounts[key] = { ...counts[key], count:0 };
+        accumulatedCounts[key].count += counts[key].count;
+      }
+      if(bestFind && (!absoluteBest || bestFind.finalRng > absoluteBest.finalRng)) absoluteBest = { ...bestFind };
+    }
+
+    function updateProgress(){
+      const pct = totalRolls > 0 ? Math.round((completedRolls / totalRolls) * 100) : 100;
+      progressBar.style.width = `${pct}%`;
+      progressText.textContent = `running 10 workers: ${completedRolls.toLocaleString()} / ${totalRolls.toLocaleString()} full offline rolls completed`;
+    }
+
+    function finalize(){
+      if(settled) return;
+      settled = true;
+      cleanup();
+
+      // Offline bonus triggers are still calculated once against the real elapsed duration, so
+      // interval bonuses are never lost to the base-roll batch boundaries.
+      const bonusResult = simulateOfflineBonusRules(offlineBonus, elapsedSeconds, pool, VARIANT_CHAIN, TIERS);
+      for(const key in bonusResult.counts){
+        if(!accumulatedCounts[key]) accumulatedCounts[key] = { ...bonusResult.counts[key], count:0 };
+        accumulatedCounts[key].count += bonusResult.counts[key].count;
+      }
+      if(bonusResult.bestFind && (!absoluteBest || bonusResult.bestFind.finalRng > absoluteBest.finalRng)) {
+        absoluteBest = { ...bonusResult.bestFind };
+      }
+
+      // Resolve every offline result back to its actual rarity and home area. Pool debuffs and
+      // cross-area injections influence odds only, never the item recorded in inventory.
+      const resolvedCounts = {};
+      for(const key in accumulatedCounts){
+        const entry = accumulatedCounts[key];
+        const trueAreaLabel = entry.injectedAreaLabel || WORLDS[state.worldIdx].areas[state.areaIdx].label;
+        const trueRng = findRankRng(trueAreaLabel, entry.name);
+        const resolvedBaseRng = trueRng != null ? trueRng : entry.baseRng;
+        const resolvedFinalRng = entry.variant ? resolvedBaseRng * entry.variant.totalMult : resolvedBaseRng;
+        const resolvedKey = invKey(trueAreaLabel, entry.name, entry.variant ? entry.variant.key : null);
+        if(!resolvedCounts[resolvedKey]){
+          resolvedCounts[resolvedKey] = {
+            name: entry.name, baseRng: resolvedBaseRng, finalRng: resolvedFinalRng,
+            tier: tierFor(resolvedFinalRng), variant: entry.variant, areaLabel: trueAreaLabel, count:0
+          };
+        }
+        resolvedCounts[resolvedKey].count += entry.count;
+      }
+
+      let resolvedBest = null;
+      if(absoluteBest){
+        const bfTrueArea = absoluteBest.injectedAreaLabel || WORLDS[state.worldIdx].areas[state.areaIdx].label;
+        const bfTrueRng = findRankRng(bfTrueArea, absoluteBest.name);
+        const bfBaseRng = bfTrueRng != null ? bfTrueRng : absoluteBest.baseRng;
+        const bfFinalRng = absoluteBest.variant ? bfBaseRng * absoluteBest.variant.totalMult : bfBaseRng;
+        resolvedBest = {
+          name: absoluteBest.name, baseRng: bfBaseRng, finalRng: bfFinalRng,
+          tier: tierFor(bfFinalRng), variant: absoluteBest.variant, areaLabel: bfTrueArea
+        };
+      }
+
+      resolve({
+        counts: resolvedCounts,
+        bestFind: resolvedBest,
+        bonusRollsFired: bonusResult.bonusRollsFired,
+        bonusTriggers: bonusResult.bonusTriggers
+      });
+    }
+
+    function fail(err){
+      if(settled) return;
+      settled = true;
+      cleanup();
+      reject(err);
+    }
+
+    function finishWorker(worker){
+      if(worker._finished) return;
+      worker._finished = true;
+      finishedWorkers++;
+      if(finishedWorkers === workerCount) finalize();
+    }
+
+    function dispatchNextBatch(worker){
+      if(settled || worker._finished) return;
+      if(undispatchedRolls <= 0){
+        finishWorker(worker);
+        return;
+      }
+      const batchRolls = Math.min(OFFLINE_ROLL_BATCH_SIZE, undispatchedRolls);
+      undispatchedRolls -= batchRolls;
+      worker._batchInFlight = batchRolls;
+      worker.postMessage({
+        rollsToRun: batchRolls,
+        pool,
+        luckMult,
+        maxRollChance,
+        variantChain: VARIANT_CHAIN,
+        TIERS
+      });
+    }
+
+    if(workerCount === 0){
+      updateProgress();
+      finalize();
+      return;
+    }
+
+    for(let i = 0; i < workerCount; i++){
       let worker;
       try {
         worker = new Worker(workerUrl);
-      } catch (e) {
-        console.error('Failed to create Web Worker:', e);
-        cleanup();
-        reject(new Error('Web Workers blocked or not supported'));
+      } catch(err) {
+        fail(new Error('Web Workers blocked or not supported'));
         return;
       }
-
       workers.push(worker);
-
-      worker.onmessage = function(event) {
-        const { counts, bestFind } = event.data;
-
-        // Merge item findings (raw, still possibly debuffed/injected — resolved to truth below)
-        for (const key in counts) {
-          if (!accumulatedCounts[key]) {
-            accumulatedCounts[key] = { ...counts[key], count: 0 };
-          }
-          accumulatedCounts[key].count += counts[key].count;
-        }
-
-        if (bestFind && (!absoluteBest || bestFind.finalRng > absoluteBest.finalRng)) {
-          absoluteBest = { ...bestFind };
-        }
-
-        workersFinished++;
-        sampledRollsFinished += workerRolls;
-        const pct = Math.round((workersFinished / numWorkers) * 100);
-        progressBar.style.width = `${pct}%`;
-        progressText.textContent = totalRolls > actualSimTotal
-          ? `sampling ${sampledRollsFinished.toLocaleString()} / ${actualSimTotal.toLocaleString()} rolls to resolve ${totalRolls.toLocaleString()} offline rolls`
-          : `running threads: ${sampledRollsFinished.toLocaleString()} / ${totalRolls.toLocaleString()} offline rolls completed`;
-
-        if (workersFinished === numWorkers) {
-          cleanup();
-
-          // Extrapolation must conserve the exact requested total, not independently round every
-          // item bucket (which can make offline inventory gains appear to vanish or drift).
-          scaleCountsToExactTotal(accumulatedCounts, totalRolls);
-
-          // Bonus triggers are computed once here, against the TRUE total elapsed time —
-          // never split across workers, so no interval ever gets fragmented into zero-trigger chunks.
-          const bonusResult = simulateOfflineBonusRules(offlineBonus, elapsedSeconds, pool, VARIANT_CHAIN, TIERS);
-          for (const key in bonusResult.counts) {
-            if (!accumulatedCounts[key]) {
-              accumulatedCounts[key] = { ...bonusResult.counts[key], count: 0 };
-            }
-            accumulatedCounts[key].count += bonusResult.counts[key].count;
-          }
-          if (bonusResult.bestFind && (!absoluteBest || bonusResult.bestFind.finalRng > absoluteBest.finalRng)) {
-            absoluteBest = { ...bonusResult.bestFind };
-          }
-
-          // Resolve every accumulated result back to its TRUE rng and TRUE home area, exactly
-          // like rollOnceForArea does for manual rolls. Debuffs/injections (All's x200, Reach,
-          // Gloves) only ever affect ODDS during simulation — never what's actually recorded.
-          const resolvedCounts = {};
-          for (const key in accumulatedCounts) {
-            const entry = accumulatedCounts[key];
-            const trueAreaLabel = entry.injectedAreaLabel || WORLDS[state.worldIdx].areas[state.areaIdx].label;
-            const trueRng = findRankRng(trueAreaLabel, entry.name);
-            const resolvedBaseRng = trueRng != null ? trueRng : entry.baseRng;
-            const resolvedFinalRng = entry.variant ? resolvedBaseRng * entry.variant.totalMult : resolvedBaseRng;
-            const resolvedTier = tierFor(resolvedFinalRng);
-            const resolvedKey = invKey(trueAreaLabel, entry.name, entry.variant ? entry.variant.key : null);
-            if(!resolvedCounts[resolvedKey]){
-              resolvedCounts[resolvedKey] = {
-                name: entry.name, baseRng: resolvedBaseRng, finalRng: resolvedFinalRng,
-                tier: resolvedTier, variant: entry.variant, areaLabel: trueAreaLabel, count: 0
-              };
-            }
-            resolvedCounts[resolvedKey].count += entry.count;
-          }
-
-          let resolvedBest = null;
-          if(absoluteBest){
-            const bfTrueArea = absoluteBest.injectedAreaLabel || WORLDS[state.worldIdx].areas[state.areaIdx].label;
-            const bfTrueRng = findRankRng(bfTrueArea, absoluteBest.name);
-            const bfBaseRng = bfTrueRng != null ? bfTrueRng : absoluteBest.baseRng;
-            const bfFinalRng = absoluteBest.variant ? bfBaseRng * absoluteBest.variant.totalMult : bfBaseRng;
-            resolvedBest = {
-              name: absoluteBest.name, baseRng: bfBaseRng, finalRng: bfFinalRng,
-              tier: tierFor(bfFinalRng), variant: absoluteBest.variant, areaLabel: bfTrueArea
-            };
-          }
-
-          resolve({
-            counts: resolvedCounts,
-            bestFind: resolvedBest,
-            bonusRollsFired: bonusResult.bonusRollsFired,
-            bonusTriggers: bonusResult.bonusTriggers
-          });
+      worker._finished = false;
+      worker._batchInFlight = 0;
+      worker.onmessage = event => {
+        const { counts, bestFind, rollsCompleted } = event.data;
+        mergeBatch(counts, bestFind);
+        completedRolls += rollsCompleted;
+        updateProgress();
+        if(undispatchedRolls <= 0){
+          finishWorker(worker);
+        } else {
+          waitForAnimationFrames(OFFLINE_BATCH_YIELD_FRAMES).then(() => dispatchNextBatch(worker));
         }
       };
-
-      worker.onerror = function(err) {
-        console.error('Worker run error:', err);
-        cleanup();
-        reject(err);
+      worker.onerror = err => {
+        console.error('Offline worker error:', err);
+        fail(err);
       };
-
-      worker.postMessage({
-        rollsToRun: workerRolls,
-        pool: pool,
-        luckMult: luckMult,
-        variantChain: VARIANT_CHAIN,
-        TIERS: TIERS
-      });
+      dispatchNextBatch(worker);
     }
   });
 }
