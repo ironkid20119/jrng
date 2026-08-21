@@ -944,13 +944,23 @@
           <option value="equips">🛡️ Equippables</option>
         </select>
       </div>
+      <div id="consumableBulkCraftControls" style="display:none; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 12px;">
+        <span class="stat">Bulk craft:</span>
+        <select id="consumableCraftAmount" aria-label="Consumable craft quantity">
+          <option value="1">1</option>
+          <option value="5">5</option>
+          <option value="25">25</option>
+          <option value="custom">n (custom)</option>
+        </select>
+        <input id="consumableCraftCustomAmount" type="number" min="1" max="1000000" step="1" inputmode="numeric" placeholder="n" aria-label="Custom consumable craft quantity" style="display:none; width:92px;" />
+      </div>
       <div class="item-cards" id="itemCards"></div>
       <div class="item-cards" id="consumableCards" style="display:none;"></div>
       <div class="item-cards" id="equipCards" style="display:none;"></div>
     </div>
   </div>
 
-  <footer class="foot">junis rng game · world 1 · v1 alpha</footer>
+  <footer class="foot">junis rng game · world 1 · v1</footer>
 </div>
 
 <nav class="bottom-nav">
@@ -2489,11 +2499,16 @@ function boiConsumableLuckMult(){
   return 1 + boiConsumableUses() * 0.1;
 }
 
-function consumableRequirements(key){
+function consumableRequirements(key, quantity=1){
   const item = CONSUMABLES[key];
   if(!item) return [];
-  const recipeMult = item.scalesRecipePerUse ? (1 + boiConsumableUses()) : 1;
-  return item.requires.map(req => ({ ...req, amount:req.amount * recipeMult }));
+  const craftQuantity = Math.max(1, Math.floor(Number(quantity) || 1));
+  // Boi Consumable becomes one multiplier step more expensive after every craft. For a bulk
+  // craft, sum each step (m, m+1, ...), rather than incorrectly applying only the first step.
+  const totalMultiplier = item.scalesRecipePerUse
+    ? craftQuantity * (1 + boiConsumableUses()) + (craftQuantity * (craftQuantity - 1)) / 2
+    : craftQuantity;
+  return item.requires.map(req => ({ ...req, amount:req.amount * totalMultiplier }));
 }
 
 const MAX_OFFLINE_SECONDS = 7 * 24 * 60 * 60; // 7 day cap
@@ -4785,17 +4800,45 @@ function setupInventoryModeToggles(){
 
 // Toggles which card list (Axes, Consumables, or Equippables) is visible in the Items view — a
 // single shared dropdown for the whole view, rather than several always-visible stacked lists.
+function getConsumableCraftAmount(){
+  const choice = document.getElementById('consumableCraftAmount');
+  const custom = document.getElementById('consumableCraftCustomAmount');
+  const raw = choice && choice.value === 'custom' ? (custom ? custom.value : 1) : (choice ? choice.value : 1);
+  const parsed = Math.floor(Number(raw));
+  return Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 1000000)) : 1;
+}
+
+function setupConsumableBulkCraftControls(){
+  const choice = document.getElementById('consumableCraftAmount');
+  const custom = document.getElementById('consumableCraftCustomAmount');
+  if(!choice || !custom || choice.dataset.ready) return;
+  choice.dataset.ready = '1';
+  const updateChoice = ()=>{
+    custom.style.display = choice.value === 'custom' ? '' : 'none';
+    renderConsumableCards();
+  };
+  choice.addEventListener('change', updateChoice);
+  custom.addEventListener('input', ()=>{
+    if(choice.value === 'custom') renderConsumableCards();
+  });
+}
+
 function setupItemCategorySelect(){
   const sel = document.getElementById('itemCategorySelect');
-  if(!sel) return;
-  sel.addEventListener('change', ()=>{
+  if(!sel || sel.dataset.ready) return;
+  sel.dataset.ready = '1';
+  const updateCategory = ()=>{
     const axesEl = document.getElementById('itemCards');
     const consumablesEl = document.getElementById('consumableCards');
     const equipsEl = document.getElementById('equipCards');
+    const bulkControls = document.getElementById('consumableBulkCraftControls');
     axesEl.style.display = sel.value === 'axes' ? '' : 'none';
     consumablesEl.style.display = sel.value === 'consumables' ? '' : 'none';
     equipsEl.style.display = sel.value === 'equips' ? '' : 'none';
-  });
+    if(bulkControls) bulkControls.style.display = sel.value === 'consumables' ? 'flex' : 'none';
+  };
+  sel.addEventListener('change', updateCategory);
+  updateCategory();
 }
 
 /* ============================================================
@@ -5335,6 +5378,12 @@ function unequipItem(){
 function renderConsumableCards(){
   const el = document.getElementById('consumableCards');
   if(!el) return;
+
+  // Timed consumables refresh this panel every second. Preserve every open nested dropdown before
+  // rebuilding the cards, then restore it below so a countdown never kicks the player out of a recipe.
+  const openSubAccordions = new Set(
+    [...el.querySelectorAll('.sub-acc-item.open[data-sub-acc]')].map(item => item.dataset.subAcc)
+  );
   const now = Date.now();
 
   el.innerHTML = CONSUMABLE_ORDER.map(key=>{
@@ -5342,7 +5391,8 @@ function renderConsumableCards(){
     const count = getConsumableCount(key);
     const isPinned = state.pinnedRecipe && state.pinnedRecipe.kind === 'consumable' && state.pinnedRecipe.key === key;
 
-    const requirements = consumableRequirements(key);
+    const craftAmount = getConsumableCraftAmount();
+    const requirements = consumableRequirements(key, craftAmount);
     let canCraft = true;
     const reqHtml = requirements.map(req=>{
       const have = getReqOwnedCount(req);
@@ -5442,14 +5492,14 @@ function renderConsumableCards(){
       const useDisabled = count <= 0 || atCap;
       const useTitle = count <= 0 ? 'None owned' : atCap ? 'Already at max stacks' : '';
       actionHtml = `
-        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft</button>
+        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft ×${craftAmount.toLocaleString()}</button>
         <button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>
       `;
     } else if(key === 'errredirector'){
       const useDisabled = count <= 0;
       const useTitle = count <= 0 ? 'None owned' : (isErrRedirectorActive() ? 'Extends the current 12h window' : '');
       actionHtml = `
-        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft</button>
+        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft ×${craftAmount.toLocaleString()}</button>
         <button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>
       `;
     } else if(key === 'doublinator'){
@@ -5458,7 +5508,7 @@ function renderConsumableCards(){
       const useDisabled = count <= 0 || active || cooling;
       const useTitle = count <= 0 ? 'None owned' : active ? 'Already active' : cooling ? 'Cooling down' : '';
       actionHtml = `
-        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft</button>
+        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft ×${craftAmount.toLocaleString()}</button>
         <button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>
       `;
     } else {
@@ -5467,7 +5517,7 @@ function renderConsumableCards(){
       const useDisabled = count <= 0 || batchInProgress || (needsPinnedRecipe && !state.pinnedRecipe);
       const useTitle = batchInProgress ? 'Roll batch in progress' : (needsPinnedRecipe && !state.pinnedRecipe ? 'Pin a recipe first' : (count <= 0 ? 'None owned' : ''));
       actionHtml = `
-        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft</button>
+        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft ×${craftAmount.toLocaleString()}</button>
         ${key !== 'bomb' || !state.bombCharge
           ? `<button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>`
           : ''}
@@ -5484,7 +5534,7 @@ function renderConsumableCards(){
 
     const recipeSub = `
       <div class="sub-acc-item" data-sub-acc="recipe-${key}">
-        <div class="sub-acc-head"><span>📋 Recipe${canCraft ? ' <span class="ready-tag">ready</span>' : ''}</span><span class="chev">▾</span></div>
+        <div class="sub-acc-head"><span>📋 Recipe ×${craftAmount.toLocaleString()}${canCraft ? ' <span class="ready-tag">ready</span>' : ''}</span><span class="chev">▾</span></div>
         <div class="sub-acc-body"><div class="req-list">${reqHtml}</div></div>
       </div>`;
 
@@ -5502,15 +5552,16 @@ function renderConsumableCards(){
         <div style="text-align:right; margin-top:10px;">${pinBtn}${actionHtml}</div>
       </div>
     `;
-  }).join('');
-
+    }).join('');
   setupSubAccordions(el);
-
+  el.querySelectorAll('.sub-acc-item[data-sub-acc]').forEach(item=>{
+    if(openSubAccordions.has(item.dataset.subAcc)) item.classList.add('open');
+  });
   el.querySelectorAll('[data-craft-consumable]').forEach(btn=>{
-    btn.addEventListener('click', (e)=>{ e.stopPropagation(); craftConsumable(btn.dataset.craftConsumable); });
+    btn.addEventListener('click', (e)=>{ e.stopPropagation(); craftConsumable(btn.dataset.craftConsumable, getConsumableCraftAmount()); });
   });
   el.querySelectorAll('[data-use-consumable]').forEach(btn=>{
-    btn.addEventListener('click', (e)=>{ e.stopPropagation(); useConsumable(btn.dataset.useConsumable); });
+    setupConsumableUseHold(btn);
   });
   el.querySelectorAll('[data-trigger-bomb]').forEach(btn=>{
     btn.addEventListener('click', (e)=>{ e.stopPropagation(); triggerBomb(); });
@@ -5593,12 +5644,13 @@ function irritationMultiplier(axe, idleSeconds){
   return 1 + (axe.irritation.perDayPct / 100) * fullDaysIdle;
 }
 
-function craftConsumable(key){
+function craftConsumable(key, quantity=1){
   const item = CONSUMABLES[key];
-  if(!item) return;
-  const requirements = consumableRequirements(key);
+  if(!item) return false;
+  const craftQuantity = Math.max(1, Math.min(Math.floor(Number(quantity) || 1), 1000000));
+  const requirements = consumableRequirements(key, craftQuantity);
   for(const req of requirements){
-    if(getReqOwnedCount(req) < req.amount) return;
+    if(getReqOwnedCount(req) < req.amount) return false;
   }
   for(const req of requirements){
     if(req.consumable){
@@ -5610,30 +5662,119 @@ function craftConsumable(key){
     }
   }
   if(!state.consumables) state.consumables = {};
-  state.consumables[key] = (state.consumables[key] || 0) + 1;
+  state.consumables[key] = (state.consumables[key] || 0) + craftQuantity;
   dbSaveMeta();
   renderConsumableCards();
   renderInventory();
+  return true;
 }
 
-function useConsumable(key){
+const CONSUMABLE_HOLD_DELAY_MS = 1500;
+const CONSUMABLE_HOLD_INTERVAL_MS = 25;
+let activeConsumableUseHold = null;
+let consumableUseHoldDocumentBound = false;
+
+function useConsumableMany(key, quantity){
+  const requested = Math.max(1, Math.floor(Number(quantity) || 1));
+  let used = 0;
+  for(let i=0; i<requested; i++){
+    const before = getConsumableCount(key);
+    if(before <= 0 || !useConsumable(key, { silent:true })) break;
+    if(getConsumableCount(key) >= before) break;
+    used++;
+  }
+  if(used > 0){
+    dbSaveMeta();
+    renderConsumableCards();
+    renderInventory();
+    renderAxeStrip();
+    updateStatStrip();
+  }
+  return used;
+}
+
+function clearConsumableUseHold(cancelled=false){
+  const hold = activeConsumableUseHold;
+  if(!hold) return;
+  if(hold.delayTimer) clearTimeout(hold.delayTimer);
+  if(hold.repeatTimer) clearInterval(hold.repeatTimer);
+  activeConsumableUseHold = null;
+  if(!cancelled && !hold.repeating) useConsumable(hold.key);
+}
+
+function startConsumableUseHold(key){
   if(getConsumableCount(key) <= 0) return;
+  clearConsumableUseHold(true);
+  const hold = {
+    key,
+    startingOwned: getConsumableCount(key),
+    repeating:false,
+    delayTimer:null,
+    repeatTimer:null,
+  };
+  activeConsumableUseHold = hold;
+  hold.delayTimer = setTimeout(()=>{
+    if(activeConsumableUseHold !== hold) return;
+    hold.repeating = true;
+    const perTick = Math.max(1, Math.floor(hold.startingOwned * 0.01));
+    const useHeldBatch = ()=>{
+      if(activeConsumableUseHold !== hold) return;
+      if(useConsumableMany(hold.key, perTick) <= 0) clearConsumableUseHold(true);
+    };
+    useHeldBatch();
+    if(activeConsumableUseHold === hold){
+      hold.repeatTimer = setInterval(useHeldBatch, CONSUMABLE_HOLD_INTERVAL_MS);
+    }
+  }, CONSUMABLE_HOLD_DELAY_MS);
+}
+
+function setupConsumableUseHold(button){
+  if(button.dataset.holdReady) return;
+  button.dataset.holdReady = '1';
+  button.style.touchAction = 'manipulation';
+  button.addEventListener('pointerdown', event=>{
+    if(event.button != null && event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    startConsumableUseHold(button.dataset.useConsumable);
+  });
+  button.addEventListener('click', event=>{
+    // Pointer use is completed by the document-level pointerup listener below. Keep keyboard
+    // activation accessible, while preventing the browser click from double-using an item.
+    if(event.detail === 0){
+      event.preventDefault();
+      useConsumable(button.dataset.useConsumable);
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  if(!consumableUseHoldDocumentBound){
+    consumableUseHoldDocumentBound = true;
+    document.addEventListener('pointerup', ()=> clearConsumableUseHold(false));
+    document.addEventListener('pointercancel', ()=> clearConsumableUseHold(true));
+  }
+}
+
+function useConsumable(key, options={}){
+  const silent = !!options.silent;
+  const refreshCards = ()=>{ if(!silent) renderConsumableCards(); };
+  const refreshInventory = ()=>{ if(!silent) renderInventory(); };
+  const refreshStats = ()=>{ if(!silent){ renderAxeStrip(); updateStatStrip(); } };
+  const deny = msg=>{ if(!silent && msg) alertUser(msg); return false; };
+  if(getConsumableCount(key) <= 0) return false;
 
   if(key === 'watergun'){
     if(!state.wgunStacks) state.wgunStacks = [];
     const now = Date.now();
     state.wgunStacks = state.wgunStacks.filter(s => s.expiresAt > now);
     if(state.wgunStacks.length >= CONSUMABLES.watergun.maxStacks){
-      alertUser('Already at max watergun stacks (×3)! Wait for one to expire first.');
-      return;
+      return deny('Already at max watergun stacks (×3)! Wait for one to expire first.');
     }
     state.consumables.watergun--;
     state.wgunStacks.push({ expiresAt: now + CONSUMABLES.watergun.durationSeconds * 1000 });
-    dbSaveMeta();
-    renderConsumableCards();
-    renderAxeStrip();
-    updateStatStrip();
-    return;
+    dbSaveMeta(); refreshCards(); refreshStats();
+    return true;
   }
 
   if(key === 'errredirector'){
@@ -5641,93 +5782,66 @@ function useConsumable(key){
     const now = Date.now();
     const base = isErrRedirectorActive() ? state.errRedirectorUntil : now;
     state.errRedirectorUntil = base + CONSUMABLES.errredirector.durationSeconds * 1000;
-    dbSaveMeta();
-    renderConsumableCards();
-    renderInventory();
-    return;
+    dbSaveMeta(); refreshCards(); refreshInventory();
+    return true;
   }
 
   if(key === 'doublinator'){
     const now = Date.now();
-    if(isDoublinatorActive()){
-      alertUser('Doublinator is already active. Only one can be active at a time.');
-      return;
-    }
-    if(isDoublinatorCoolingDown()){
-      alertUser(`Doublinator is cooling down for ${fmtDuration(Math.ceil((state.doublinatorCooldownUntil - now) / 1000))}.`);
-      return;
-    }
+    if(isDoublinatorActive()) return deny('Doublinator is already active. Only one can be active at a time.');
+    if(isDoublinatorCoolingDown()) return deny(`Doublinator is cooling down for ${fmtDuration(Math.ceil((state.doublinatorCooldownUntil - now) / 1000))}.`);
     state.consumables.doublinator--;
     state.doublinatorUntil = now + CONSUMABLES.doublinator.durationSeconds * 1000;
     state.doublinatorCooldownUntil = state.doublinatorUntil + CONSUMABLES.doublinator.cooldownSeconds * 1000;
-    dbSaveMeta();
-    renderConsumableCards();
-    renderAxeStrip();
-    updateStatStrip();
-    return;
+    dbSaveMeta(); refreshCards(); refreshStats();
+    return true;
   }
 
   if(key === 'boiconsumable'){
     state.consumables.boiconsumable--;
     state.boiConsumableUses = boiConsumableUses() + 1;
-    dbSaveMeta();
-    renderConsumableCards();
-    renderAxeStrip();
-    updateStatStrip();
-    return;
+    dbSaveMeta(); refreshCards(); refreshStats();
+    return true;
   }
 
   if(CONSUMABLES[key] && CONSUMABLES[key].instantRollBatch){
+    if(silent) return false;
     triggerInstantConsumableBatch(key);
-    return;
+    return true;
   }
 
   if(key === 'nullbomb'){
-    if(state.nullBombCharge){
-      alertUser('null_bomb is already charging — only one can charge at a time.');
-      return;
-    }
+    if(state.nullBombCharge) return deny('null_bomb is already charging — only one can charge at a time.');
     state.consumables.nullbomb--;
-    const chargeMs = CONSUMABLES.nullbomb.chargeSeconds * 1000;
-    state.nullBombCharge = { chargingUntil: Date.now() + chargeMs };
-    dbSaveMeta();
-    renderConsumableCards();
-    return;
+    state.nullBombCharge = { chargingUntil: Date.now() + CONSUMABLES.nullbomb.chargeSeconds * 1000 };
+    dbSaveMeta(); refreshCards();
+    return true;
   }
 
-  if(!state.pinnedRecipe){
-    alertUser('Pin a recipe first — this only works on your pinned axe or consumable.');
-    return;
-  }
+  if(!state.pinnedRecipe) return deny('Pin a recipe first — this only works on your pinned axe or consumable.');
 
   if(key === 'pushpin' || key === 'gloves'){
     const target = rarestUnfinishedMaterial();
-    if(!target){
-      alertUser('Your pinned recipe has nothing left to gather — no target to boost.');
-      return;
-    }
+    if(!target) return deny('Your pinned recipe has nothing left to gather — no target to boost.');
     state.consumables[key]--;
     if(!state.activeBuffs) state.activeBuffs = {};
-    // ADD to any remaining duration rather than overwrite it — using Pushpin again while it's
-    // already active with clicks left extends it, it doesn't reset it back down to 500/250.
     const existingClicksLeft = (state.activeBuffs[key] && state.activeBuffs[key].rollsLeft) || 0;
     state.activeBuffs[key] = { rollsLeft: existingClicksLeft + CONSUMABLES[key].duration };
-    dbSaveMeta();
-    renderConsumableCards();
-  } else if(key === 'bomb'){
-    if(state.bombCharge){
-      alertUser('The bomb is already armed — only one can charge at a time.');
-      return;
-    }
+    dbSaveMeta(); refreshCards();
+    return true;
+  }
+
+  if(key === 'bomb'){
+    if(state.bombCharge) return deny('The bomb is already armed — only one can charge at a time.');
     state.consumables.bomb--;
-    // [Axenades] (equip): if worn, the bomb's charge time is halved (x2 faster).
     const equip = currentEquip();
     const chargeSpeedMult = (equip && equip.bombChargeSpeedMult) ? equip.bombChargeSpeedMult : 1;
-    const chargeMs = (CONSUMABLES.bomb.chargeSeconds * 1000) / chargeSpeedMult;
-    state.bombCharge = { chargingUntil: Date.now() + chargeMs };
-    dbSaveMeta();
-    renderConsumableCards();
+    state.bombCharge = { chargingUntil: Date.now() + (CONSUMABLES.bomb.chargeSeconds * 1000) / chargeSpeedMult };
+    dbSaveMeta(); refreshCards();
+    return true;
   }
+
+  return false;
 }
 
 function alertUser(msg){
@@ -7418,6 +7532,7 @@ async function initInner(){
   renderItemCards();
   renderConsumableCards();
   renderEquipCards();
+  setupConsumableBulkCraftControls();
   setupItemCategorySelect();
   updateStatStrip();
   if(report) renderOfflineBanner(report);
