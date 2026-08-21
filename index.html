@@ -2043,19 +2043,24 @@ const AXES = {
       { everyNClicks:404, oneIn:4,      rolls:40404, luckMult:40.4,  mutationLuckMult:1.4 },            // Nilbomb
       { everyNClicks:66,  oneIn:6.66,   rolls:666,   luckMult:6666 },                                  // MISSING TEXTURE (click half)
     ],
+    // Rank value: 1×NO CONTENT.(24.04B) + 2×DENIAL(18B) + 5×NIL(4.04B) + 262×UNAUTHORIZED.(40M)
+    // + 17,156,092×undefined(666) + 29,099,982×not found(404) + 250,000×NaN(40,400)
+    // + 16×NULL(666M) + 3,050,000×corruption(3,333) + 1,250×TIMEOUT(8M)
+    // + 125,000×Bad Request(80,808) + 25,000×FORBIDDEN.(403,000) = 175B exactly.
     requires:[
       { consumable:'errredirector', amount:40 },
-      { name:'NIL',            area:'404', amount:4 },
-      { name:'UNAUTHORIZED.',  area:'404', amount:404 },
-      { name:'undefined',      area:'404', amount:60000000 },
-      { name:'not found',      area:'404', amount:40400000 },
-      { name:'NaN',            area:'404', amount:680000 },
-      { name:'NULL',           area:'404', amount:10 },
-      { name:'FOUR',           area:'Factoritization', amount:404000000 },
-      { name:'NO CONTENT.',    area:'404', amount:1 },
-      { name:'corruption',     area:'404', amount:3330000 },
-      { name:'TIMEOUT',        area:'404', amount:204 },
-      { name:'Bad Request',    area:'404', amount:606060 },
+      { name:'not found',      area:'404', amount:29099982 },
+      { name:'undefined',      area:'404', amount:17156092 },
+      { name:'corruption',     area:'404', amount:3050000  },
+      { name:'NaN',            area:'404', amount:250000   },
+      { name:'Bad Request',    area:'404', amount:125000   },
+      { name:'FORBIDDEN.',     area:'404', amount:25000    },
+      { name:'TIMEOUT',        area:'404', amount:1250     },
+      { name:'UNAUTHORIZED.',  area:'404', amount:262      },
+      { name:'NULL',           area:'404', amount:16       },
+      { name:'NIL',            area:'404', amount:5        },
+      { name:'DENIAL',         area:'404', amount:2        },
+      { name:'NO CONTENT.',    area:'404', amount:1        },
     ],
   },
   blandaxe: {
