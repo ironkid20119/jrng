@@ -2040,17 +2040,17 @@ const AXES = {
     key:'nanaxe', name:'nan.axe',
     desc:'404: axe not found. Somehow still swings.',
     stats:{ luckMult:404, bulk:404, rps:404 },
-    bonus:'[Deletion] Offline every 404s: 1/4.04 for +4 rolls at ×4,040,404 luck. [Bad Gateway] Every 5th click: +503 rolls at ×503 luck, guaranteed. [Segmentation Fault] Offline every hour: 1/40.3 for +403 rolls at ×403,403 luck. [Unstability] Every 10th click: 1/50 for +1,234 rolls at ×56,789 luck. [Corruption] Every 4th click: 1/4.04 for +4,040 rolls at ×4,040 luck (×4.04 mutation luck). [Nilbomb] Every 404th click: 1/4 for +40,404 rolls at ×40.4 luck (×1.4 mutation luck). [MISSING TEXTURE] Always active, online or offline: 1/6.66 every 66th click AND 1/666 every 6s offline, either way adding +666 rolls at ×6,666 luck.',
+    bonus:'[Deletion] Offline every 404s: 1/4.04 for +40 rolls at ×4,040,404 luck. [Bad Gateway] Every 5th click: +5,030 rolls at ×5,030 luck, guaranteed. [Segmentation Fault] Offline every hour: 1/40.3 for +4,030 rolls at ×403,403 luck. [Unstability] Every 10th click: 1/50 for +5,678 rolls at ×4,040 luck. [Corruption] Every 4th click: 1/4.04 for +4,040 rolls at ×4.04 luck (×4.04 mutation luck). [Nilbomb] Every 404th click: 1/4 for +40,404 rolls at ×404 luck (×1.4 mutation luck). [MISSING TEXTURE] Always active, online or offline: 1/6.66 every 66th click AND 1/666 every 6s offline, either way adding +666 rolls at ×6,666 luck.',
     offlineBonus:[
-      { intervalSeconds:404,  chancePerInterval:1/4.04,  minRolls:4,     maxRolls:4,     bonusLuckMult:4040404 },  // Deletion
-      { intervalSeconds:3600, chancePerInterval:1/40.3,  minRolls:403,   maxRolls:403,   bonusLuckMult:403403 },   // Segmentation Fault
+      { intervalSeconds:404,  chancePerInterval:1/4.04,  minRolls:40,    maxRolls:40,    bonusLuckMult:4040404 },  // Deletion
+      { intervalSeconds:3600, chancePerInterval:1/40.3,  minRolls:4030,  maxRolls:4030,  bonusLuckMult:403403 },   // Segmentation Fault
       { intervalSeconds:6,    chancePerInterval:1/666,   minRolls:666,   maxRolls:666,   bonusLuckMult:6666 },     // MISSING TEXTURE (offline half)
     ],
     clickBonus:[
-      { everyNClicks:5,   chance:1,     rolls:503,   luckMult:503 },                                  // Bad Gateway
-      { everyNClicks:10,  oneIn:50,     rolls:1234,  luckMult:56789 },                                 // Unstability
-      { everyNClicks:4,   oneIn:4.04,   rolls:4040,  luckMult:4040,  mutationLuckMult:4.04 },           // Corruption
-      { everyNClicks:404, oneIn:4,      rolls:40404, luckMult:40.4,  mutationLuckMult:1.4 },            // Nilbomb
+      { everyNClicks:5,   chance:1,     rolls:5030,  luckMult:5030 },                                  // Bad Gateway
+      { everyNClicks:10,  oneIn:50,     rolls:5678,  luckMult:4040 },                                  // Unstability
+      { everyNClicks:4,   oneIn:4.04,   rolls:4040,  luckMult:4.04,  mutationLuckMult:4.04 },           // Corruption
+      { everyNClicks:404, oneIn:4,      rolls:40404, luckMult:404,   mutationLuckMult:1.4 },            // Nilbomb
       { everyNClicks:66,  oneIn:6.66,   rolls:666,   luckMult:6666 },                                  // MISSING TEXTURE (click half)
     ],
     // Rank value: 1×NO CONTENT.(24.04B) + 2×DENIAL(18B) + 5×NIL(4.04B) + 262×UNAUTHORIZED.(40M)
@@ -2108,13 +2108,13 @@ const AXES = {
     key:'godaxe', name:'God Axe',
     desc:'stay awake. you cant get rid of the power youve reached for... will you stay or join the corruption?',
     stats:{ luckMult:20000, bulk:5, rps:0 },
-    bonus:'[divinity] Every click: 1/50 to add +2 rolls at ×700,000 luck (×20 mutation luck). [ascension] Every 20th click, always: +30,000 rolls at ×800 luck (×4 mutation luck). [supremity] Every 75th click, always: +9,000 rolls at ×70 luck. [prayers] Every 5th click: 1/25 to add +50,000 rolls at ×800 luck. [omnipotence] Every 10 clicks: 1/10 to add +100,000 rolls at ×10 luck.',
+    bonus:'[divinity] Every click: 1/50 to add +30 rolls at ×700,000 luck (×20 mutation luck). [ascension] Every 20th click, always: +30,000 rolls at ×800 luck (×4 mutation luck). [supremity] Every 75th click, always: +7,000 rolls at ×3,500 luck. [prayers] Every 5th click: 1/25 to add +40,000 rolls at ×750 luck. [omnipotence] Every 10 clicks: 1/10 to add +10,000 rolls at ×2,500 luck.',
     clickBonus:[
-      { chance:1/50, rolls:2, luckMult:700000, mutationLuckMult:20 },        // divinity
+      { chance:1/50, rolls:30, luckMult:700000, mutationLuckMult:20 },       // divinity
       { everyNClicks:20, chance:1, rolls:30000, luckMult:800, mutationLuckMult:4 }, // ascension
-      { everyNClicks:75, chance:1, rolls:9000, luckMult:70 },                // supremity
-      { everyNClicks:5, oneIn:25, rolls:50000, luckMult:800 },               // prayers
-      { everyNClicks:10, oneIn:10, rolls:100000, luckMult:10 },              // omnipotence
+      { everyNClicks:75, chance:1, rolls:7000, luckMult:3500 },              // supremity
+      { everyNClicks:5, oneIn:25, rolls:40000, luckMult:750 },               // prayers
+      { everyNClicks:10, oneIn:10, rolls:10000, luckMult:2500 },             // omnipotence
     ],
     requires:[
       { name:'DENIAL',        area:'404', amount:5 },
