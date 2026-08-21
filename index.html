@@ -2040,7 +2040,7 @@ const AXES = {
     key:'nanaxe', name:'nan.axe',
     desc:'404: axe not found. Somehow still swings.',
     stats:{ luckMult:404, bulk:404, rps:404 },
-    bonus:'[Deletion] Offline every 404s: 1/4.04 for +40 rolls at ×4,040,404 luck. [Bad Gateway] Every 5th click: +5,030 rolls at ×5,030 luck, guaranteed. [Segmentation Fault] Offline every hour: 1/40.3 for +4,030 rolls at ×403,403 luck. [Unstability] Every 10th click: 1/50 for +5,678 rolls at ×4,040 luck. [Corruption] Every 4th click: 1/4.04 for +4,040 rolls at ×4.04 luck (×4.04 mutation luck). [Nilbomb] Every 404th click: 1/4 for +40,404 rolls at ×404 luck (×1.4 mutation luck). [MISSING TEXTURE] Always active, online or offline: 1/6.66 every 66th click AND 1/666 every 6s offline, either way adding +666 rolls at ×6,666 luck.',
+    bonus:'[Deletion] Offline every 404s: 1/4.04 for +40 rolls at ×4,040,404 luck. [Bad Gateway] Every 5th click: +5,030 rolls at ×5,030 luck, guaranteed. [Segmentation Fault] Offline every hour: 1/40.3 for +4,030 rolls at ×403,403 luck. [Unstability] Every 10th click: 1/50 for +5,678 rolls at ×4,040 luck. [Corruption] Every 4th click: 1/4.04 for +4,040 rolls at ×4.04 luck (×4.04 mutation luck). [Nilbomb] Every 404th click: 1/4 for +40,404 rolls at ×404 luck (×1.4 mutation luck). [MISSING TEXTURE] Offline every 6s: 1/666 to add +666 rolls at ×6,666 luck.',
     offlineBonus:[
       { intervalSeconds:404,  chancePerInterval:1/4.04,  minRolls:40,    maxRolls:40,    bonusLuckMult:4040404 },  // Deletion
       { intervalSeconds:3600, chancePerInterval:1/40.3,  minRolls:4030,  maxRolls:4030,  bonusLuckMult:403403 },   // Segmentation Fault
@@ -2051,7 +2051,6 @@ const AXES = {
       { everyNClicks:10,  oneIn:50,     rolls:5678,  luckMult:4040 },                                  // Unstability
       { everyNClicks:4,   oneIn:4.04,   rolls:4040,  luckMult:4.04,  mutationLuckMult:4.04 },           // Corruption
       { everyNClicks:404, oneIn:4,      rolls:40404, luckMult:404,   mutationLuckMult:1.4 },            // Nilbomb
-      { everyNClicks:66,  oneIn:6.66,   rolls:666,   luckMult:6666 },                                  // MISSING TEXTURE (click half)
     ],
     // Rank value: 1×NO CONTENT.(24.04B) + 2×DENIAL(18B) + 5×NIL(4.04B) + 262×UNAUTHORIZED.(40M)
     // + 17,156,092×undefined(666) + 29,099,982×not found(404) + 250,000×NaN(40,400)
