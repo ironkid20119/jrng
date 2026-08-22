@@ -2381,18 +2381,23 @@ const EQUIPS = {
   exponentia: {
     key:'exponentia', name:'Exponentia',
     desc:'It refuses to idle. Its luck only grows by raising itself to a higher power.',
-    luckMult:1.5, luckExponent:1.15, rpsMult:0, rankValue:25000000000,
-    bonus:'No offline RPS. Your total equipped luck is raised to the power of 1.15. Every 3rd click: 1/25 chance for +250 rolls with (current luck)^1.5. Every 75th click: +750 rolls with (current luck)^1.33.',
+    luckMult:1.25, luckExponent:1.05, rpsMult:0, rankValue:583000000000,
+    bonus:'No offline RPS. Your total equipped luck is raised to the power of 1.05. Every 3rd click: 1/25 chance for +250 rolls with (current luck)^1.5, capped at ×10,000 luck. Every 75th click: +750 rolls with (current luck)^1.33, capped at ×10,000 luck.',
     clickBonus:[
-      { everyNClicks:3, oneIn:25, rolls:250, dynamicLuckMultFn:()=> Math.pow(effectiveLuckMult(), 1.5) },
-      { everyNClicks:75, chance:1, rolls:750, dynamicLuckMultFn:()=> Math.pow(effectiveLuckMult(), 1.33) },
+      { everyNClicks:3, oneIn:25, rolls:250, dynamicLuckMultFn:()=> Math.min(10000, Math.pow(effectiveLuckMult(), 1.5)) },
+      { everyNClicks:75, chance:1, rolls:750, dynamicLuckMultFn:()=> Math.min(10000, Math.pow(effectiveLuckMult(), 1.33)) },
     ],
-    // Rank value: 2×PIZZA (18.6B) + 8×Moon (3.2B) + 4×Obliterator (3B) + 4×Entropy (0.2B) = 25B exactly.
+    // Rank value: 40×PIZZA (372B) + 280×Obliterator (210B) + 1×Garbage Compacter (0.2B)
+    // + 2×Entropy (0.1B) + 1×Spectral (0.68B) + 5×Glitchite (0.0125B) + 1×Unstable Core (0.0075B)
+    // = 583B exactly. Seven unique ranks across The Fridge, Wasteland, and Aberration.
     requires:[
-      { name:'PIZZA', area:'The Fridge', amount:2 },
-      { name:'Moon', area:'Natural', amount:8 },
-      { name:'Obliterator', area:'Wasteland', amount:4 },
-      { name:'Entropy', area:'Wasteland', amount:4 },
+      { name:'PIZZA', area:'The Fridge', amount:40 },
+      { name:'Obliterator', area:'Wasteland', amount:280 },
+      { name:'Garbage Compacter', area:'Wasteland', amount:1 },
+      { name:'Entropy', area:'Wasteland', amount:2 },
+      { name:'Spectral', area:'Aberration', amount:1 },
+      { name:'Glitchite', area:'Aberration', amount:5 },
+      { name:'Unstable Core', area:'Aberration', amount:1 },
     ],
   },
 };
@@ -2698,7 +2703,7 @@ function effectiveLuckMult(){
   const equip = currentEquip();
   let mult = axe.stats.luckMult;
   if(equip && equip.luckMult) mult *= equip.luckMult;
-  // [Exponentia] raises its complete equipped luck value to a power after applying its ×1.5 multiplier.
+  // [Exponentia] raises its complete equipped luck value to a power after applying its own multiplier.
   if(equip && equip.luckExponent) mult = Math.pow(mult, equip.luckExponent);
   // [Expoballs] raises the complete axe/equip luck value by +0.01 exponent per level, capped at ^1.05.
   if(ballUpgradeLevel('expoballs') > 0) mult = Math.pow(mult, expoballsLuckExponent());
