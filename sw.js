@@ -15,11 +15,12 @@
    whether the page's own HTML/CSS/JS can load without a network connection.
    ============================================================ */
 
-const CACHE_VERSION = 'junis-rng-shell-v16';
+const CACHE_VERSION = 'junis-rng-shell-v17';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
+  './textures/juni-axe.gif',
   './textures/blackball.PNG',
   './textures/blueball.PNG',
   './textures/cyanball.PNG',

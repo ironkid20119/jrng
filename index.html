@@ -206,6 +206,8 @@
     position:relative;
   }
 
+  .juni-axe-gif{ display:block; width:64px; height:64px; image-rendering:auto; margin:2px auto; border-radius:8px; box-shadow:0 0 14px rgba(255,255,255,.34); }
+  .juni-bonus-gif{ width:18px; height:18px; vertical-align:middle; margin:0 3px 0 5px; border-radius:3px; }
   .skillcheck-circle{
     position:absolute;
     border-radius:50%;
@@ -2204,8 +2206,45 @@ const AXES = {
       { name:'Fragments',         area:'Wasteland', amount:20000 },
     ],
   },
+  juniaxe1power: {
+    key:'juniaxe1power', name:'juni axe (1% power)',
+    desc:'<img class="juni-axe-gif" src="./textures/juni-axe.gif" alt="juni axe (1% power)">',
+    stats:{ luckMult:25000, bulk:100000, rps:75000 },
+    bonus:'<img class="juni-bonus-gif" src="./textures/juni-axe.gif" alt=""> Every click: 1/2 to add 250,000 rolls at ×10,000 luck. <img class="juni-bonus-gif" src="./textures/juni-axe.gif" alt=""> Offline every millisecond: 1/69,420 to add 69,420 rolls at ×69,420 luck. <img class="juni-bonus-gif" src="./textures/juni-axe.gif" alt=""> On click: 1/5 to add 125 rolls at ×50,000,000 luck; offline every 5s: 1/2.5 to add 750 rolls at ×50,000,000 luck.',
+    hiddenUntilBallUpgrade:'unlockJuniAxe',
+    discountExempt:true,
+    clickBonus:[
+      { chance:1/2, rolls:250000, luckMult:10000 },
+      { chance:1/5, rolls:125, luckMult:50000000 },
+    ],
+    offlineBonus:[
+      { workerSim:true, intervalSeconds:0.001, chancePerInterval:1/69420, minRolls:69420, maxRolls:69420, bonusLuckMult:69420 },
+      { intervalSeconds:5, chancePerInterval:1/2.5, minRolls:750, maxRolls:750, bonusLuckMult:50000000 },
+    ],
+    requires:[
+      { name:'The Probably Rarest Thing Ever', area:'Scary Land', amount:72500000 },
+      { name:'         ', area:'Placeholder Land', amount:12500 },
+      { name:'lavandite', area:'winterstone', amount:2682500 },
+      { name:'lame crystal', area:'LAME world', amount:4250 },
+      { name:'Spectral', area:'Aberration', amount:153000 },
+      { name:'Esoterium', area:'Aberration', variant:'odd', amount:7350 },
+      { name:'Lunar', area:'Natural', variant:'weird', amount:52500 },
+      { name:'Slop', area:'Wasteland', variant:'grayscale', amount:99999 },
+      { name:'Destruction', area:'Wasteland', amount:9500 },
+      { name:'Blank', area:'Aberration', amount:1750000 },
+      { ball:'black', amount:10 },
+      { ball:'pink', amount:35 },
+      { ball:'cyan', amount:25 },
+      { ball:'purple', amount:20 },
+      { consumable:'juniaxeswing', amount:2500 },
+      { name:'Destiny', area:'Natural', globalWorld:'world1', amount:777 },
+      { name:'crazy tate', area:'winterstone', globalWorld:'world2', amount:5000 },
+      { name:'Dirtiverse', area:'Natural', amount:500 },
+      { name:'Doomcrystal', area:'Wasteland', variant:'weird', amount:2750 },
+    ],
+  },
 };
-const AXE_ORDER = ['default','crude','destroyer','blandaxe','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','magicwand','silkinator','geomathaxe','fraudaxe','rageaxe','godaxe','nanaxe'];
+const AXE_ORDER = ['default','crude','destroyer','blandaxe','disaster','dark','foodeater','dreamersprism','emblem','glowaxe','magicwand','silkinator','geomathaxe','fraudaxe','rageaxe','godaxe','nanaxe','juniaxe1power'];
 
 /* ============================================================
    EQUIPPABLES
@@ -2525,7 +2564,7 @@ const BALL_DEFS = [
   { key:'black',  label:'Black',  chance:1/10000,asset:'./textures/blackball.PNG', glow:'#d8d8e5' },
 ];
 const BALL_BY_KEY = Object.fromEntries(BALL_DEFS.map(ball => [ball.key, ball]));
-const BALL_UPGRADE_LIMITS = { manualAutoroll:10, discount:10, doubleChance:5 };
+const BALL_UPGRADE_LIMITS = { manualAutoroll:10, discount:10, doubleChance:5, offlineTickspeed:5, expoballs:5 };
 
 function blankBallCounts(){
   return Object.fromEntries(BALL_DEFS.map(ball => [ball.key, 0]));
@@ -2607,6 +2646,7 @@ function effectivePinnedRecipeRequirements(){
   const recipe = pinnedRecipeData();
   if(!recipe) return [];
   if(state.pinnedRecipe && state.pinnedRecipe.kind === 'consumable') return consumableRequirements(state.pinnedRecipe.key, 1);
+  if(state.pinnedRecipe && state.pinnedRecipe.kind === 'axe') return effectiveAxeRequirements(recipe);
   return discountedRecipeRequirements(recipe.requires);
 }
 
@@ -2660,6 +2700,8 @@ function effectiveLuckMult(){
   if(equip && equip.luckMult) mult *= equip.luckMult;
   // [Exponentia] raises its complete equipped luck value to a power after applying its ×1.5 multiplier.
   if(equip && equip.luckExponent) mult = Math.pow(mult, equip.luckExponent);
+  // [Expoballs] raises the complete axe/equip luck value by +0.01 exponent per level, capped at ^1.05.
+  if(ballUpgradeLevel('expoballs') > 0) mult = Math.pow(mult, expoballsLuckExponent());
   // [Coin Bag] (equip): active stacks add their luck% ADDITIVELY on top of everything else so
   // far (not another flat multiplier stacking multiplicatively), matching "+5% of your current
   // luck" — i.e. current luck grows by a percentage of itself, then that becomes the new total.
@@ -3974,9 +4016,67 @@ function getOwnedCount(areaLabel, name, variantKey){
 // ranks (req.area/req.name/req.variant, checked against the inventory); some (like nan.axe's
 // err.redirector cost) are crafted CONSUMABLE items instead (req.consumable = a CONSUMABLES key),
 // checked against state.consumables.
+function globalRequirementEntries(req){
+  const world = WORLDS.find(candidate => candidate.key === req.globalWorld);
+  if(!world) return [];
+  const areaLabels = new Set(world.areas.map(area => area.label));
+  const wantedVariant = req.variant || null;
+  return Object.values(state.inventory).filter(item => item && areaLabels.has(item.areaLabel) && item.name === req.name && ((item.variant ? item.variant.key : null) === wantedVariant));
+}
+
 function getReqOwnedCount(req){
   if(req.consumable) return getConsumableCount(req.consumable);
+  if(req.ball) return Math.max(0, Number(state.balls && state.balls[req.ball]) || 0);
+  if(req.globalWorld) return globalRequirementEntries(req).reduce((total, item) => total + item.count, 0);
   return getOwnedCount(req.area, req.name, req.variant);
+}
+
+function consumeRequirement(req){
+  if(req.consumable){
+    state.consumables[req.consumable] -= req.amount;
+    return;
+  }
+  if(req.ball){
+    state.balls[req.ball] -= req.amount;
+    return;
+  }
+  if(!req.globalWorld){
+    const key = invKey(req.area, req.name, req.variant || null);
+    state.inventory[key].count -= req.amount;
+    dbSaveInvItem(state.inventory[key]);
+    return;
+  }
+  let remaining = req.amount;
+  for(const item of globalRequirementEntries(req).sort((a,b)=>a.key.localeCompare(b.key))){
+    if(remaining <= 0) break;
+    const used = Math.min(remaining, item.count);
+    item.count -= used;
+    remaining -= used;
+    if(item.count <= 0){
+      delete state.inventory[item.key];
+      dbDeleteInvItem(item.key);
+    } else {
+      dbSaveInvItem(item);
+    }
+  }
+}
+
+function requirementRng(req){
+  if(!req.globalWorld) return findRankRng(req.area, req.name);
+  const world = WORLDS.find(candidate => candidate.key === req.globalWorld);
+  const global = world && world.global.find(rank => rank.name === req.name);
+  return global ? global.rng : null;
+}
+
+function effectiveAxeRequirements(axe){
+  if(!axe) return [];
+  return axe.discountExempt ? axe.requires : discountedRecipeRequirements(axe.requires);
+}
+
+function requirementLabel(req){
+  if(req.consumable) return CONSUMABLES[req.consumable] ? CONSUMABLES[req.consumable].name : req.consumable;
+  if(req.ball) return `${BALL_BY_KEY[req.ball] ? BALL_BY_KEY[req.ball].label : req.ball} ball`;
+  return req.name || '';
 }
 
 // Checks if a rank has EVER been caught in the given area, in ANY variant (plain, weird, odd,
@@ -4029,9 +4129,9 @@ function allUnfinishedMaterials(){
   if(!recipe) return [];
   const list = [];
   for(const req of effectivePinnedRecipeRequirements()){
-    const have = getOwnedCount(req.area, req.name, req.variant);
+    const have = getReqOwnedCount(req);
     if(have >= req.amount) continue;
-    const rng = findRankRng(req.area, req.name);
+    const rng = requirementRng(req);
     if(rng == null) continue;
     list.push({ name:req.name, area:req.area, rng, variant:req.variant || null });
   }
@@ -5231,7 +5331,11 @@ function buildIndexAccordion(){
 function renderItemCards(){
   renderPinnedRecipePanel();
   const el = document.getElementById('itemCards');
-  el.innerHTML = AXE_ORDER.map(key=>{
+  const visibleAxeKeys = AXE_ORDER.filter(key => {
+    const axe = AXES[key];
+    return !axe.hiddenUntilBallUpgrade || hasBallUpgrade(axe.hiddenUntilBallUpgrade) || state.ownedAxes.includes(key);
+  });
+  el.innerHTML = visibleAxeKeys.map(key=>{
     const axe = AXES[key];
     const owned = state.ownedAxes.includes(key);
     const equipped = state.equippedAxe === key;
@@ -5242,13 +5346,13 @@ function renderItemCards(){
     if(axe.free){
       reqHtml = `<div class="req-row ok">Free · auto-equipped at start</div>`;
     } else {
-      const requirements = discountedRecipeRequirements(axe.requires);
+      const requirements = effectiveAxeRequirements(axe);
       reqHtml = requirements.map(req=>{
         const have = getReqOwnedCount(req);
         const ok = have >= req.amount;
         if(!ok) canCraft = false;
         const variantTag = req.variant ? ` (${req.variant})` : '';
-        const label = req.consumable ? CONSUMABLES[req.consumable].name : req.name;
+        const label = requirementLabel(req);
         return `<div class="req-row ${ok?'ok':'short'}">${label}${variantTag} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
       }).join('');
     }
@@ -5357,7 +5461,7 @@ function renderPinnedRecipePanel(){
   const reqRows = effectivePinnedRecipeRequirements().map(req=>{
     const have = getReqOwnedCount(req);
     const ok = have >= req.amount;
-    return `<div class="req-row ${ok?'ok':'short'}">${req.name} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
+    return `<div class="req-row ${ok?'ok':'short'}">${requirementLabel(req)} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
   }).join('');
 
   el.innerHTML = `
@@ -5490,19 +5594,13 @@ function renderEquipCards(){
 function craftAxe(key){
   const axe = AXES[key];
   if(!axe || axe.free || state.ownedAxes.includes(key)) return;
-  const requirements = discountedRecipeRequirements(axe.requires);
+  const requirements = effectiveAxeRequirements(axe);
   // verify and consume
   for(const req of requirements){
     if(getReqOwnedCount(req) < req.amount) return;
   }
   for(const req of requirements){
-    if(req.consumable){
-      state.consumables[req.consumable] -= req.amount;
-    } else {
-      const k = invKey(req.area, req.name, req.variant || null);
-      state.inventory[k].count -= req.amount;
-      dbSaveInvItem(state.inventory[k]);
-    }
+    consumeRequirement(req);
   }
   state.ownedAxes.push(key);
   state.equippedAxe = key;
@@ -5831,7 +5929,7 @@ function effectiveRps(){
   const equipMult = (equip && equip.rpsMult != null) ? equip.rpsMult : 1;
   const idleEffMult = (equip && equip.idleEfficiencyMult) ? equip.idleEfficiencyMult : 1;
   const doublinatorMult = isDoublinatorActive() ? 2 : 1;
-  return base * wgunMult * equipMult * idleEffMult * doublinatorMult;
+  return base * wgunMult * equipMult * idleEffMult * doublinatorMult * offlineTickspeedMultiplier();
 }
 
 // [Irritation] (Rage Axe only): for every FULL day the player has been continuously idle, every
@@ -6285,9 +6383,12 @@ function normalizeBallState(){
     upgradedPushpin: !!sourceUpgrades.upgradedPushpin,
     upgradedBombs: !!sourceUpgrades.upgradedBombs,
     sentientWaterhose: !!sourceUpgrades.sentientWaterhose,
+    unlockJuniAxe: !!sourceUpgrades.unlockJuniAxe,
     manualAutoroll: Math.min(BALL_UPGRADE_LIMITS.manualAutoroll, Math.max(0, Math.floor(Number(sourceUpgrades.manualAutoroll) || 0))),
     discount: Math.min(BALL_UPGRADE_LIMITS.discount, Math.max(0, Math.floor(Number(sourceUpgrades.discount) || 0))),
     doubleChance: Math.min(BALL_UPGRADE_LIMITS.doubleChance, Math.max(0, Math.floor(Number(sourceUpgrades.doubleChance) || 0))),
+    offlineTickspeed: Math.min(BALL_UPGRADE_LIMITS.offlineTickspeed, Math.max(0, Math.floor(Number(sourceUpgrades.offlineTickspeed) || 0))),
+    expoballs: Math.min(BALL_UPGRADE_LIMITS.expoballs, Math.max(0, Math.floor(Number(sourceUpgrades.expoballs) || 0))),
   };
   const sourceAutoUse = (state.ballAutoUse && typeof state.ballAutoUse === 'object') ? state.ballAutoUse : {};
   state.ballAutoUse = {
@@ -6306,6 +6407,14 @@ function hasBallUpgrade(key){
 
 function manualAutorollMultiplier(){
   return 1 + ballUpgradeLevel('manualAutoroll') * 0.10;
+}
+
+function offlineTickspeedMultiplier(){
+  return 1 + ballUpgradeLevel('offlineTickspeed') * 0.20;
+}
+
+function expoballsLuckExponent(){
+  return 1 + ballUpgradeLevel('expoballs') * 0.01;
 }
 
 function tryAutoUseRecipeConsumables(){
@@ -6441,6 +6550,9 @@ const BALL_UPGRADES = [
   { key:'manualAutoroll', title:'Manual autoroll upgrade', max:10, costForLevel:level=>({ black:level + 1 }), desc:level=>`Level ${level}/10. Each level adds +10% sphere appearance speed, sphere duration, and sphere efficiency.` },
   { key:'discount', title:'Discount', max:10, costForLevel:level=>({ black:level + 1 }), desc:level=>`Level ${level}/10. Recipes are ${level}% cheaper; Balls upgrades are excluded.` },
   { key:'doubleChance', title:'Double chance', max:5, costForLevel:level=>({ black:2 + level * 2 }), desc:level=>`Level ${level}/5. Balls have +${level}% chance to duplicate when they spawn.` },
+  { key:'offlineTickspeed', title:'Offline tickspeed', max:5, costForLevel:level=>({ pink:level + 1 }), desc:level=>`Level ${level}/5. Offline roll speed is +${level * 20}%.` },
+  { key:'expoballs', title:'Expoballs', max:5, costForLevel:()=>({ cyan:5 }), desc:level=>`Level ${level}/5. Luck exponent is ^${(1 + level * 0.01).toFixed(2)}.` },
+  { key:'unlockJuniAxe', title:'???', cost:{ black:5, blue:5, cyan:5, green:5, pink:5, purple:5, red:5, white:5, yellow:5 }, desc:'unlocks ???' },
 ];
 const BALL_UPGRADE_BY_KEY = Object.fromEntries(BALL_UPGRADES.map(upgrade => [upgrade.key, upgrade]));
 
@@ -7212,6 +7324,9 @@ function simulateOfflineBonusRules(offlineBonus, seconds, pool, variantChain, TI
   }
 
   for(const rule of bonusRules){
+    // High-frequency rules are sampled by geometric gaps and rolled through the normal worker
+    // pool in resolveOfflineProgress(). Never loop once per millisecond on the main thread.
+    if(rule.workerSim) continue;
     const intervalSeconds = rule.intervalSeconds || 1;
     const chancePerInterval = rule.chancePerInterval != null ? rule.chancePerInterval : (rule.chancePerSecond || 0);
     const bonusLuckMult = rule.bonusLuckMult;
@@ -7323,6 +7438,52 @@ function simulateOfflineBonusRules(offlineBonus, seconds, pool, variantChain, TI
   }
 
   return { counts, bestFind, bonusRollsFired, bonusTriggers };
+}
+
+// Samples independent Bernoulli events exactly without iterating through every trial. The gap
+// to the next success follows a geometric distribution, so this takes roughly one loop per actual
+// trigger rather than one loop per millisecond of idle time.
+function sampleBernoulliTriggers(trials, chance){
+  let remaining = Math.max(0, Math.floor(Number(trials) || 0));
+  const p = Math.max(0, Math.min(1, Number(chance) || 0));
+  if(!remaining || !p) return 0;
+  if(p >= 1) return remaining;
+  const logNoSuccess = Math.log1p(-p);
+  let triggers = 0;
+  while(remaining > 0){
+    const skipped = Math.floor(Math.log(1 - Math.random()) / logNoSuccess);
+    if(skipped >= remaining) break;
+    triggers++;
+    remaining -= skipped + 1;
+  }
+  return triggers;
+}
+
+function highFrequencyOfflineBonusSpecs(offlineBonus, seconds){
+  const rules = offlineBonus ? (Array.isArray(offlineBonus) ? offlineBonus : [offlineBonus]) : [];
+  const specs = [];
+  for(const rule of rules){
+    if(!rule.workerSim) continue;
+    const intervalSeconds = Math.max(Number(rule.intervalSeconds) || 1, 0.000001);
+    const tickCount = Math.floor(seconds / intervalSeconds);
+    const chance = rule.chancePerInterval != null ? rule.chancePerInterval : (rule.chancePerSecond || 0);
+    const triggers = sampleBernoulliTriggers(tickCount, chance);
+    const rollsPerTrigger = rule.minRolls != null ? rule.minRolls : (rule.bonusRolls || 1);
+    const bonusRolls = Math.max(0, Math.floor(triggers * rollsPerTrigger));
+    if(bonusRolls > 0) specs.push({ rule, triggers, bonusRolls });
+  }
+  return specs;
+}
+
+function mergeOfflineSimulationResult(base, extra){
+  for(const key in extra.counts){
+    if(!base.counts[key]) base.counts[key] = { ...extra.counts[key], count:0 };
+    base.counts[key].count += extra.counts[key].count;
+  }
+  if(extra.bestFind && (!base.bestFind || extra.bestFind.finalRng > base.bestFind.finalRng)) base.bestFind = extra.bestFind;
+  base.bonusRollsFired = (base.bonusRollsFired || 0) + (extra.bonusRollsFired || 0);
+  base.bonusTriggers = (base.bonusTriggers || 0) + (extra.bonusTriggers || 0);
+  return base;
 }
 
 // Preserves an exact total when the browser cannot start workers and must use the bounded
@@ -7611,10 +7772,22 @@ async function resolveOfflineProgress(){
     });
   }
 
+  const highFrequencySpecs = highFrequencyOfflineBonusSpecs(scaledOfflineBonus, wholeSeconds);
+  const regularOfflineBonus = scaledOfflineBonus.filter(rule => !rule.workerSim);
+
   let simResult;
   try {
-    // Attempt fast concurrent worker simulation
-    simResult = await runOfflineSimulations(totalRolls, wholeSeconds, pool, luckMult, scaledOfflineBonus);
+    // Attempt fast concurrent worker simulation for base rolls and ordinary interval bonuses.
+    simResult = await runOfflineSimulations(totalRolls, wholeSeconds, pool, luckMult, regularOfflineBonus);
+    // Juni Axe’s millisecond bonus preserves its literal 1/69,420-per-ms behavior, but its
+    // triggered roll batches are dispatched to the same non-blocking worker pool as all other
+    // offline rolls instead of freezing the UI with a main-thread millisecond loop.
+    for(const spec of highFrequencySpecs){
+      const highResult = await runOfflineSimulations(spec.bonusRolls, 0, pool, spec.rule.bonusLuckMult, []);
+      highResult.bonusRollsFired = spec.bonusRolls;
+      highResult.bonusTriggers = spec.triggers;
+      mergeOfflineSimulationResult(simResult, highResult);
+    }
   } catch (err) {
     console.warn('Worker sim execution failed, utilizing sync main thread fallback:', err);
     // Strict budgeted fallback calculation so gameplay doesn't halt
@@ -7711,7 +7884,7 @@ async function resolveOfflineProgress(){
     // Bonus triggers computed once against the true total wholeSeconds — same shared function
     // used by the worker path, so both paths can never diverge or reintroduce fragmentation bugs.
     const fallbackBonusChanceCap = area.isUniversalPool ? (1/3) : LUCK_AFFECTED_CHANCE_CAP;
-    const bonusResult = simulateOfflineBonusRules(scaledOfflineBonus, wholeSeconds, pool, VARIANT_CHAIN, TIERS, fallbackBonusChanceCap);
+    const bonusResult = simulateOfflineBonusRules(regularOfflineBonus, wholeSeconds, pool, VARIANT_CHAIN, TIERS, fallbackBonusChanceCap);
     for(const key in bonusResult.counts){
       const bc = bonusResult.counts[key];
       const trueAreaLabel = bc.injectedAreaLabel || area.label;
@@ -7735,11 +7908,36 @@ async function resolveOfflineProgress(){
       };
     }
 
+    // If workers are unavailable, preserve the high-frequency bonus’s exact roll total with the
+    // same bounded representative-and-scale strategy used for base idle rolls above.
+    let highFrequencyRolls = 0;
+    let highFrequencyTriggers = 0;
+    for(const spec of highFrequencySpecs){
+      const sampledCounts = {};
+      let sampledBest = null;
+      const directHighCount = Math.min(spec.bonusRolls, DIRECT_ROLL_BUDGET);
+      for(let i=0; i<directHighCount; i++){
+        const result = rollOnceForArea(world, area, spec.rule.bonusLuckMult, { applyBuffs:false });
+        const key = invKey(result.areaLabel || area.label, result.name, result.variant ? result.variant.key : null);
+        if(!sampledCounts[key]) sampledCounts[key] = { ...result, count:0, areaLabel:result.areaLabel || area.label };
+        sampledCounts[key].count++;
+        if(!sampledBest || result.finalRng > sampledBest.finalRng) sampledBest = result;
+      }
+      if(directHighCount > 0) scaleCountsToExactTotal(sampledCounts, spec.bonusRolls);
+      for(const key in sampledCounts){
+        if(!counts[key]) counts[key] = { ...sampledCounts[key], count:0 };
+        counts[key].count += sampledCounts[key].count;
+      }
+      if(sampledBest && (!bestFind || sampledBest.finalRng > bestFind.finalRng)) bestFind = sampledBest;
+      highFrequencyRolls += spec.bonusRolls;
+      highFrequencyTriggers += spec.triggers;
+    }
+
     simResult = {
       counts: counts,
       bestFind,
-      bonusRollsFired: bonusResult.bonusRollsFired,
-      bonusTriggers: bonusResult.bonusTriggers
+      bonusRollsFired: bonusResult.bonusRollsFired + highFrequencyRolls,
+      bonusTriggers: bonusResult.bonusTriggers + highFrequencyTriggers
     };
   }
 
