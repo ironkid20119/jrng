@@ -15,11 +15,20 @@
    whether the page's own HTML/CSS/JS can load without a network connection.
    ============================================================ */
 
-const CACHE_VERSION = 'junis-rng-shell-v15';
+const CACHE_VERSION = 'junis-rng-shell-v16';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
+  './textures/blackball.PNG',
+  './textures/blueball.PNG',
+  './textures/cyanball.PNG',
+  './textures/greenball.PNG',
+  './textures/pinkball.PNG',
+  './textures/purpleball.PNG',
+  './textures/redball.PNG',
+  './textures/whiteball.PNG',
+  './textures/yellowball.PNG',
 ];
 
 self.addEventListener('install', (event) => {

@@ -217,6 +217,12 @@
     animation:skillcheckShrink 3s linear forwards;
     touch-action:none;
   }
+  .skillcheck-timer{
+    position:absolute; left:50%; top:calc(100% + 5px); transform:translateX(-50%); white-space:nowrap;
+    padding:3px 5px; border-radius:5px; background:rgba(8,7,12,.88); border:1px solid rgba(255,255,255,.38);
+    color:#fff; font:700 9px var(--mono); pointer-events:none; box-shadow:0 2px 10px rgba(0,0,0,.45);
+  }
+  .skillcheck-timer.perfect-now{ color:#ffe56a; border-color:#ffe56a; }
   @keyframes skillcheckShrink{
     0%{ opacity:0.55; transform:scale(0.85); }
     10%{ opacity:1; transform:scale(1); }
@@ -706,6 +712,51 @@
   .nav-btn.active .icon{ filter:drop-shadow(0 0 6px rgba(124,92,255,0.7)); }
   .nav-btn:active{ transform:scale(0.96); }
 
+  /* ---------- Balls tab ---------- */
+  .nav-btn{ position:relative; }
+  .balls-nav-dot{
+    position:absolute; top:0; right:calc(50% - 19px); width:8px; height:8px;
+    border-radius:50%; background:#ff3b4f; border:1px solid #fff;
+    box-shadow:0 0 8px rgba(255,59,79,0.9); pointer-events:none;
+  }
+  .balls-nav-dot[hidden]{ display:none; }
+  .balls-lede{ color:var(--text-dim); line-height:1.55; margin-bottom:16px; }
+  .ball-wallet{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); gap:8px; margin:14px 0 18px;
+  }
+  .ball-wallet-item{
+    display:flex; align-items:center; justify-content:space-between; gap:7px; padding:8px 9px;
+    background:var(--bg-1); border:1px solid var(--border); border-radius:10px;
+    font-family:var(--mono); font-size:11px;
+  }
+  .ball-wallet-item img{ width:23px; height:23px; image-rendering:pixelated; }
+  .ball-wallet-item .ball-count{ color:#fff; font-weight:700; margin-left:auto; }
+  .spawned-balls{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(116px,1fr)); gap:12px; min-height:146px;
+    align-items:center; padding:13px; border:1px dashed var(--border-lit); border-radius:14px;
+    background:linear-gradient(135deg,rgba(124,92,255,0.08),rgba(255,92,168,0.05));
+  }
+  .balls-empty{ grid-column:1/-1; text-align:center; color:var(--text-faint); font-family:var(--mono); font-size:12px; line-height:1.55; padding:24px 10px; }
+  .spawned-ball{
+    display:flex; flex-direction:column; align-items:center; gap:4px; min-height:108px; padding:10px 7px;
+    border-radius:12px; border:1px solid var(--border); background:var(--bg-1); color:var(--text);
+    cursor:pointer; font-family:var(--mono); transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease;
+  }
+  .spawned-ball:hover{ transform:translateY(-2px) scale(1.02); border-color:var(--accent-2); box-shadow:0 8px 22px -10px rgba(255,92,168,0.8); }
+  .spawned-ball:active{ transform:scale(.97); }
+  .spawned-ball img{ width:54px; height:54px; image-rendering:pixelated; filter:drop-shadow(0 0 8px var(--ball-glow,rgba(255,255,255,.4))); }
+  .spawned-ball .ball-name{ font-size:11px; font-weight:700; }
+  .spawned-ball .ball-timer{ color:var(--text-dim); font-size:10px; }
+  .balls-section-title{ margin:21px 0 10px; font:700 11px var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--text-faint); }
+  .ball-upgrade-cards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:10px; }
+  .ball-upgrade-card{ padding:14px; border:1px solid var(--border); border-radius:13px; background:var(--bg-1); }
+  .ball-upgrade-card h3{ font-size:14px; margin-bottom:6px; }
+  .ball-upgrade-card p{ color:var(--text-dim); font-size:12px; line-height:1.45; margin-bottom:10px; }
+  .ball-upgrade-card .upgrade-cost{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .ball-cost{ display:inline-flex; align-items:center; gap:4px; padding:3px 6px; border:1px solid var(--border); border-radius:999px; font:700 10px var(--mono); color:var(--text-dim); }
+  .ball-cost img{ width:15px; height:15px; image-rendering:pixelated; }
+  .ball-upgrade-card.owned{ border-color:rgba(34,197,94,.6); box-shadow:inset 0 0 0 1px rgba(34,197,94,.12); }
+
   footer.foot{
     text-align:center;
     color:var(--text-faint);
@@ -932,6 +983,18 @@
     </div>
   </div>
 
+  <!-- BALLS VIEW -->
+  <div class="view" id="view-balls">
+    <div class="panel">
+      <h2 class="ptitle">Balls</h2>
+      <p class="balls-lede">Every roll click has a chance to spawn balls. Collect them before they disappear, then trade them for permanent upgrades.</p>
+      <div class="ball-wallet" id="ballWallet"></div>
+      <div class="spawned-balls" id="spawnedBalls"></div>
+      <div class="balls-section-title">Permanent upgrades</div>
+      <div class="ball-upgrade-cards" id="ballUpgradeCards"></div>
+    </div>
+  </div>
+
   <!-- ITEMS VIEW -->
   <div class="view" id="view-items">
     <div class="panel">
@@ -968,6 +1031,7 @@
   <button class="nav-btn" data-view="inventory"><span class="icon">🎒</span>Inventory</button>
   <button class="nav-btn" data-view="index"><span class="icon">📖</span>Index</button>
   <button class="nav-btn" data-view="items"><span class="icon">🪓</span>Items</button>
+  <button class="nav-btn" data-view="balls"><span class="icon">🔮</span>Balls<span id="ballsNavDot" class="balls-nav-dot" hidden aria-label="Collectible balls available"></span></button>
 </nav>
 
 <script>
@@ -2446,6 +2510,28 @@ const CONSUMABLES = {
 const CONSUMABLE_ORDER = ['pushpin','gloves','bomb','nullbomb','watergun','errredirector','nukinamachina','juniaxeswing','doublinator','boiconsumable'];
 
 /* ============================================================
+   BALLS
+   ============================================================ */
+const BALL_LIFETIME_MS = 30 * 1000;
+const BALL_DEFS = [
+  { key:'yellow', label:'Yellow', chance:1/125, asset:'./textures/yellowball.PNG', glow:'#ffe15a' },
+  { key:'white',  label:'White',  chance:1/250, asset:'./textures/whiteball.PNG',  glow:'#ffffff' },
+  { key:'red',    label:'Red',    chance:1/500, asset:'./textures/redball.PNG',    glow:'#ff3131' },
+  { key:'blue',   label:'Blue',   chance:1/1000, asset:'./textures/blueball.PNG',  glow:'#304dff' },
+  { key:'green',  label:'Green',  chance:1/1750, asset:'./textures/greenball.PNG', glow:'#26dc35' },
+  { key:'pink',   label:'Pink',   chance:1/2500, asset:'./textures/pinkball.PNG',  glow:'#ffb4e6' },
+  { key:'cyan',   label:'Cyan',   chance:1/3333, asset:'./textures/cyanball.PNG',  glow:'#25eaf0' },
+  { key:'purple', label:'Purple', chance:1/5000, asset:'./textures/purpleball.PNG', glow:'#ef2eff' },
+  { key:'black',  label:'Black',  chance:1/10000,asset:'./textures/blackball.PNG', glow:'#d8d8e5' },
+];
+const BALL_BY_KEY = Object.fromEntries(BALL_DEFS.map(ball => [ball.key, ball]));
+const BALL_UPGRADE_LIMITS = { manualAutoroll:10, discount:10, doubleChance:5 };
+
+function blankBallCounts(){
+  return Object.fromEntries(BALL_DEFS.map(ball => [ball.key, 0]));
+}
+
+/* ============================================================
    STATE
    ============================================================ */
 let state = {
@@ -2476,6 +2562,10 @@ let state = {
   doublinatorUntil: null, // timestamp — ×2 bulk/luck/rps while in the future
   doublinatorCooldownUntil: null, // timestamp — cannot activate another Doublinator before this time
   boiConsumableUses: 0, // permanent Boi Consumables used; each adds ×0.1 luck and one recipe multiplier step
+  balls: blankBallCounts(), // permanently collected ball currencies, by color
+  spawnedBalls: [], // { id, key, expiresAt }; collected balls are removed, expired balls are pruned
+  ballUpgrades: {}, // permanent Balls-tab upgrades and their level counters
+  ballAutoUse: {}, // player-selected toggles unlocked by the auto-use ball upgrades
 };
 
 function isErrRedirectorActive(){
@@ -2498,6 +2588,45 @@ function boiConsumableLuckMult(){
   return 1 + boiConsumableUses() * 0.1;
 }
 
+function recipeDiscountPercent(){
+  return ballUpgradeLevel('discount');
+}
+
+function discountedRecipeAmount(amount){
+  const base = Math.max(0, Number(amount) || 0);
+  const discount = recipeDiscountPercent();
+  if(discount <= 0 || base <= 0) return base;
+  return Math.max(1, Math.ceil(base * (1 - discount / 100)));
+}
+
+function discountedRecipeRequirements(requirements){
+  return (requirements || []).map(req => ({ ...req, amount:discountedRecipeAmount(req.amount) }));
+}
+
+function effectivePinnedRecipeRequirements(){
+  const recipe = pinnedRecipeData();
+  if(!recipe) return [];
+  if(state.pinnedRecipe && state.pinnedRecipe.kind === 'consumable') return consumableRequirements(state.pinnedRecipe.key, 1);
+  return discountedRecipeRequirements(recipe.requires);
+}
+
+function recipeAreaRanks(){
+  const recipe = pinnedRecipeData();
+  if(!recipe) return [];
+  const areas = new Set((recipe.requires || []).filter(req => req.area && req.name).map(req => req.area));
+  const ranks = [];
+  for(const world of WORLDS){
+    for(const area of world.areas){
+      if(!areas.has(area.label)) continue;
+      for(const rank of area.ranks){
+        ranks.push({ name:rank.name, area:area.label, rng:rank.rng, isMutation:false });
+        for(const mutation of (rank.mutations || [])) ranks.push({ name:mutation.name, area:area.label, rng:mutation.rng, isMutation:true });
+      }
+    }
+  }
+  return ranks;
+}
+
 function consumableRequirements(key, quantity=1){
   const item = CONSUMABLES[key];
   if(!item) return [];
@@ -2507,7 +2636,7 @@ function consumableRequirements(key, quantity=1){
   const totalMultiplier = item.scalesRecipePerUse
     ? craftQuantity * (1 + boiConsumableUses()) + (craftQuantity * (craftQuantity - 1)) / 2
     : craftQuantity;
-  return item.requires.map(req => ({ ...req, amount:req.amount * totalMultiplier }));
+  return item.requires.map(req => ({ ...req, amount:discountedRecipeAmount(req.amount * totalMultiplier) }));
 }
 
 const MAX_OFFLINE_SECONDS = 7 * 24 * 60 * 60; // 7 day cap
@@ -3413,6 +3542,10 @@ function buildMetaSnapshot(){
     doublinatorUntil: state.doublinatorUntil,
     doublinatorCooldownUntil: state.doublinatorCooldownUntil,
     boiConsumableUses: state.boiConsumableUses,
+    balls: state.balls,
+    spawnedBalls: state.spawnedBalls,
+    ballUpgrades: state.ballUpgrades,
+    ballAutoUse: state.ballAutoUse,
   };
 }
 
@@ -3621,6 +3754,11 @@ function applyMetaToState(meta){
   state.doublinatorUntil = meta.doublinatorUntil || null;
   state.doublinatorCooldownUntil = meta.doublinatorCooldownUntil || null;
   state.boiConsumableUses = Math.max(0, Number(meta.boiConsumableUses) || 0);
+  state.balls = { ...blankBallCounts(), ...(meta.balls && typeof meta.balls === 'object' ? meta.balls : {}) };
+  state.spawnedBalls = Array.isArray(meta.spawnedBalls) ? meta.spawnedBalls : [];
+  state.ballUpgrades = (meta.ballUpgrades && typeof meta.ballUpgrades === 'object') ? meta.ballUpgrades : {};
+  state.ballAutoUse = (meta.ballAutoUse && typeof meta.ballAutoUse === 'object') ? meta.ballAutoUse : {};
+  normalizeBallState();
   saveLoadedSuccessfully = true;
 }
 
@@ -3890,7 +4028,7 @@ function allUnfinishedMaterials(){
   const recipe = pinnedRecipeData();
   if(!recipe) return [];
   const list = [];
-  for(const req of recipe.requires){
+  for(const req of effectivePinnedRecipeRequirements()){
     const have = getOwnedCount(req.area, req.name, req.variant);
     if(have >= req.amount) continue;
     const rng = findRankRng(req.area, req.name);
@@ -4036,11 +4174,11 @@ function rollOnceForArea(world, area, luckMult, opts){
 
   const reachSources = [];
   if(glovesActive){
-    // Gloves reaches for EVERY unfinished material in the pinned recipe at once — any rank from
-    // that area can drop, not just the rarest missing one. This is additive: it's injected into
-    // the pool alongside whatever's already native/reachable here, never replacing anything.
-    const mats = allUnfinishedMaterials();
-    if(mats.length) reachSources.push({ materials:mats, rarityMult:2 });
+    // Base Gloves reaches every unfinished material. Its Balls upgrade reaches every rank from
+    // any area represented in the pinned recipe, while making the cross-area odds ×1.5 instead of ×2.
+    const mats = hasBallUpgrade('upgradedGloves') ? recipeAreaRanks() : allUnfinishedMaterials();
+    const rarityMult = hasBallUpgrade('upgradedGloves') ? 1.5 : 2;
+    if(mats.length) reachSources.push({ materials:mats, rarityMult });
   }
   if(emblemActive){
     // Emblem's innate Reach covers every unfinished material at once
@@ -4068,11 +4206,14 @@ function rollOnceForArea(world, area, luckMult, opts){
       mat = source.materials.find(m => m.name === name);
       if(mat) break;
     }
-    if(mat) pool.push({ name:mat.name, rng:mat.rng * injectedRarity[name], isMutation:false, injectedAreaLabel:mat.area });
+            if(mat) pool.push({ name:mat.name, rng:mat.rng * injectedRarity[name], isMutation:!!mat.isMutation, injectedAreaLabel:mat.area });
+
   }
 
-  // Pushpin's own rarity-easing effect still targets just the rarest unfinished material specifically
+  // Base Pushpin eases only the rarest unfinished material. Its Balls upgrade instead gives
+  // luck directly: ×2.5 to the most common unfinished material and ×5 to the rarest one.
   const buffTarget = pushpinActive ? rarestUnfinishedMaterial() : null;
+  const pushpinCommonTarget = (pushpinActive && hasBallUpgrade('upgradedPushpin')) ? mostCommonUnfinishedMaterial() : null;
 
   const emblemUnfinished = emblemActive ? allUnfinishedMaterials() : [];
   const emblemCommonTarget = (emblemActive && pushpinActive) ? mostCommonUnfinishedMaterial() : null;
@@ -4080,7 +4221,7 @@ function rollOnceForArea(world, area, luckMult, opts){
   // Per-item effective rng after buffs (Pushpin easing its target, Emblem's Blessing/Synergy Pushpin)
   function effectiveRng(item){
     let rng = item.rng;
-    if(pushpinActive && buffTarget && buffTarget.area === area.label && buffTarget.name === item.name){
+    if(pushpinActive && !hasBallUpgrade('upgradedPushpin') && buffTarget && buffTarget.area === area.label && buffTarget.name === item.name){
       rng = rng / 2.5;
     }
     return rng;
@@ -4090,6 +4231,10 @@ function rollOnceForArea(world, area, luckMult, opts){
   // and Synergy Pushpin (an extra ×1.7 to the most common unfinished material, stacking with Pushpin)
   function effectiveLuckForItem(item, baseLuck){
     let l = baseLuck;
+    if(pushpinActive && hasBallUpgrade('upgradedPushpin')){
+      if(buffTarget && buffTarget.area === area.label && buffTarget.name === item.name) l *= 5;
+      else if(pushpinCommonTarget && pushpinCommonTarget.area === area.label && pushpinCommonTarget.name === item.name) l *= 2.5;
+    }
     if(emblemActive && emblemUnfinished.some(m => m.name === item.name)){
       l *= equippedAxe.blessingLuckMult;
       if(emblemCommonTarget && emblemCommonTarget.name === item.name){
@@ -5097,7 +5242,8 @@ function renderItemCards(){
     if(axe.free){
       reqHtml = `<div class="req-row ok">Free · auto-equipped at start</div>`;
     } else {
-      reqHtml = axe.requires.map(req=>{
+      const requirements = discountedRecipeRequirements(axe.requires);
+      reqHtml = requirements.map(req=>{
         const have = getReqOwnedCount(req);
         const ok = have >= req.amount;
         if(!ok) canCraft = false;
@@ -5208,8 +5354,8 @@ function renderPinnedRecipePanel(){
     ? `<span class="pin-target">🎯 Rarest missing: <b>${target.name}</b> (1/${fmtRng(target.rng)}) in ${target.area}</span>`
     : `<span class="pin-target" style="color:var(--ok)">✅ All materials gathered!</span>`;
 
-  const reqRows = recipe.requires.map(req=>{
-    const have = getOwnedCount(req.area, req.name, req.variant);
+  const reqRows = effectivePinnedRecipeRequirements().map(req=>{
+    const have = getReqOwnedCount(req);
     const ok = have >= req.amount;
     return `<div class="req-row ${ok?'ok':'short'}">${req.name} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
   }).join('');
@@ -5231,6 +5377,24 @@ function renderPinnedRecipePanel(){
   });
 }
 
+function ballAdjustedConsumableEffect(item){
+  if(!item) return '';
+  if(item.key === 'pushpin' && hasBallUpgrade('upgradedPushpin')) return 'On use: for 500 clicks, the most common unfinished material gets ×2.5 luck and the rarest unfinished material gets ×5 luck in its home area.';
+  if(item.key === 'gloves' && hasBallUpgrade('upgradedGloves')) return 'On use: every rank from each area represented in your pinned recipe can drop in any area at ×1.5 rarity, for 250 clicks. Nothing native is replaced.';
+  if(item.key === 'bomb' && hasBallUpgrade('upgradedBombs')) return 'On use: charges for 15 minutes. Once triggered, fires 1,250,000 rolls in your current area at ×100 luck and ×5 mutation luck.';
+  if(item.key === 'nukinamachina' && hasBallUpgrade('upgradedBombs')) return 'On use: adds 5,000,000 rolls in your current area at ×150 luck and ×10 mutation luck.';
+  if(item.key === 'nullbomb' && hasBallUpgrade('upgradedBombs')) return 'On use: charges for 4h 4m 4s. Once triggered, fires 40.4 million rolls in your current area at ×404 luck and ×4.04 mutation luck.';
+  if(item.key === 'watergun' && hasBallUpgrade('sentientWaterhose')) return 'On use: AFK roll speed +1× per stack, up to ×4 total (3 uses max). Each stack lasts 1 hour.';
+  return item.effect;
+}
+
+function ballAdjustedEquipBonus(item){
+  if(item && item.key === 'axenades' && hasBallUpgrade('upgradedBombs')){
+    return `${item.bonus} Balls upgrade: every Axenades roll/luck/mutation-luck bonus is doubled; Explosive Axe Bomb charge speed and efficiency are doubled again.`;
+  }
+  return item ? item.bonus : '';
+}
+
 function renderEquipCards(){
   const el = document.getElementById('equipCards');
   if(!el) return;
@@ -5247,7 +5411,8 @@ function renderEquipCards(){
 
     let reqHtml = '';
     let canCraft = true;
-    reqHtml = item.requires.map(req=>{
+    const requirements = discountedRecipeRequirements(item.requires);
+    reqHtml = requirements.map(req=>{
       const have = getOwnedCount(req.area, req.name, req.variant);
       const ok = have >= req.amount;
       if(!ok) canCraft = false;
@@ -5255,7 +5420,7 @@ function renderEquipCards(){
       return `<div class="req-row ${ok?'ok':'short'}">${req.name}${variantTag} <span>${have.toLocaleString()} / ${req.amount.toLocaleString()}</span></div>`;
     }).join('');
     if(item.requiresConsumables){
-      reqHtml += item.requiresConsumables.map(creq=>{
+      reqHtml += discountedRecipeRequirements(item.requiresConsumables).map(creq=>{
         const have = getConsumableCount(creq.key);
         const ok = have >= creq.amount;
         if(!ok) canCraft = false;
@@ -5285,7 +5450,7 @@ function renderEquipCards(){
     const bonusSub = item.bonus ? `
       <div class="sub-acc-item" data-sub-acc="ebonus-${key}">
         <div class="sub-acc-head"><span>✦ Bonus</span><span class="chev">▾</span></div>
-        <div class="sub-acc-body"><span class="stat" style="color:var(--accent-2);">${item.bonus}</span></div>
+        <div class="sub-acc-body"><span class="stat" style="color:var(--accent-2);">${ballAdjustedEquipBonus(item)}</span></div>
       </div>` : '';
 
     const recipeSub = `
@@ -5325,11 +5490,12 @@ function renderEquipCards(){
 function craftAxe(key){
   const axe = AXES[key];
   if(!axe || axe.free || state.ownedAxes.includes(key)) return;
+  const requirements = discountedRecipeRequirements(axe.requires);
   // verify and consume
-  for(const req of axe.requires){
+  for(const req of requirements){
     if(getReqOwnedCount(req) < req.amount) return;
   }
-  for(const req of axe.requires){
+  for(const req of requirements){
     if(req.consumable){
       state.consumables[req.consumable] -= req.amount;
     } else {
@@ -5360,23 +5526,25 @@ function equipAxe(key){
 function craftEquip(key){
   const item = EQUIPS[key];
   if(!item || state.ownedEquips.includes(key)) return;
-  for(const req of item.requires){
+  const requirements = discountedRecipeRequirements(item.requires);
+  for(const req of requirements){
     if(getOwnedCount(req.area, req.name, req.variant) < req.amount) return;
   }
   // Some equips also consume owned CONSUMABLES as part of their recipe (e.g. Axenades needing
   // 2 Explosive Axe Bombs), not just raw inventory ranks.
-  if(item.requiresConsumables){
-    for(const creq of item.requiresConsumables){
+  const consumableRequirements = discountedRecipeRequirements(item.requiresConsumables || []);
+  if(consumableRequirements.length){
+    for(const creq of consumableRequirements){
       if(getConsumableCount(creq.key) < creq.amount) return;
     }
   }
-  for(const req of item.requires){
+  for(const req of requirements){
     const k = invKey(req.area, req.name, req.variant || null);
     state.inventory[k].count -= req.amount;
     dbSaveInvItem(state.inventory[k]);
   }
-  if(item.requiresConsumables){
-    for(const creq of item.requiresConsumables){
+  if(consumableRequirements.length){
+    for(const creq of consumableRequirements){
       state.consumables[creq.key] -= creq.amount;
     }
   }
@@ -5475,7 +5643,7 @@ function renderConsumableCards(){
           const msLeft = s.expiresAt - now;
           return `<div>Stack ${i+1}: ${fmtDuration(Math.ceil(msLeft/1000))} left</div>`;
         }).join('');
-        const curMult = Math.min(1 + activeStacks * 0.5, 2.5);
+        const curMult = Math.min(1 + activeStacks * upgradedWatergunStackMult(), upgradedWatergunCapMult());
         statusHtml = `<div class="buff-active">💧 ${activeStacks}/3 stacks active · ×${curMult.toFixed(1)} rps<br>${stackLines}</div>`;
       }
     }
@@ -5562,7 +5730,7 @@ function renderConsumableCards(){
     const effectSub = `
       <div class="sub-acc-item" data-sub-acc="effect-${key}">
         <div class="sub-acc-head"><span>✦ Effect</span><span class="chev">▾</span></div>
-        <div class="sub-acc-body"><span class="stat" style="color:var(--accent-2);">${item.effect}</span></div>
+        <div class="sub-acc-body"><span class="stat" style="color:var(--accent-2);">${ballAdjustedConsumableEffect(item)}</span></div>
       </div>`;
 
     const recipeSub = `
@@ -5657,7 +5825,7 @@ function coinBagBonus(){
 function effectiveRps(){
   const base = currentAxe().stats.rps;
   const stacks = wgunActiveStacks();
-  const wgunMult = stacks === 0 ? 1 : Math.min(1 + stacks * CONSUMABLES.watergun.stackMult, CONSUMABLES.watergun.capMult);
+  const wgunMult = stacks === 0 ? 1 : Math.min(1 + stacks * upgradedWatergunStackMult(), upgradedWatergunCapMult());
   const equip = currentEquip();
   // rpsMult may intentionally be zero (Exponentia), so test for presence instead of truthiness.
   const equipMult = (equip && equip.rpsMult != null) ? equip.rpsMult : 1;
@@ -5802,7 +5970,7 @@ function useConsumable(key, options={}){
     const now = Date.now();
     state.wgunStacks = state.wgunStacks.filter(s => s.expiresAt > now);
     if(state.wgunStacks.length >= CONSUMABLES.watergun.maxStacks){
-      return deny('Already at max watergun stacks (×3)! Wait for one to expire first.');
+      return deny(`Already at max watergun stacks (×${upgradedWatergunCapMult().toFixed(1)})! Wait for one to expire first.`);
     }
     state.consumables.watergun--;
     state.wgunStacks.push({ expiresAt: now + CONSUMABLES.watergun.durationSeconds * 1000 });
@@ -5868,8 +6036,9 @@ function useConsumable(key, options={}){
     if(state.bombCharge) return deny('The bomb is already armed — only one can charge at a time.');
     state.consumables.bomb--;
     const equip = currentEquip();
-    const chargeSpeedMult = (equip && equip.bombChargeSpeedMult) ? equip.bombChargeSpeedMult : 1;
-    state.bombCharge = { chargingUntil: Date.now() + (CONSUMABLES.bomb.chargeSeconds * 1000) / chargeSpeedMult };
+    const chargeSpeedMult = ballAdjustedAxenadesScalar(equip, (equip && equip.bombChargeSpeedMult) ? equip.bombChargeSpeedMult : 1);
+    const bombCfg = ballAdjustedConsumableConfig('bomb');
+    state.bombCharge = { chargingUntil: Date.now() + (bombCfg.chargeSeconds * 1000) / chargeSpeedMult };
     dbSaveMeta(); refreshCards();
     return true;
   }
@@ -5899,14 +6068,14 @@ function triggerBomb(){
   const world = WORLDS[state.worldIdx];
   const area = world.areas[state.areaIdx];
   const equip = currentEquip();
-  const cfg = CONSUMABLES.bomb;
+  const cfg = ballAdjustedConsumableConfig('bomb');
 
   // [Axenades] (equip): if worn, the bomb itself is x1.5 more efficient — more rolls per trigger.
-  const bombEffMult = (equip && equip.bombEfficiencyMult) ? equip.bombEfficiencyMult : 1;
+  const bombEffMult = ballAdjustedAxenadesScalar(equip, (equip && equip.bombEfficiencyMult) ? equip.bombEfficiencyMult : 1);
   const bombRollCount = Math.round(cfg.rollCount * bombEffMult);
 
   // Extra batch also fired when the bomb goes off, on top of the bomb's own roll batch.
-  const extraBatch = (equip && equip.bombTriggerBonus) ? equip.bombTriggerBonus : null;
+  const extraBatch = ballAdjustedAxenadesTriggerBonus(equip);
   const totalPlanned = bombRollCount + (extraBatch ? extraBatch.rolls : 0);
 
   let best = null;
@@ -5962,7 +6131,7 @@ function triggerBomb(){
 // chunks. It preserves current-area rolls, luck, mutation luck, inventory aggregation, and the
 // live roll display without blocking the browser while a multi-million-roll batch is processed.
 function triggerInstantConsumableBatch(key){
-  const cfg = CONSUMABLES[key];
+  const cfg = ballAdjustedConsumableConfig(key);
   if(!cfg || !cfg.instantRollBatch || getConsumableCount(key) <= 0) return;
   if(state.instantConsumableBatch) {
     alertUser('A consumable roll batch is already in progress.');
@@ -6033,7 +6202,7 @@ function triggerNullBomb(){
 
   const world = WORLDS[state.worldIdx];
   const area = world.areas[state.areaIdx];
-  const cfg = CONSUMABLES.nullbomb;
+  const cfg = ballAdjustedConsumableConfig('nullbomb');
   const totalPlanned = cfg.rollCount;
 
   state.nullBombCharge.detonating = true;
@@ -6092,6 +6261,305 @@ function triggerNullBomb(){
 }
 
 /* ============================================================
+   BALLS TAB — SPAWNS, COLLECTION, AND DISPLAY
+   ============================================================ */
+function normalizeBallState(){
+  const sourceCounts = (state.balls && typeof state.balls === 'object') ? state.balls : {};
+  state.balls = blankBallCounts();
+  for(const ball of BALL_DEFS){
+    state.balls[ball.key] = Math.max(0, Math.floor(Number(sourceCounts[ball.key]) || 0));
+  }
+  const rawSpawned = Array.isArray(state.spawnedBalls) ? state.spawnedBalls : [];
+  state.spawnedBalls = rawSpawned.filter(ball => ball && BALL_BY_KEY[ball.key] && Number.isFinite(Number(ball.expiresAt))).map(ball => ({
+    id: String(ball.id || `ball-${Math.random().toString(36).slice(2)}`),
+    key: ball.key,
+    expiresAt: Number(ball.expiresAt),
+  }));
+  const sourceUpgrades = (state.ballUpgrades && typeof state.ballUpgrades === 'object') ? state.ballUpgrades : {};
+  state.ballUpgrades = {
+    showAutorollTimer: !!sourceUpgrades.showAutorollTimer,
+    showPerfectTime: !!sourceUpgrades.showPerfectTime,
+    autoPushpin: !!sourceUpgrades.autoPushpin,
+    autoGloves: !!sourceUpgrades.autoGloves,
+    upgradedGloves: !!sourceUpgrades.upgradedGloves,
+    upgradedPushpin: !!sourceUpgrades.upgradedPushpin,
+    upgradedBombs: !!sourceUpgrades.upgradedBombs,
+    sentientWaterhose: !!sourceUpgrades.sentientWaterhose,
+    manualAutoroll: Math.min(BALL_UPGRADE_LIMITS.manualAutoroll, Math.max(0, Math.floor(Number(sourceUpgrades.manualAutoroll) || 0))),
+    discount: Math.min(BALL_UPGRADE_LIMITS.discount, Math.max(0, Math.floor(Number(sourceUpgrades.discount) || 0))),
+    doubleChance: Math.min(BALL_UPGRADE_LIMITS.doubleChance, Math.max(0, Math.floor(Number(sourceUpgrades.doubleChance) || 0))),
+  };
+  const sourceAutoUse = (state.ballAutoUse && typeof state.ballAutoUse === 'object') ? state.ballAutoUse : {};
+  state.ballAutoUse = {
+    pushpin: !!sourceAutoUse.pushpin && state.ballUpgrades.autoPushpin,
+    gloves: !!sourceAutoUse.gloves && state.ballUpgrades.autoGloves,
+  };
+}
+
+function ballUpgradeLevel(key){
+  return Math.max(0, Math.floor(Number(state.ballUpgrades && state.ballUpgrades[key]) || 0));
+}
+
+function hasBallUpgrade(key){
+  return !!(state.ballUpgrades && state.ballUpgrades[key]);
+}
+
+function manualAutorollMultiplier(){
+  return 1 + ballUpgradeLevel('manualAutoroll') * 0.10;
+}
+
+function tryAutoUseRecipeConsumables(){
+  if(!state.pinnedRecipe || !allUnfinishedMaterials().length) return;
+  if(state.ballAutoUse && state.ballAutoUse.pushpin && !state.activeBuffs?.pushpin && getConsumableCount('pushpin') > 0){
+    useConsumable('pushpin', { silent:true });
+  }
+  if(state.ballAutoUse && state.ballAutoUse.gloves && !state.activeBuffs?.gloves && getConsumableCount('gloves') > 0){
+    useConsumable('gloves', { silent:true });
+  }
+}
+
+function upgradedWatergunStackMult(){
+  return hasBallUpgrade('sentientWaterhose') ? 1 : CONSUMABLES.watergun.stackMult;
+}
+
+function upgradedWatergunCapMult(){
+  return 1 + CONSUMABLES.watergun.maxStacks * upgradedWatergunStackMult();
+}
+
+function ballAdjustedConsumableConfig(key){
+  const cfg = CONSUMABLES[key];
+  if(!cfg || !hasBallUpgrade('upgradedBombs')) return cfg;
+  if(key === 'bomb') return { ...cfg, chargeSeconds:15 * 60, rollCount:1250000, luckMult:100, mutationLuckMult:5 };
+  if(key === 'nukinamachina') return { ...cfg, rollCount:5000000, luckMult:150, mutationLuckMult:10 };
+  if(key === 'nullbomb') return { ...cfg, rollCount:40400000, luckMult:404, mutationLuckMult:4.04 };
+  return cfg;
+}
+
+function ballAdjustedAxenadesScalar(equip, value){
+  return equip && equip.key === 'axenades' && hasBallUpgrade('upgradedBombs') ? value * 2 : value;
+}
+
+function ballAdjustedAxenadesRules(equip, field){
+  if(!equip || equip.key !== 'axenades' || !hasBallUpgrade('upgradedBombs')) return equip && equip[field];
+  const rules = equip[field] ? (Array.isArray(equip[field]) ? equip[field] : [equip[field]]) : [];
+  return rules.map(rule => ({
+    ...rule,
+    rolls: rule.rolls != null ? rule.rolls * 2 : rule.rolls,
+    minRolls: rule.minRolls != null ? rule.minRolls * 2 : rule.minRolls,
+    maxRolls: rule.maxRolls != null ? rule.maxRolls * 2 : rule.maxRolls,
+    bonusRolls: rule.bonusRolls != null ? rule.bonusRolls * 2 : rule.bonusRolls,
+    luckMult: rule.luckMult != null ? rule.luckMult * 2 : rule.luckMult,
+    bonusLuckMult: rule.bonusLuckMult != null ? rule.bonusLuckMult * 2 : rule.bonusLuckMult,
+    mutationLuckMult: rule.mutationLuckMult != null ? rule.mutationLuckMult * 2 : rule.mutationLuckMult,
+  }));
+}
+
+function ballAdjustedAxenadesTriggerBonus(equip){
+  if(!equip || !equip.bombTriggerBonus) return null;
+  const bonus = equip.bombTriggerBonus;
+  if(equip.key !== 'axenades' || !hasBallUpgrade('upgradedBombs')) return bonus;
+  return { ...bonus, rolls:bonus.rolls * 2, luckMult:bonus.luckMult * 2, mutationLuckMult:bonus.mutationLuckMult * 2 };
+}
+
+function pruneExpiredBalls(now=Date.now()){
+  if(!Array.isArray(state.spawnedBalls)){
+    state.spawnedBalls = [];
+    return false;
+  }
+  const before = state.spawnedBalls.length;
+  state.spawnedBalls = state.spawnedBalls.filter(ball => ball && BALL_BY_KEY[ball.key] && ball.expiresAt > now);
+  return state.spawnedBalls.length !== before;
+}
+
+function updateBallsNavDot(){
+  const dot = document.getElementById('ballsNavDot');
+  if(dot) dot.hidden = !state.spawnedBalls || state.spawnedBalls.length === 0;
+}
+
+function makeSpawnedBall(key){
+  return { id:`ball-${Date.now()}-${Math.random().toString(36).slice(2,10)}`, key, expiresAt:Date.now() + BALL_LIFETIME_MS };
+}
+
+// Called once per real player roll interaction, never once per individual bulk roll. Every color
+// is rolled independently, so more than one color can be available from the same click.
+function trySpawnBallsFromPlayerClick(){
+  normalizeBallState();
+  const expired = pruneExpiredBalls();
+  if(expired){
+    updateBallsNavDot();
+    dbSaveMeta();
+  }
+  const spawned = [];
+  const duplicateChance = ballUpgradeLevel('doubleChance') / 100;
+  for(const ball of BALL_DEFS){
+    if(Math.random() >= ball.chance) continue;
+    spawned.push(makeSpawnedBall(ball.key));
+    if(duplicateChance > 0 && Math.random() < duplicateChance){
+      spawned.push(makeSpawnedBall(ball.key));
+    }
+  }
+  if(!spawned.length) return [];
+  state.spawnedBalls.push(...spawned);
+  updateBallsNavDot();
+  if(currentView === 'balls') renderBallsView();
+  dbSaveMeta();
+  return spawned;
+}
+
+function collectSpawnedBall(id){
+  normalizeBallState();
+  const index = state.spawnedBalls.findIndex(ball => ball.id === id && ball.expiresAt > Date.now());
+  if(index < 0){
+    renderBallsView();
+    return false;
+  }
+  const [ball] = state.spawnedBalls.splice(index, 1);
+  state.balls[ball.key] = (state.balls[ball.key] || 0) + 1;
+  updateBallsNavDot();
+  dbSaveMeta();
+  renderBallsView();
+  return true;
+}
+
+function ballCostHtml(cost){
+  return Object.entries(cost).map(([key, amount])=>{
+    const ball = BALL_BY_KEY[key];
+    if(!ball) return '';
+    return `<span class="ball-cost"><img src="${ball.asset}" alt="">${amount.toLocaleString()} ${escapeHtml(ball.label)}</span>`;
+  }).join('');
+}
+
+const BALL_UPGRADES = [
+  { key:'showAutorollTimer', title:'Show timer on autoroll sphere', cost:{ yellow:3 }, desc:'Shows the remaining lifetime on each autoroll sphere.' },
+  { key:'showPerfectTime', title:'Show perfect time on autoroll sphere', cost:{ yellow:10, red:1 }, desc:'Shows the sphere’s perfect-time window alongside its timer.' },
+  { key:'autoPushpin', title:'Auto use Pushpin option', cost:{ green:1 }, desc:'Unlocks a saved option to automatically use Pushpin for a valid pinned recipe.', autoUse:'pushpin' },
+  { key:'autoGloves', title:'Auto use Universal Recipe Gloves option', cost:{ white:5 }, desc:'Unlocks a saved option to automatically use Universal Recipe Gloves for a valid pinned recipe.', autoUse:'gloves' },
+  { key:'upgradedGloves', title:'Upgrade Universal Recipe Gloves', cost:{ yellow:25, red:15 }, desc:'Gloves use ×1.5 rarity instead of ×2 and can reach every rank in any area represented in the pinned recipe.' },
+  { key:'upgradedPushpin', title:'Upgrade Pushpin', cost:{ green:10, red:20 }, desc:'Pushpin gives ×2.5 luck to the most common unfinished material and ×5 luck to the rarest unfinished material.' },
+  { key:'upgradedBombs', title:'Upgrade bomb related items', cost:{ purple:2, white:50, blue:40 }, desc:'Upgrades Explosive Axe Bomb, Nukina Machina, Axenades, and null_bomb to the requested stronger values.' },
+  { key:'sentientWaterhose', title:'Sentient waterhose', cost:{ red:50, yellow:250, blue:25 }, desc:'Sentient Watergun gives +1× offline-roll speed per stack instead of +0.5×.' },
+  { key:'manualAutoroll', title:'Manual autoroll upgrade', max:10, costForLevel:level=>({ black:level + 1 }), desc:level=>`Level ${level}/10. Each level adds +10% sphere appearance speed, sphere duration, and sphere efficiency.` },
+  { key:'discount', title:'Discount', max:10, costForLevel:level=>({ black:level + 1 }), desc:level=>`Level ${level}/10. Recipes are ${level}% cheaper; Balls upgrades are excluded.` },
+  { key:'doubleChance', title:'Double chance', max:5, costForLevel:level=>({ black:2 + level * 2 }), desc:level=>`Level ${level}/5. Balls have +${level}% chance to duplicate when they spawn.` },
+];
+const BALL_UPGRADE_BY_KEY = Object.fromEntries(BALL_UPGRADES.map(upgrade => [upgrade.key, upgrade]));
+
+function ballUpgradeIsLevelled(upgrade){
+  return !!(upgrade && upgrade.max != null);
+}
+
+function ballUpgradeOwned(upgrade){
+  return ballUpgradeIsLevelled(upgrade) ? ballUpgradeLevel(upgrade.key) > 0 : hasBallUpgrade(upgrade.key);
+}
+
+function ballUpgradeIsMaxed(upgrade){
+  return ballUpgradeIsLevelled(upgrade) && ballUpgradeLevel(upgrade.key) >= upgrade.max;
+}
+
+function ballUpgradeCost(upgrade){
+  if(ballUpgradeIsLevelled(upgrade)) return upgrade.costForLevel(ballUpgradeLevel(upgrade.key));
+  return upgrade.cost || {};
+}
+
+function canAffordBallCost(cost){
+  return Object.entries(cost).every(([key, amount]) => (state.balls[key] || 0) >= amount);
+}
+
+function spendBallCost(cost){
+  for(const [key, amount] of Object.entries(cost)) state.balls[key] -= amount;
+}
+
+function purchaseBallUpgrade(key){
+  normalizeBallState();
+  const upgrade = BALL_UPGRADE_BY_KEY[key];
+  if(!upgrade) return false;
+  if(!ballUpgradeIsLevelled(upgrade) && ballUpgradeOwned(upgrade)) return false;
+  if(ballUpgradeIsMaxed(upgrade)) return false;
+  const cost = ballUpgradeCost(upgrade);
+  if(!canAffordBallCost(cost)){
+    alertUser('You do not have enough balls for that upgrade.');
+    return false;
+  }
+  spendBallCost(cost);
+  if(ballUpgradeIsLevelled(upgrade)) state.ballUpgrades[key] = ballUpgradeLevel(key) + 1;
+  else state.ballUpgrades[key] = true;
+  dbSaveMeta();
+  renderBallsView();
+  renderAxeStrip();
+  updateStatStrip();
+  if(currentView === 'items') refreshLiveViews();
+  return true;
+}
+
+function setBallAutoUse(key, enabled){
+  if(!['pushpin','gloves'].includes(key)) return;
+  const unlockKey = key === 'pushpin' ? 'autoPushpin' : 'autoGloves';
+  if(!hasBallUpgrade(unlockKey)) return;
+  state.ballAutoUse[key] = !!enabled;
+  dbSaveMeta();
+  renderBallsView();
+}
+
+function renderBallUpgradeCards(){
+  const el = document.getElementById('ballUpgradeCards');
+  if(!el) return;
+  normalizeBallState();
+  el.innerHTML = BALL_UPGRADES.map(upgrade => {
+    const level = ballUpgradeLevel(upgrade.key);
+    const owned = ballUpgradeOwned(upgrade);
+    const maxed = ballUpgradeIsMaxed(upgrade);
+    const cost = ballUpgradeCost(upgrade);
+    const canBuy = !maxed && (!owned || ballUpgradeIsLevelled(upgrade)) && canAffordBallCost(cost);
+    const desc = typeof upgrade.desc === 'function' ? upgrade.desc(level) : upgrade.desc;
+    const buttonLabel = maxed ? 'Maxed' : (!ballUpgradeIsLevelled(upgrade) && owned ? 'Owned' : `Buy${ballUpgradeIsLevelled(upgrade) ? ` · ${ballUpgradeLevel(upgrade.key) + 1}/${upgrade.max}` : ''}`);
+    const autoToggle = upgrade.autoUse && owned ? `
+      <label class="stat" style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;">
+        <input type="checkbox" data-ball-auto-use="${upgrade.autoUse}" ${state.ballAutoUse[upgrade.autoUse] ? 'checked' : ''}> Auto-use enabled
+      </label>` : '';
+    return `<div class="ball-upgrade-card ${owned ? 'owned' : ''}">
+      <h3>${escapeHtml(upgrade.title)}</h3>
+      <p>${escapeHtml(desc)}</p>
+      <div class="upgrade-cost">${maxed ? '<span class="ball-cost">MAXED</span>' : ballCostHtml(cost)}</div>
+      <button class="btn small ${canBuy ? '' : 'secondary'}" type="button" data-ball-upgrade="${upgrade.key}" ${canBuy ? '' : 'disabled'}>${buttonLabel}</button>${autoToggle}
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-ball-upgrade]').forEach(button => button.addEventListener('click', ()=> purchaseBallUpgrade(button.dataset.ballUpgrade)));
+  el.querySelectorAll('[data-ball-auto-use]').forEach(input => input.addEventListener('change', ()=> setBallAutoUse(input.dataset.ballAutoUse, input.checked)));
+}
+
+function renderBallsView(){
+  normalizeBallState();
+  const expired = pruneExpiredBalls();
+  if(expired) dbSaveMeta();
+  updateBallsNavDot();
+
+  const wallet = document.getElementById('ballWallet');
+  const spawnedEl = document.getElementById('spawnedBalls');
+  if(!wallet || !spawnedEl) return;
+  wallet.innerHTML = BALL_DEFS.map(ball => `
+    <div class="ball-wallet-item" title="${escapeHtml(ball.label)} balls collected">
+      <img src="${ball.asset}" alt="${escapeHtml(ball.label)} ball"><span>${escapeHtml(ball.label)}</span><span class="ball-count">${(state.balls[ball.key] || 0).toLocaleString()}</span>
+    </div>`).join('');
+
+  if(!state.spawnedBalls.length){
+    spawnedEl.innerHTML = '<div class="balls-empty">clicking has a chance to spawn balls! and you can buy upgrades with it</div>';
+  } else {
+    const now = Date.now();
+    spawnedEl.innerHTML = state.spawnedBalls.map(spawn => {
+      const ball = BALL_BY_KEY[spawn.key];
+      const seconds = Math.max(0, Math.ceil((spawn.expiresAt - now) / 1000));
+      return `<button class="spawned-ball" type="button" data-collect-ball="${escapeHtml(spawn.id)}" style="--ball-glow:${ball.glow}" title="Collect ${escapeHtml(ball.label)} ball">
+        <img src="${ball.asset}" alt="${escapeHtml(ball.label)} ball"><span class="ball-name">${escapeHtml(ball.label)} ball</span><span class="ball-timer">${seconds}s left</span>
+      </button>`;
+    }).join('');
+    spawnedEl.querySelectorAll('[data-collect-ball]').forEach(button => {
+      button.addEventListener('click', ()=> collectSpawnedBall(button.dataset.collectBall));
+    });
+  }
+  renderBallUpgradeCards();
+}
+
+/* ============================================================
    NAV / VIEW SWITCHING
    ============================================================ */
 
@@ -6112,6 +6580,7 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
 function refreshLiveViews(){
   if(currentView === 'items'){ renderItemCards(); renderConsumableCards(); renderEquipCards(); }
   if(currentView === 'inventory') renderInventory();
+  if(currentView === 'balls') renderBallsView();
 }
 
 /* ============================================================
@@ -6192,6 +6661,7 @@ function processClickBonusRules(rules, world, area, results, updateBest){
 // identically using the current axe/equip stats — the skillcheck is not a separate, weaker path.
 // Returns { best, totalRolls } — does NOT touch the stage/troll-roll display, callers do that.
 function performClick(){
+  tryAutoUseRecipeConsumables();
   state.trollstoneEligible = !!state.lastRollWasTroll;
   state.lastRollWasTroll = false;
   const axe = currentAxe();
@@ -6238,7 +6708,7 @@ function performClick(){
 
   // Click-triggered bonus rolls from the equipped item, if any (same rule shape as axes)
   if(equip){
-    clickBonusFired += processClickBonusRules(equip.clickBonus, world, area, results, updateBest);
+    clickBonusFired += processClickBonusRules(ballAdjustedAxenadesRules(equip, 'clickBonus'), world, area, results, updateBest);
   }
 
   // [Coin Bag] (equip): on click, 1/5 chance to add a 15-second luck/mutation-luck stack.
@@ -6273,6 +6743,7 @@ function performClick(){
 
 function doRoll(){
   const { best, totalRolls } = performClick();
+  trySpawnBallsFromPlayerClick();
 
   // Troll roll: 1/5,000 chance PER CLICK, no requirement on the real result. When it fires, shows
   // a genuinely Unworldly+ rank from the current area for 3 seconds before revealing the truth.
@@ -6387,6 +6858,7 @@ const skillcheck = {
   el: null,           // the circle DOM element, while spawned
   spawnedAt: 0,
   perfectTicker: null, // interval handle while a perfect-window sustain is running
+  displayTicker: null, // interval handle for unlocked sphere timer/perfect-time display
 };
 
 // accuracy: how centered the tap was on the circle, scaled 0.01-2.5 (0.01 = just grazed the
@@ -6404,11 +6876,12 @@ function computeTapAccuracy(circleEl, clientX, clientY){
 function clearSkillcheckCircle(){
   if(skillcheck.el){ skillcheck.el.remove(); skillcheck.el = null; }
   if(skillcheck.perfectTicker){ clearInterval(skillcheck.perfectTicker); skillcheck.perfectTicker = null; }
+  if(skillcheck.displayTicker){ clearInterval(skillcheck.displayTicker); skillcheck.displayTicker = null; }
 }
 
 function scheduleNextSkillcheck(){
   if(!skillcheck.active) return;
-  const delay = (2 + Math.random()*3) * 1000; // every 2-5 seconds
+  const delay = ((2 + Math.random()*3) * 1000) / manualAutorollMultiplier(); // base every 2-5 seconds, faster by +10% per level
   skillcheck.timer = setTimeout(spawnSkillcheckCircle, delay);
 }
 
@@ -6435,9 +6908,28 @@ function spawnSkillcheckCircle(){
   skillcheck.el = circle;
   skillcheck.spawnedAt = Date.now();
 
-  const LIFESPAN_MS = 3000;
-  const PERFECT_WINDOW_START = 1400; // ms remaining
-  const PERFECT_WINDOW_END = 1500;   // ms remaining
+  const autorollMult = manualAutorollMultiplier();
+  const LIFESPAN_MS = 3000 * autorollMult;
+  const PERFECT_WINDOW_START = 1400 * autorollMult; // ms remaining
+  const PERFECT_WINDOW_END = 1500 * autorollMult;   // ms remaining
+  circle.style.animationDuration = `${LIFESPAN_MS}ms`;
+
+  if(hasBallUpgrade('showAutorollTimer') || hasBallUpgrade('showPerfectTime')){
+    const timerLabel = document.createElement('div');
+    timerLabel.className = 'skillcheck-timer';
+    circle.appendChild(timerLabel);
+    const updateTimerLabel = ()=>{
+      if(skillcheck.el !== circle) return;
+      const remaining = Math.max(0, LIFESPAN_MS - (Date.now() - skillcheck.spawnedAt));
+      const isPerfectNow = remaining >= PERFECT_WINDOW_START && remaining <= PERFECT_WINDOW_END;
+      const timerText = hasBallUpgrade('showAutorollTimer') ? `${(remaining / 1000).toFixed(1)}s` : '';
+      const perfectText = hasBallUpgrade('showPerfectTime') ? (isPerfectNow ? 'Perfect: NOW' : `Perfect: ${(PERFECT_WINDOW_START / 1000).toFixed(1)}–${(PERFECT_WINDOW_END / 1000).toFixed(1)}s`) : '';
+      timerLabel.textContent = [timerText, perfectText].filter(Boolean).join(' · ');
+      timerLabel.classList.toggle('perfect-now', isPerfectNow && hasBallUpgrade('showPerfectTime'));
+    };
+    updateTimerLabel();
+    skillcheck.displayTicker = setInterval(updateTimerLabel, 50);
+  }
 
   const despawnTimer = setTimeout(()=>{
     if(skillcheck.el === circle){
@@ -6465,11 +6957,13 @@ function spawnSkillcheckCircle(){
       return;
     }
 
+    trySpawnBallsFromPlayerClick();
+
     if(remaining >= PERFECT_WINDOW_START && remaining <= PERFECT_WINDOW_END){
       // Perfect timing window: sustained 5-second payout, ticking once per second.
       // Each "click" here is a FULL click — full bulk, axe/equip click bonuses, everything.
       let ticksLeft = 5;
-      const clicksPerTick = Math.max(1, Math.round(10 * (accuracy * 1.5)));
+      const clicksPerTick = Math.max(1, Math.round(10 * (accuracy * 1.5) * autorollMult));
       skillcheck.perfectTicker = setInterval(()=>{
         performBulkRolls(clicksPerTick);
         ticksLeft--;
@@ -6483,7 +6977,7 @@ function spawnSkillcheckCircle(){
       ticksLeft--;
     } else {
       // Normal hit, anywhere/anytime within the circle's life — grants this many full clicks.
-      const clicks = Math.max(1, Math.round(10 * accuracy));
+      const clicks = Math.max(1, Math.round(10 * accuracy * autorollMult));
       performBulkRolls(clicks);
       scheduleNextSkillcheck();
     }
@@ -7099,7 +7593,8 @@ async function resolveOfflineProgress(){
   // idleEfficiencyMult (from an equip) scales EVERY offline bonus rule unconditionally, axe and
   // equip alike, since it's meant to boost "everything idle" the same way Irritation's wording does.
   const axeRules = scaledAxeBonus ? (Array.isArray(scaledAxeBonus) ? scaledAxeBonus : [scaledAxeBonus]) : [];
-  const equipRules = (equip && equip.offlineBonus) ? (Array.isArray(equip.offlineBonus) ? equip.offlineBonus : [equip.offlineBonus]) : [];
+  const adjustedEquipBonus = ballAdjustedAxenadesRules(equip, 'offlineBonus');
+  const equipRules = adjustedEquipBonus ? (Array.isArray(adjustedEquipBonus) ? adjustedEquipBonus : [adjustedEquipBonus]) : [];
   let scaledOfflineBonus = [...axeRules, ...equipRules];
 
   const idleEffMult = (equip && equip.idleEfficiencyMult) ? equip.idleEfficiencyMult : 1;
@@ -7599,6 +8094,7 @@ async function initInner(){
   renderItemCards();
   renderConsumableCards();
   renderEquipCards();
+  renderBallsView();
   setupConsumableBulkCraftControls();
   setupItemCategorySelect();
   updateStatStrip();
@@ -7682,6 +8178,12 @@ let wasErrRedirectorActive = isErrRedirectorActive();
 let wasDoublinatorActive = isDoublinatorActive();
 setInterval(()=>{
   const now = Date.now();
+  const ballsExpired = pruneExpiredBalls(now);
+  if(ballsExpired){
+    updateBallsNavDot();
+    dbSaveMeta();
+  }
+  if(currentView === 'balls') renderBallsView();
   if(currentView === 'items'){
     if(state.bombCharge) renderConsumableCards();
     if(state.nullBombCharge) renderConsumableCards();
