@@ -1029,6 +1029,10 @@
           <span class="settings-copy"><b>legacycolorfont</b><small>Use original tier-based visual styling.</small></span>
           <input id="legacyColorFontToggle" type="checkbox" role="switch">
         </label>
+        <label class="settings-card setting-toggle" title="Groups normal, Weird, Odd, Rainbow, and Grayscale holdings into one Inventory row with a pipe-separated owned-count summary.">
+          <span class="settings-copy"><b>Compact Inventory variants</b><small>Hide separate variant rows and show owned as normal | Weird | Odd | Rainbow | Grayscale.</small></span>
+          <input id="compactInventoryVariantsToggle" type="checkbox" role="switch">
+        </label>
       </div>
       <div class="settings-section-title">Automatic recipe helpers</div>
       <div id="settingsAutoUseOptions" class="settings-grid"></div>
@@ -2654,6 +2658,7 @@ let state = {
   discoveredSecrets: {},    // { secretKey: firstDiscoveredAtTimestamp }
   rankVisualStyle: 'modernrandom', // 'modernrandom' or 'legacycolorfont'
   lowDetailMode: false, // removes expensive visuals and lowers live UI work for performance
+  compactInventoryVariants: false, // groups normal + variant holdings into one flat Inventory row
   errRedirectorUntil: null, // timestamp — while in the future, the 404 area's rarity-truncation gimmick is suppressed
   doublinatorUntil: null, // timestamp — ×2 bulk/luck/rps while in the future
   doublinatorCooldownUntil: null, // timestamp — cannot activate another Doublinator before this time
@@ -3638,6 +3643,7 @@ function buildMetaSnapshot(){
     discoveredSecrets: state.discoveredSecrets,
     rankVisualStyle: state.rankVisualStyle,
     lowDetailMode: !!state.lowDetailMode,
+    compactInventoryVariants: !!state.compactInventoryVariants,
     errRedirectorUntil: state.errRedirectorUntil,
     doublinatorUntil: state.doublinatorUntil,
     doublinatorCooldownUntil: state.doublinatorCooldownUntil,
@@ -3851,6 +3857,7 @@ function applyMetaToState(meta){
   state.discoveredSecrets = meta.discoveredSecrets || {};
   state.rankVisualStyle = meta.rankVisualStyle === 'legacycolorfont' ? 'legacycolorfont' : 'modernrandom';
   state.lowDetailMode = !!meta.lowDetailMode;
+  state.compactInventoryVariants = !!meta.compactInventoryVariants;
   state.errRedirectorUntil = meta.errRedirectorUntil || null;
   state.doublinatorUntil = meta.doublinatorUntil || null;
   state.doublinatorCooldownUntil = meta.doublinatorCooldownUntil || null;
@@ -4723,6 +4730,21 @@ function setupLowDetailModeToggle(){
   toggle.addEventListener('change', ()=> setLowDetailMode(toggle.checked));
 }
 
+function setCompactInventoryVariants(enabled){
+  state.compactInventoryVariants = !!enabled;
+  const toggle = document.getElementById('compactInventoryVariantsToggle');
+  if(toggle) toggle.checked = state.compactInventoryVariants;
+  dbSaveMeta();
+  renderInventory();
+}
+
+function setupCompactInventoryVariantsToggle(){
+  const toggle = document.getElementById('compactInventoryVariantsToggle');
+  if(!toggle) return;
+  toggle.checked = !!state.compactInventoryVariants;
+  toggle.addEventListener('change', ()=> setCompactInventoryVariants(toggle.checked));
+}
+
 function applyRankVisualStyle(){
   const enabled = isLegacyColorFontEnabled();
   document.documentElement.classList.toggle('legacycolorfont-active', enabled);
@@ -4733,6 +4755,8 @@ function applyRankVisualStyle(){
 function renderSettingsView(){
   applyLowDetailMode();
   applyRankVisualStyle();
+  const compactToggle = document.getElementById('compactInventoryVariantsToggle');
+  if(compactToggle) compactToggle.checked = !!state.compactInventoryVariants;
   const autoUseEl = document.getElementById('settingsAutoUseOptions');
   if(!autoUseEl) return;
   const helpers = [
@@ -4861,7 +4885,10 @@ function renderInventory(){
   if(fRank.value) items = items.filter(i => i.name === fRank.value);
 
   const totalCount = allItems.reduce((s,i)=> s + i.count, 0);
-  summary.textContent = `${allItems.length} unique · ${totalCount.toLocaleString()} total`;
+  const allCompactGroupCount = state.compactInventoryVariants
+    ? new Set(allItems.map(item => `${item.isSecret ? 'secret' : 'rank'}|${item.areaLabel}|${item.name}`)).size
+    : allItems.length;
+  summary.textContent = `${allCompactGroupCount} ${state.compactInventoryVariants ? 'unique ranks' : 'unique'} · ${totalCount.toLocaleString()} total`;
 
   if(items.length === 0){
     list.innerHTML = `<div class="inv-empty">${allItems.length === 0 ? 'Nothing collected yet. Go roll something.' : 'No items match the current filters.'}</div>`;
@@ -4874,17 +4901,51 @@ function renderInventory(){
     return b.lastRng - a.lastRng;
   });
 
-  list.innerHTML = items.map(it => {
-    const variantTxt = it.variant ? ` · ${it.variant.label}` : '';
-    const suffix = it.variant ? ' ✦' : (it.isSecret ? ' 🔒' : '');
-    const nameEl = rankNameHtml(it.name, it.tierCls, it.variant, '', it.isSecret ? null : it.tierKey);
-    return `
-      <div class="inv-row">
-        <div>
-          <div class="iname">${nameEl}${suffix}</div>
-          <div class="imeta">${it.areaLabel} · ${fmtRngForResult(it)} · ${it.tierLabel}${variantTxt}</div>
+  if(!state.compactInventoryVariants){
+    summary.textContent = `${allItems.length} unique · ${totalCount.toLocaleString()} total`;
+    list.innerHTML = items.map(it => {
+      const variantTxt = it.variant ? ` · ${it.variant.label}` : '';
+      const suffix = it.variant ? ' ✦' : (it.isSecret ? ' 🔒' : '');
+      const nameEl = rankNameHtml(it.name, it.tierCls, it.variant, '', it.isSecret ? null : it.tierKey);
+      return `
+        <div class="inv-row">
+          <div>
+            <div class="iname">${nameEl}${suffix}</div>
+            <div class="imeta">${it.areaLabel} · ${fmtRngForResult(it)} · ${it.tierLabel}${variantTxt}</div>
+          </div>
+          <span class="icount">×${it.count.toLocaleString()}</span>
         </div>
-        <span class="icount">×${it.count.toLocaleString()}</span>
+      `;
+    }).join('');
+    return;
+  }
+
+  const variantOrder = [null, ...VARIANT_CHAIN.map(variant => variant.key)];
+  const grouped = new Map();
+  for(const item of items){
+    const groupKey = `${item.isSecret ? 'secret' : 'rank'}|${item.areaLabel}|${item.name}`;
+    if(!grouped.has(groupKey)) grouped.set(groupKey, { representative:item, counts:Object.fromEntries(variantOrder.map(key => [key == null ? 'normal' : key, 0])) });
+    const group = grouped.get(groupKey);
+    const variantKey = item.variant ? item.variant.key : 'normal';
+    group.counts[variantKey] = (group.counts[variantKey] || 0) + item.count;
+    if(item.lastRng > group.representative.lastRng) group.representative = item;
+  }
+  const compactItems = [...grouped.values()].sort((a,b)=> {
+    if(a.representative.isSecret && !b.representative.isSecret) return -1;
+    if(!a.representative.isSecret && b.representative.isSecret) return 1;
+    return b.representative.lastRng - a.representative.lastRng;
+  });
+  list.innerHTML = compactItems.map(group => {
+    const it = group.representative;
+    const nameEl = rankNameHtml(it.name, it.tierCls, null, '', it.isSecret ? null : it.tierKey);
+    const variantCounts = variantOrder.map(key => (group.counts[key == null ? 'normal' : key] || 0).toLocaleString()).join(' | ');
+    return `
+      <div class="inv-row compact-variant-row">
+        <div>
+          <div class="iname">${nameEl}${it.isSecret ? ' 🔒' : ''}</div>
+          <div class="imeta">${it.areaLabel} · ${fmtRng(it.baseRng)} · ${it.tierLabel}</div>
+        </div>
+        <span class="icount" title="normal | Weird | Odd | Rainbow | Grayscale">${variantCounts}</span>
       </div>
     `;
   }).join('');
@@ -8318,6 +8379,7 @@ async function initInner(){
   applyLowDetailMode();
   setupLegacyColorFontToggle();
   setupLowDetailModeToggle();
+  setupCompactInventoryVariantsToggle();
 
   // DATA-LOSS GUARD: if it looks like a real save vanished, stop here. Don't render the game,
   // don't run anticheat/offline-progress, and CRITICALLY don't let dbSaveMeta() run — that's
