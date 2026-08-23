@@ -109,7 +109,8 @@
   .setting-toggle input{ width:18px; height:18px; accent-color:var(--accent); cursor:pointer; flex:0 0 auto; }
   .settings-section-title{ margin:20px 0 10px; color:var(--text-faint); font-size:10px; font-family:var(--mono); letter-spacing:.13em; text-transform:uppercase; }
   .settings-maintenance{ display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
-  .settings-maintenance .cache-reset-btn{ margin-top:0; }
+  .settings-maintenance .cache-reset-btn{ margin-top:0; display:block; }
+  .settings-maintenance #storageEngineChangeChoices .cache-reset-btn{ display:block; }
   .brand .eyebrow{
     font-family:var(--mono);
     font-size:11px;
@@ -2619,7 +2620,7 @@ const BALL_DEFS = [
   { key:'black',  label:'Black',  chance:1/10000,asset:'./textures/blackball.PNG', glow:'#d8d8e5' },
 ];
 const BALL_BY_KEY = Object.fromEntries(BALL_DEFS.map(ball => [ball.key, ball]));
-const BALL_UPGRADE_LIMITS = { manualAutoroll:10, discount:10, doubleChance:5, offlineTickspeed:5, expoballs:5 };
+const BALL_UPGRADE_LIMITS = { manualAutoroll:10, discount:10, doubleChance:5, offlineTickspeed:5, expoballs:5, holdToClick:5 };
 
 function blankBallCounts(){
   return Object.fromEntries(BALL_DEFS.map(ball => [ball.key, 0]));
@@ -4281,34 +4282,44 @@ function buildAreaPool(world, area, opts){
   return pool;
 }
 
-// Luck can improve a rank's chance, but it can never push a luck-affected roll beyond 1/2.
-// "All" retains its stricter 1/3 cap, because it is an area-specific debuff rather than a luck bonus.
+// Luck-affected checks retain the global 1/2 cap; the All area retains its stricter 1/3 cap.
+// When raw luck actually exceeds one or more ranks, those ranks are no longer resolved as equal
+// 1/2 checks. Instead they become the guaranteed-luck candidate group and are selected with the
+// requested relative weight: (the RNG of the rank directly below × 5)². A log-space calculation
+// preserves that exact ratio without overflowing on very large rarity values.
 const LUCK_AFFECTED_CHANCE_CAP = 0.5;
-const RARITY_TIE_BIAS_PER_COMMONER = 0.02;
 
 function cappedLuckChance(luckMult, rng, areaMaxChance=LUCK_AFFECTED_CHANCE_CAP){
   return Math.min(luckMult / rng, LUCK_AFFECTED_CHANCE_CAP, areaMaxChance);
 }
 
-// Equal effective odds should not accidentally favor whichever rank happened to be iterated first.
-// Identical-rarity entries stay perfectly uniform. When several ranks are at their luck cap, each
-// step toward a rarer RNG value gets a tiny +2% relative weight over every more-common step below it.
-function chooseRarityBiasedWinner(candidates){
+function chooseUniformWinner(candidates){
+  if(!candidates || candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function chooseLuckExceededWinner(candidates, fullPool){
   if(!candidates || candidates.length === 0) return null;
   if(candidates.length === 1) return candidates[0];
-  const uniqueRngs = [...new Set(candidates.map(item => item.rng))].sort((a,b)=>a-b);
-  const rankByRng = new Map(uniqueRngs.map((rng, index)=>[rng, index]));
-  const weighted = candidates.map(item => ({
-    item,
-    weight: 1 + rankByRng.get(item.rng) * RARITY_TIE_BIAS_PER_COMMONER,
-  }));
-  const totalWeight = weighted.reduce((sum, entry)=>sum + entry.weight, 0);
+  const finiteRngs = [...new Set((fullPool || candidates).map(item => item.rng).filter(Number.isFinite))].sort((a,b)=>a-b);
+  const rankBelow = rng => {
+    let below = 1;
+    for(const candidateRng of finiteRngs){
+      if(candidateRng >= rng) break;
+      below = candidateRng;
+    }
+    return below;
+  };
+  const logWeights = candidates.map(item => 2 * Math.log(Math.max(1, rankBelow(item.rng) * 5)));
+  const maxLogWeight = Math.max(...logWeights);
+  const weights = logWeights.map(logWeight => Math.exp(logWeight - maxLogWeight));
+  const totalWeight = weights.reduce((sum, weight)=>sum + weight, 0);
   let cursor = Math.random() * totalWeight;
-  for(const entry of weighted){
-    cursor -= entry.weight;
-    if(cursor <= 0) return entry.item;
+  for(let i=0; i<candidates.length; i++){
+    cursor -= weights[i];
+    if(cursor <= 0) return candidates[i];
   }
-  return weighted[weighted.length - 1].item;
+  return candidates[candidates.length - 1];
 }
 
 function rollOnceForArea(world, area, luckMult, opts){
@@ -4402,88 +4413,46 @@ function rollOnceForArea(world, area, luckMult, opts){
     return l;
   }
 
-  // 1. Identify the highest guaranteed RNG that luck would automatically roll
-  let highestGuaranteedRng = 0;
-  for(const item of pool) {
-    if(item.rng !== Infinity) {
-      const rng = effectiveRng(item);
-      const itemLuckMult = effectiveLuckForItem(item, item.isMutation ? luckMult * mutationLuckMult : luckMult);
-      const effectiveChance = cappedLuckChance(itemLuckMult, rng, area.isUniversalPool ? (1/3) : LUCK_AFFECTED_CHANCE_CAP);
-      if(effectiveChance >= 1) {
-        if(rng > highestGuaranteedRng) {
-          highestGuaranteedRng = rng;
-        }
-      }
-    }
-  }
-
-  // 2. Perform rolling checks with 1/5 minimum fallback cap for skipped ranks
-  // Track ALL items that pass their check at the best (rarest) rng seen so far, not just the
-  // first one encountered — ties are broken with a genuine uniform 1/n pick at the end, rather
-  // than always favoring whichever happened to iterate first.
-  let normalWinners = [];   // all items tied for the best passing rng
-  let bypassedWinners = [];
-  let cappedWinners = [];   // every successful item whose chance reached its area’s luck cap
-
-  // Luck’s global 1/2 cap applies in every area; "All" keeps its existing stricter 1/3 area cap.
+  // Raw luck that exceeds a rank is handled as a guaranteed candidate rather than a flat 1/2
+  // chance. All keeps its strict 1/3 cap and therefore has no guaranteed-luck candidates.
   const maxRollChance = area.isUniversalPool ? (1/3) : LUCK_AFFECTED_CHANCE_CAP;
+  const luckExceededCandidates = [];
+  let normalWinners = []; // all successful non-guaranteed entries tied at the rarest RNG
 
   for(const item of pool){
     if(item.rng === Infinity){
       if(Math.random() < Math.min(0.0005 * luckMult, LUCK_AFFECTED_CHANCE_CAP)){
-        if(normalWinners.length === 0 || item.rng > normalWinners[0].rng){
-          normalWinners = [item];
-        } else if(item.rng === normalWinners[0].rng){
-          normalWinners.push(item);
-        }
+        if(normalWinners.length === 0 || item.rng > normalWinners[0].rng) normalWinners = [item];
+        else if(item.rng === normalWinners[0].rng) normalWinners.push(item);
       }
       continue;
     }
 
     const rng = effectiveRng(item);
     const itemLuckMult = effectiveLuckForItem(item, item.isMutation ? luckMult * mutationLuckMult : luckMult);
-
-    const isSkipped = rng < highestGuaranteedRng;
-    if(isSkipped) {
-      // flat 1/5 (20%) roll rate if skipped by high luck
-      if(Math.random() < 0.2) {
-        if(bypassedWinners.length === 0 || item.rng > bypassedWinners[0].rng){
-          bypassedWinners = [item];
-        } else if(item.rng === bypassedWinners[0].rng){
-          bypassedWinners.push(item);
-        }
-      }
-    } else {
-      const effectiveChance = cappedLuckChance(itemLuckMult, rng, maxRollChance);
-      if(Math.random() < effectiveChance){
-        if(effectiveChance >= maxRollChance) cappedWinners.push(item);
-        if(normalWinners.length === 0 || item.rng > normalWinners[0].rng){
-          normalWinners = [item];
-        } else if(item.rng === normalWinners[0].rng){
-          normalWinners.push(item);
-        }
-      }
+    if(!area.isUniversalPool && itemLuckMult >= rng){
+      luckExceededCandidates.push({ ...item, rng });
+      continue;
+    }
+    const effectiveChance = cappedLuckChance(itemLuckMult, rng, maxRollChance);
+    if(Math.random() < effectiveChance){
+      const candidate = rng === item.rng ? item : { ...item, rng };
+      if(normalWinners.length === 0 || candidate.rng > normalWinners[0].rng) normalWinners = [candidate];
+      else if(candidate.rng === normalWinners[0].rng) normalWinners.push(candidate);
     }
   }
 
-  // Choose bypassed item if it won, unless normal roll picked up something rarer than the skipped threshold
-  let winnerPool = normalWinners;
-  if (bypassedWinners.length) {
-    if (winnerPool.length === 0 || winnerPool[0].rng <= highestGuaranteedRng) {
-      winnerPool = bypassedWinners;
-    }
-  }
-
+  const effectivePoolForWeight = pool.map(item => ({ ...item, rng:item.rng === Infinity ? Infinity : effectiveRng(item) }));
+  const guaranteedWinner = chooseLuckExceededWinner(luckExceededCandidates, effectivePoolForWeight);
+  // A genuine non-guaranteed result can still beat the weighted guaranteed group only when it is
+  // rarer than every luck-exceeded candidate, preserving the old rare-result priority.
   let winner;
-  const rarestCappedRng = cappedWinners.length ? Math.max(...cappedWinners.map(item => item.rng)) : -Infinity;
-  if(winnerPool.length && winnerPool[0].rng > rarestCappedRng){
-    // A genuinely rarer, non-capped result still wins outright over every capped result.
-    winner = chooseRarityBiasedWinner(winnerPool);
-  } else if(cappedWinners.length > 1){
-    // Capped ranks share the same effective 1/2 chance; use only a tiny genuine-rarity preference.
-    winner = chooseRarityBiasedWinner(cappedWinners);
-  } else if(winnerPool.length){
-    winner = chooseRarityBiasedWinner(winnerPool);
+  if(normalWinners.length && (!guaranteedWinner || normalWinners[0].rng > guaranteedWinner.rng)){
+    winner = chooseUniformWinner(normalWinners);
+  } else if(guaranteedWinner){
+    winner = guaranteedWinner;
+  } else if(normalWinners.length){
+    winner = chooseUniformWinner(normalWinners);
   } else {
     winner = pool.reduce((a,b)=> a.rng < b.rng ? a : b);
   }
@@ -4768,6 +4737,7 @@ function renderSettingsView(){
   if(!autoUseEl) return;
   const helpers = [
     { unlock:'autoPushpin', key:'pushpin', title:'Auto use Pushpin', detail:'Use Pushpin automatically when a pinned recipe has unfinished materials.' },
+    { unlock:'holdToClick', key:'holdToClick', title:'Hold to click', detail:`Hold ROLL for ${formatHoldClickInterval(holdToClickIntervalMs())}. Current Ball level: ${ballUpgradeLevel('holdToClick')}/5.` },
     { unlock:'autoGloves', key:'gloves', title:'Auto use Universal Recipe Gloves', detail:'Use Universal Recipe Gloves automatically when a pinned recipe has unfinished materials.' },
   ];
   autoUseEl.innerHTML = helpers.map(helper => {
@@ -6492,11 +6462,13 @@ function normalizeBallState(){
     doubleChance: Math.min(BALL_UPGRADE_LIMITS.doubleChance, Math.max(0, Math.floor(Number(sourceUpgrades.doubleChance) || 0))),
     offlineTickspeed: Math.min(BALL_UPGRADE_LIMITS.offlineTickspeed, Math.max(0, Math.floor(Number(sourceUpgrades.offlineTickspeed) || 0))),
     expoballs: Math.min(BALL_UPGRADE_LIMITS.expoballs, Math.max(0, Math.floor(Number(sourceUpgrades.expoballs) || 0))),
+    holdToClick: Math.min(BALL_UPGRADE_LIMITS.holdToClick, Math.max(0, Math.floor(Number(sourceUpgrades.holdToClick) || 0))),
   };
   const sourceAutoUse = (state.ballAutoUse && typeof state.ballAutoUse === 'object') ? state.ballAutoUse : {};
   state.ballAutoUse = {
     pushpin: !!sourceAutoUse.pushpin && state.ballUpgrades.autoPushpin,
     gloves: !!sourceAutoUse.gloves && state.ballUpgrades.autoGloves,
+    holdToClick: !!sourceAutoUse.holdToClick && state.ballUpgrades.holdToClick > 0,
   };
 }
 
@@ -6518,6 +6490,21 @@ function offlineTickspeedMultiplier(){
 
 function expoballsLuckExponent(){
   return 1 + ballUpgradeLevel('expoballs') * 0.01;
+}
+
+// The unpurchased baseline is one click per second; each of the five permanent Ball levels
+// improves the held-click interval through 0.75s, 0.66s, 0.5s, one third of a second, and 0.25s.
+const HOLD_TO_CLICK_INTERVALS_MS = [1000, 750, 660, 500, 1000 / 3, 250];
+function holdToClickIntervalMs(){
+  return HOLD_TO_CLICK_INTERVALS_MS[Math.min(BALL_UPGRADE_LIMITS.holdToClick, ballUpgradeLevel('holdToClick'))];
+}
+function formatHoldClickInterval(ms){
+  if(ms === 250) return '1 click every 1/4s';
+  if(Math.abs(ms - 1000 / 3) < 1) return '1 click every 1/3s';
+  if(ms === 500) return '1 click every 0.5s';
+  if(ms === 660) return '1 click every 0.66s';
+  if(ms === 750) return '1 click every 0.75s';
+  return '1 click every 1s';
 }
 
 function tryAutoUseRecipeConsumables(){
@@ -6655,6 +6642,7 @@ const BALL_UPGRADES = [
   { key:'doubleChance', title:'Double chance', max:5, costForLevel:level=>({ black:2 + level * 2 }), desc:level=>`Level ${level}/5. Balls have +${level}% chance to duplicate when they spawn.` },
   { key:'offlineTickspeed', title:'Offline tickspeed', max:5, costForLevel:level=>({ pink:level + 1 }), desc:level=>`Level ${level}/5. Offline roll speed is +${level * 20}%.` },
   { key:'expoballs', title:'Expoballs', max:5, costForLevel:()=>({ cyan:5 }), desc:level=>`Level ${level}/5. Luck exponent is ^${(1 + level * 0.01).toFixed(2)}.` },
+  { key:'holdToClick', title:'Hold to click', max:5, costForLevel:()=>({ pink:2 }), desc:level=>`Level ${level}/5. ${formatHoldClickInterval(HOLD_TO_CLICK_INTERVALS_MS[Math.min(5, level)])}; each level improves held rolling, ending at 1 click every 1/4s.` },
   { key:'unlockJuniAxe', title:'???', cost:{ black:5, blue:5, cyan:5, green:5, pink:5, purple:5, red:5, white:5, yellow:5 }, desc:'unlocks ???' },
 ];
 const BALL_UPGRADE_BY_KEY = Object.fromEntries(BALL_UPGRADES.map(upgrade => [upgrade.key, upgrade]));
@@ -6700,6 +6688,7 @@ function purchaseBallUpgrade(key){
   else state.ballUpgrades[key] = true;
   dbSaveMeta();
   renderBallsView();
+  renderSettingsView();
   renderAxeStrip();
   updateStatStrip();
   if(currentView === 'items') refreshLiveViews();
@@ -6707,10 +6696,11 @@ function purchaseBallUpgrade(key){
 }
 
 function setBallAutoUse(key, enabled){
-  if(!['pushpin','gloves'].includes(key)) return;
-  const unlockKey = key === 'pushpin' ? 'autoPushpin' : 'autoGloves';
+  if(!['pushpin','gloves','holdToClick'].includes(key)) return;
+  const unlockKey = key === 'pushpin' ? 'autoPushpin' : (key === 'gloves' ? 'autoGloves' : 'holdToClick');
   if(!hasBallUpgrade(unlockKey)) return;
   state.ballAutoUse[key] = !!enabled;
+  if(key === 'holdToClick' && !enabled) stopHoldToClick();
   dbSaveMeta();
   if(currentView === 'balls') renderBallsView();
   renderSettingsView();
@@ -7003,7 +6993,42 @@ function tickActiveBuffs(clickHappened){
 }
 
 
-document.getElementById('rollBtn').addEventListener('click', doRoll);
+const rollBtn = document.getElementById('rollBtn');
+let holdToClickTimer = null;
+let holdToClickPointerId = null;
+let suppressNextRollClickUntil = 0;
+
+function holdToClickEnabled(){
+  return !!(state.ballAutoUse && state.ballAutoUse.holdToClick && ballUpgradeLevel('holdToClick') > 0);
+}
+
+function stopHoldToClick(){
+  if(holdToClickTimer || holdToClickPointerId != null) suppressNextRollClickUntil = Date.now() + 500;
+  if(holdToClickTimer){ clearInterval(holdToClickTimer); holdToClickTimer = null; }
+  holdToClickPointerId = null;
+}
+
+function startHoldToClick(event){
+  if(!holdToClickEnabled() || event.button !== 0 || holdToClickTimer) return;
+  event.preventDefault();
+  holdToClickPointerId = event.pointerId;
+  suppressNextRollClickUntil = Date.now() + 500;
+  try{ rollBtn.setPointerCapture(event.pointerId); }catch(_){ /* capture is best-effort */ }
+  doRoll(); // the held press is the first click; the remaining clicks use the purchased interval.
+  holdToClickTimer = setInterval(doRoll, holdToClickIntervalMs());
+}
+
+rollBtn.addEventListener('click', ()=>{
+  if(Date.now() < suppressNextRollClickUntil) return;
+  doRoll();
+});
+rollBtn.addEventListener('pointerdown', startHoldToClick);
+rollBtn.addEventListener('pointerup', stopHoldToClick);
+rollBtn.addEventListener('pointercancel', stopHoldToClick);
+document.addEventListener('pointerup', stopHoldToClick);
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState !== 'visible') stopHoldToClick();
+});
 
 /* ============================================================
    MOBILE AUTO-ROLL SKILLCHECK
@@ -7237,30 +7262,13 @@ function initMobileAutoRollUI(){
 initMobileAutoRollUI();
 
 /* ============================================================
-   HIDDEN CACHE-RESET BUTTON + STORAGE ENGINE CHANGE
-   Tap the logo 5 times within 3 seconds to reveal the cache-reset button AND a "Change save
-   engine" button (lets you re-open the Legacy/Modern choice later, e.g. if you set "don't ask
-   again" and want to switch). This only forces the browser/PWA to re-fetch fresh HTML/JS/CSS —
-   your save data lives in IndexedDB/localStorage, entirely separate from the page cache, so it's
-   untouched by the cache-reset action itself.
+   SETTINGS: CACHE-RESET BUTTON + STORAGE ENGINE CHANGE
+   These maintenance actions live directly in Settings. The cache reset only re-fetches the page
+   shell; save data remains in IndexedDB/localStorage and is untouched.
    ============================================================ */
 (function initCacheResetButton(){
-  const logo = document.getElementById('logoTitle');
   const btn = document.getElementById('cacheResetBtn');
-  const engineBtn = document.getElementById('storageEngineChangeBtn');
-  if(!logo || !btn) return;
-
-  let tapTimes = [];
-  logo.addEventListener('click', () => {
-    const now = Date.now();
-    tapTimes.push(now);
-    tapTimes = tapTimes.filter(t => now - t < 3000); // only count taps within the last 3s
-    if(tapTimes.length >= 5){
-      btn.classList.add('show');
-      if(engineBtn) engineBtn.classList.add('show');
-      tapTimes = [];
-    }
-  });
+  if(!btn) return;
 
   btn.addEventListener('click', () => {
     // Cache-bust by appending/refreshing a version query param, stripping any existing one first.
@@ -7309,32 +7317,37 @@ function createWorkerBlob() {
       // assigned full batch, returns the exact results, then waits for the main thread to yield
       // five frames before it can receive another batch.
       const chanceCap = Math.min(0.5, maxRollChance);
-      const chooseRarityBiasedWinner = function(candidates) {
+      const chooseUniformWinner = function(candidates) {
+        if (!candidates || candidates.length === 0) return null;
+        return candidates[Math.floor(Math.random() * candidates.length)];
+      };
+      const chooseLuckExceededWinner = function(candidates) {
         if (!candidates || candidates.length === 0) return null;
         if (candidates.length === 1) return candidates[0];
-        const uniqueRngs = [...new Set(candidates.map(item => item.rng))].sort((a, b) => a - b);
-        const rankByRng = new Map(uniqueRngs.map((rng, index) => [rng, index]));
-        const weighted = candidates.map(item => ({ item, weight: 1 + rankByRng.get(item.rng) * 0.02 }));
-        const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+        const finiteRngs = [...new Set(pool.map(item => item.rng).filter(Number.isFinite))].sort((a, b) => a - b);
+        const rankBelow = function(rng) {
+          let below = 1;
+          for (const candidateRng of finiteRngs) {
+            if (candidateRng >= rng) break;
+            below = candidateRng;
+          }
+          return below;
+        };
+        const logWeights = candidates.map(item => 2 * Math.log(Math.max(1, rankBelow(item.rng) * 5)));
+        const maxLogWeight = Math.max(...logWeights);
+        const weights = logWeights.map(logWeight => Math.exp(logWeight - maxLogWeight));
+        const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
         let cursor = Math.random() * totalWeight;
-        for (const entry of weighted) {
-          cursor -= entry.weight;
-          if (cursor <= 0) return entry.item;
+        for (let i = 0; i < candidates.length; i++) {
+          cursor -= weights[i];
+          if (cursor <= 0) return candidates[i];
         }
-        return weighted[weighted.length - 1].item;
+        return candidates[candidates.length - 1];
       };
-      let highestGuaranteedRng = 0;
-      for (const item of pool) {
-        if (item.rng !== Infinity) {
-          const effectiveChance = Math.min(luckMult / item.rng, chanceCap);
-          if (effectiveChance >= 1 && item.rng > highestGuaranteedRng) highestGuaranteedRng = item.rng;
-        }
-      }
 
       for (let i = 0; i < rollsToRun; i++) {
         let normalWinners = [];
-        let bypassedWinners = [];
-        let cappedWinners = [];
+        const luckExceededCandidates = [];
 
         for (const item of pool) {
           if (item.rng === Infinity) {
@@ -7344,28 +7357,21 @@ function createWorkerBlob() {
             }
             continue;
           }
-
-          if (item.rng < highestGuaranteedRng) {
-            if (Math.random() < 0.2) {
-              if (!bypassedWinners.length || item.rng > bypassedWinners[0].rng) bypassedWinners = [item];
-              else if (item.rng === bypassedWinners[0].rng) bypassedWinners.push(item);
-            }
-          } else {
-            const effectiveChance = Math.min(luckMult / item.rng, chanceCap);
-            if (Math.random() < effectiveChance) {
-              if (effectiveChance >= chanceCap) cappedWinners.push(item);
-              if (!normalWinners.length || item.rng > normalWinners[0].rng) normalWinners = [item];
-              else if (item.rng === normalWinners[0].rng) normalWinners.push(item);
-            }
+          if (maxRollChance >= 0.5 && luckMult >= item.rng) {
+            luckExceededCandidates.push(item);
+            continue;
+          }
+          const effectiveChance = Math.min(luckMult / item.rng, chanceCap);
+          if (Math.random() < effectiveChance) {
+            if (!normalWinners.length || item.rng > normalWinners[0].rng) normalWinners = [item];
+            else if (item.rng === normalWinners[0].rng) normalWinners.push(item);
           }
         }
 
-        let winnerPool = normalWinners;
-        if (bypassedWinners.length && (!winnerPool.length || winnerPool[0].rng <= highestGuaranteedRng)) winnerPool = bypassedWinners;
-        const rarestCappedRng = cappedWinners.length ? Math.max(...cappedWinners.map(item => item.rng)) : -Infinity;
-        let winner = winnerPool.length && winnerPool[0].rng > rarestCappedRng
-          ? chooseRarityBiasedWinner(winnerPool)
-          : (cappedWinners.length > 1 ? chooseRarityBiasedWinner(cappedWinners) : chooseRarityBiasedWinner(winnerPool));
+        const guaranteedWinner = chooseLuckExceededWinner(luckExceededCandidates);
+        let winner = normalWinners.length && (!guaranteedWinner || normalWinners[0].rng > guaranteedWinner.rng)
+          ? chooseUniformWinner(normalWinners)
+          : (guaranteedWinner || chooseUniformWinner(normalWinners));
         if (!winner) winner = pool[0];
 
         let variant = null;
@@ -7439,17 +7445,6 @@ function simulateOfflineBonusRules(offlineBonus, seconds, pool, variantChain, TI
     const minRolls = rule.minRolls != null ? rule.minRolls : (rule.bonusRolls || 1);
     const maxRolls = rule.maxRolls != null ? rule.maxRolls : (rule.bonusRolls || 1);
 
-    let highestGuaranteedBonusRng = 0;
-    for(const item of pool){
-      if(item.rng !== Infinity){
-        const itemBonusLuckMult = item.isMutation ? bonusLuckMult * bonusMutationLuckMult : bonusLuckMult;
-        const effectiveChance = cappedLuckChance(itemBonusLuckMult, item.rng, maxRollChance);
-        if(effectiveChance >= 1 && item.rng > highestGuaranteedBonusRng){
-          highestGuaranteedBonusRng = item.rng;
-        }
-      }
-    }
-
     const intervalTicks = Math.floor(seconds / intervalSeconds);
 
     for(let s = 0; s < intervalTicks; s++){
@@ -7464,8 +7459,7 @@ function simulateOfflineBonusRules(offlineBonus, seconds, pool, variantChain, TI
         if(rollsThisTrigger <= 0) continue;
         for(let j = 0; j < rollsThisTrigger; j++){
           let normalWinners = [];
-          let bypassedWinners = [];
-          let cappedWinners = [];
+          const luckExceededCandidates = [];
 
           for(const item of pool){
             const itemBonusLuckMult = item.isMutation ? bonusLuckMult * bonusMutationLuckMult : bonusLuckMult;
@@ -7476,28 +7470,21 @@ function simulateOfflineBonusRules(offlineBonus, seconds, pool, variantChain, TI
               }
               continue;
             }
-            const isSkipped = item.rng < highestGuaranteedBonusRng;
-            if(isSkipped){
-              if(Math.random() < 0.2){
-                if(!bypassedWinners.length || item.rng > bypassedWinners[0].rng) bypassedWinners = [item];
-                else if(item.rng === bypassedWinners[0].rng) bypassedWinners.push(item);
-              }
-            } else {
-              const effectiveChance = cappedLuckChance(itemBonusLuckMult, item.rng, maxRollChance);
-              if(Math.random() < effectiveChance){
-                if(effectiveChance >= maxRollChance) cappedWinners.push(item);
-                if(!normalWinners.length || item.rng > normalWinners[0].rng) normalWinners = [item];
-                else if(item.rng === normalWinners[0].rng) normalWinners.push(item);
-              }
+            if(maxRollChance >= LUCK_AFFECTED_CHANCE_CAP && itemBonusLuckMult >= item.rng){
+              luckExceededCandidates.push(item);
+              continue;
+            }
+            const effectiveChance = cappedLuckChance(itemBonusLuckMult, item.rng, maxRollChance);
+            if(Math.random() < effectiveChance){
+              if(!normalWinners.length || item.rng > normalWinners[0].rng) normalWinners = [item];
+              else if(item.rng === normalWinners[0].rng) normalWinners.push(item);
             }
           }
 
-          let winnerPool = normalWinners;
-          if(bypassedWinners.length && (!winnerPool.length || winnerPool[0].rng <= highestGuaranteedBonusRng)) winnerPool = bypassedWinners;
-          const rarestCappedRng = cappedWinners.length ? Math.max(...cappedWinners.map(item => item.rng)) : -Infinity;
-          let winner = winnerPool.length && winnerPool[0].rng > rarestCappedRng
-            ? chooseRarityBiasedWinner(winnerPool)
-            : (cappedWinners.length > 1 ? chooseRarityBiasedWinner(cappedWinners) : chooseRarityBiasedWinner(winnerPool));
+          const guaranteedWinner = chooseLuckExceededWinner(luckExceededCandidates, pool);
+          let winner = normalWinners.length && (!guaranteedWinner || normalWinners[0].rng > guaranteedWinner.rng)
+            ? chooseUniformWinner(normalWinners)
+            : (guaranteedWinner || chooseUniformWinner(normalWinners));
           if(!winner) winner = pool[0];
 
           let variant = null;
@@ -7903,21 +7890,11 @@ async function resolveOfflineProgress(){
     const directCount = Math.min(totalRolls, DIRECT_ROLL_BUDGET);
     const remaining = totalRolls - directCount;
 
-    // With the global 1/2 luck cap, no rank is guaranteed by luck alone. The old skipped-rank
-    // fallback therefore naturally remains inactive, but is retained for any future non-luck guarantee.
     const fallbackMaxRollChance = area.isUniversalPool ? (1/3) : LUCK_AFFECTED_CHANCE_CAP;
-    let highestGuaranteedRng = 0;
-    for(const item of pool) {
-      if(item.rng !== Infinity) {
-        const effectiveChance = cappedLuckChance(luckMult, item.rng, fallbackMaxRollChance);
-        if(effectiveChance >= 1 && item.rng > highestGuaranteedRng) highestGuaranteedRng = item.rng;
-      }
-    }
 
     for(let i=0;i<directCount;i++){
       let normalWinners = [];
-      let bypassedWinners = [];
-      let cappedWinners = [];
+      const luckExceededCandidates = [];
 
       for(const item of pool){
         if(item.rng === Infinity){
@@ -7927,29 +7904,21 @@ async function resolveOfflineProgress(){
           }
           continue;
         }
-
-        const isSkipped = item.rng < highestGuaranteedRng;
-        if(isSkipped) {
-          if(Math.random() < 0.2) {
-            if(!bypassedWinners.length || item.rng > bypassedWinners[0].rng) bypassedWinners = [item];
-            else if(item.rng === bypassedWinners[0].rng) bypassedWinners.push(item);
-          }
-        } else {
-          const effectiveChance = cappedLuckChance(luckMult, item.rng, fallbackMaxRollChance);
-          if(Math.random() < effectiveChance){
-            if(effectiveChance >= fallbackMaxRollChance) cappedWinners.push(item);
-            if(!normalWinners.length || item.rng > normalWinners[0].rng) normalWinners = [item];
-            else if(item.rng === normalWinners[0].rng) normalWinners.push(item);
-          }
+        if(fallbackMaxRollChance >= LUCK_AFFECTED_CHANCE_CAP && luckMult >= item.rng){
+          luckExceededCandidates.push(item);
+          continue;
+        }
+        const effectiveChance = cappedLuckChance(luckMult, item.rng, fallbackMaxRollChance);
+        if(Math.random() < effectiveChance){
+          if(!normalWinners.length || item.rng > normalWinners[0].rng) normalWinners = [item];
+          else if(item.rng === normalWinners[0].rng) normalWinners.push(item);
         }
       }
 
-      let winnerPool = normalWinners;
-      if(bypassedWinners.length && (!winnerPool.length || winnerPool[0].rng <= highestGuaranteedRng)) winnerPool = bypassedWinners;
-      const rarestCappedRng = cappedWinners.length ? Math.max(...cappedWinners.map(item => item.rng)) : -Infinity;
-      let winner = winnerPool.length && winnerPool[0].rng > rarestCappedRng
-        ? chooseRarityBiasedWinner(winnerPool)
-        : (cappedWinners.length > 1 ? chooseRarityBiasedWinner(cappedWinners) : chooseRarityBiasedWinner(winnerPool));
+      const guaranteedWinner = chooseLuckExceededWinner(luckExceededCandidates, pool);
+      let winner = normalWinners.length && (!guaranteedWinner || normalWinners[0].rng > guaranteedWinner.rng)
+        ? chooseUniformWinner(normalWinners)
+        : (guaranteedWinner || chooseUniformWinner(normalWinners));
       if(!winner) winner = pool.reduce((a,b)=> a.rng < b.rng ? a : b);
 
       // Resolve the winner's TRUE rng and TRUE home area before recording — winner.rng here may
