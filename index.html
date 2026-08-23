@@ -99,13 +99,17 @@
     width:fit-content;
   }
   .cache-reset-btn.show{ display:block; }
-  .rank-style-toggle{
-    display:flex; align-items:center; gap:7px; width:fit-content; margin-top:7px;
-    font-family:var(--mono); font-size:10px; color:var(--text-dim); cursor:pointer;
-    user-select:none;
-  }
-  .rank-style-toggle input{ accent-color:var(--accent); cursor:pointer; }
-  .rank-style-toggle b{ color:var(--text); font-weight:700; }
+  .settings-lede{ color:var(--text-dim); line-height:1.55; margin-bottom:16px; }
+  .settings-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px; }
+  .settings-card{ border:1px solid var(--border); background:rgba(255,255,255,.025); border-radius:12px; padding:13px; }
+  .setting-toggle{ display:flex; justify-content:space-between; align-items:center; gap:16px; cursor:pointer; }
+  .settings-copy{ display:flex; flex-direction:column; gap:4px; }
+  .settings-copy b{ color:var(--text); font-size:13px; }
+  .settings-copy small{ color:var(--text-faint); font-family:var(--mono); line-height:1.4; }
+  .setting-toggle input{ width:18px; height:18px; accent-color:var(--accent); cursor:pointer; flex:0 0 auto; }
+  .settings-section-title{ margin:20px 0 10px; color:var(--text-faint); font-size:10px; font-family:var(--mono); letter-spacing:.13em; text-transform:uppercase; }
+  .settings-maintenance{ display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+  .settings-maintenance .cache-reset-btn{ margin-top:0; }
   .brand .eyebrow{
     font-family:var(--mono);
     font-size:11px;
@@ -625,6 +629,29 @@
     animation:none !important;
   }
 
+  /* LOW DETAIL MODE: performance-first rendering. Gameplay and odds are unchanged; this removes
+     the repeated paint/compositing work (animations, transitions, filters, glow, blur, and flash)
+     that dominates the visual cost of rapid rolling on slower devices. */
+  html.low-detail-mode *, html.low-detail-mode *::before, html.low-detail-mode *::after{
+    animation:none !important;
+    transition:none !important;
+    filter:none !important;
+  }
+  html.low-detail-mode .flash-bg,
+  html.low-detail-mode .skillcheck-circle::before{ display:none !important; }
+  html.low-detail-mode .result-name,
+  html.low-detail-mode .glow-epic,
+  html.low-detail-mode .glow-pelicular,
+  html.low-detail-mode .glow-horizon,
+  html.low-detail-mode .glow-grandiose,
+  html.low-detail-mode .glow-zenith,
+  html.low-detail-mode .glow-unworldly,
+  html.low-detail-mode .glow-secret{ text-shadow:none !important; }
+  html.low-detail-mode .panel,
+  html.low-detail-mode .modal-overlay,
+  html.low-detail-mode .modal-content,
+  html.low-detail-mode .bottom-nav{ box-shadow:none !important; backdrop-filter:none !important; }
+
   /* ---------- Simulation Modal ---------- */
   .modal-overlay {
     position: fixed;
@@ -906,16 +933,6 @@
   <header class="top">
     <div class="brand">
       <h1 id="logoTitle" style="cursor:pointer; user-select:none;">Juni's RNG Game</h1>
-      <label class="rank-style-toggle" title="Use the original tier-based colors, fonts, and effects instead of modern per-rank random styling.">
-        <input id="legacyColorFontToggle" type="checkbox">
-        <span><b>legacycolorfont</b> · legacy tier visuals</span>
-      </label>
-      <button id="cacheResetBtn" class="cache-reset-btn" type="button">⟳ Force reload latest version (keeps your save)</button>
-      <button id="storageEngineChangeBtn" class="cache-reset-btn" type="button">💾 Change save engine</button>
-      <div id="storageEngineChangeChoices" style="display:none; gap:8px; margin-top:6px;">
-        <button id="storageEngineChangeToLegacy" class="cache-reset-btn" type="button">→ Legacy (buggy)</button>
-        <button id="storageEngineChangeToModern" class="cache-reset-btn" type="button">→ Modern (stable)</button>
-      </div>
     </div>
     <div class="stat-strip">
       <div class="s"><span class="label">Rolls</span><span class="val" id="statRolls">0</span></div>
@@ -997,6 +1014,35 @@
     </div>
   </div>
 
+  <!-- SETTINGS VIEW -->
+  <div class="view" id="view-settings">
+    <div class="panel">
+      <h2 class="ptitle">Settings</h2>
+      <p class="settings-lede">Customize visuals, performance, and unlocked automatic helpers. Every choice is saved with your game.</p>
+      <div class="settings-grid">
+        <label class="settings-card setting-toggle" title="Strips visual effects, reduces redraw frequency, and prioritizes the game’s worker-backed save and offline simulation paths.">
+          <span class="settings-copy"><b>Low detail mode</b><small>Performance mode: removes most visual effects and lowers live UI work.</small></span>
+          <input id="lowDetailModeToggle" type="checkbox" role="switch">
+        </label>
+        <label class="settings-card setting-toggle" title="Use the original tier-based colors, fonts, and effects instead of modern per-rank random styling.">
+          <span class="settings-copy"><b>legacycolorfont</b><small>Use original tier-based visual styling.</small></span>
+          <input id="legacyColorFontToggle" type="checkbox" role="switch">
+        </label>
+      </div>
+      <div class="settings-section-title">Automatic recipe helpers</div>
+      <div id="settingsAutoUseOptions" class="settings-grid"></div>
+      <div class="settings-section-title">Save and update tools</div>
+      <div class="settings-maintenance">
+        <button id="cacheResetBtn" class="cache-reset-btn" type="button">⟳ Force reload latest version (keeps your save)</button>
+        <button id="storageEngineChangeBtn" class="cache-reset-btn" type="button">💾 Change save engine</button>
+        <div id="storageEngineChangeChoices" style="display:none; gap:8px; margin-top:6px; flex-wrap:wrap;">
+          <button id="storageEngineChangeToLegacy" class="cache-reset-btn" type="button">→ Legacy (buggy)</button>
+          <button id="storageEngineChangeToModern" class="cache-reset-btn" type="button">→ Modern (stable)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ITEMS VIEW -->
   <div class="view" id="view-items">
     <div class="panel">
@@ -1034,6 +1080,7 @@
   <button class="nav-btn" data-view="index"><span class="icon">📖</span>Index</button>
   <button class="nav-btn" data-view="items"><span class="icon">🪓</span>Items</button>
   <button class="nav-btn" data-view="balls"><span class="icon">🔮</span>Balls<span id="ballsNavDot" class="balls-nav-dot" hidden aria-label="Collectible balls available"></span></button>
+  <button class="nav-btn" data-view="settings"><span class="icon">⚙</span>Settings</button>
 </nav>
 
 <script>
@@ -1237,6 +1284,8 @@ function isLegacyColorFontEnabled(){
 }
 
 function rankVisualStyleAttr(name, tierKey){
+  // Low Detail Mode intentionally skips per-rank random font/gradient generation entirely.
+  if(state.lowDetailMode) return '';
   // Legacy mode intentionally leaves the shared .t-* class in complete control, restoring the
   // original tier-based color, font, gradient, animation, and glow behavior from the supplied file.
   if(isLegacyColorFontEnabled()) return '';
@@ -1255,7 +1304,7 @@ function rankVisualStyleAttr(name, tierKey){
 // without this, the overlay would render in some other ambient font and visibly peek out from
 // behind the base text as extra, misaligned characters.
 function rankVisualFontOnlyStyleAttr(name){
-  if(isLegacyColorFontEnabled()) return '';
+  if(state.lowDetailMode || isLegacyColorFontEnabled()) return '';
   // tierKey doesn't affect font selection (only color/gradient does), so any tierKey value works
   // here — font choice is purely a function of the rank's name via hashRankName.
   const v = rankVisualIdentity(name, null);
@@ -2603,6 +2652,7 @@ let state = {
   coinBagStacks: [],        // array of { expiresAt: timestamp } — Coin Bag's 15s luck/mutation-luck stacks
   discoveredSecrets: {},    // { secretKey: firstDiscoveredAtTimestamp }
   rankVisualStyle: 'modernrandom', // 'modernrandom' or 'legacycolorfont'
+  lowDetailMode: false, // removes expensive visuals and lowers live UI work for performance
   errRedirectorUntil: null, // timestamp — while in the future, the 404 area's rarity-truncation gimmick is suppressed
   doublinatorUntil: null, // timestamp — ×2 bulk/luck/rps while in the future
   doublinatorCooldownUntil: null, // timestamp — cannot activate another Doublinator before this time
@@ -3586,6 +3636,7 @@ function buildMetaSnapshot(){
     coinBagStacks: state.coinBagStacks,
     discoveredSecrets: state.discoveredSecrets,
     rankVisualStyle: state.rankVisualStyle,
+    lowDetailMode: !!state.lowDetailMode,
     errRedirectorUntil: state.errRedirectorUntil,
     doublinatorUntil: state.doublinatorUntil,
     doublinatorCooldownUntil: state.doublinatorCooldownUntil,
@@ -3798,6 +3849,7 @@ function applyMetaToState(meta){
   state.coinBagStacks = meta.coinBagStacks || [];
   state.discoveredSecrets = meta.discoveredSecrets || {};
   state.rankVisualStyle = meta.rankVisualStyle === 'legacycolorfont' ? 'legacycolorfont' : 'modernrandom';
+  state.lowDetailMode = !!meta.lowDetailMode;
   state.errRedirectorUntil = meta.errRedirectorUntil || null;
   state.doublinatorUntil = meta.doublinatorUntil || null;
   state.doublinatorCooldownUntil = meta.doublinatorCooldownUntil || null;
@@ -4617,7 +4669,7 @@ function renderStage(result, count, trollOverride, clicksNote){
       <div class="result-rng">1 in ${fmtRng(trollOverride.rng)}</div>
       ${clicksNote ? `<div class="multi-note">${clicksNote}</div>` : (count && count > 1 ? `<div class="multi-note">shown: rarest of ${count} rolls (bulk)</div>` : '')}
     `;
-    if(['pelicular','horizon','grandiose','zenith','unworldly','colossal','infinite','insanity','impossible'].includes(fakeTier.key)){
+    if(!state.lowDetailMode && ['pelicular','horizon','grandiose','zenith','unworldly','colossal','infinite','insanity','impossible'].includes(fakeTier.key)){
       const flash = document.getElementById('flashBg');
       flash.style.background = `radial-gradient(circle at 50% 40%, ${tierGlowColor(fakeTier.key)}, transparent 70%)`;
       flash.classList.remove('go');
@@ -4638,7 +4690,7 @@ function renderStage(result, count, trollOverride, clicksNote){
     ${clicksNote ? `<div class="multi-note">${clicksNote}</div>` : (count && count > 1 ? `<div class="multi-note">shown: rarest of ${count} rolls (bulk)</div>` : '')}
   `;
 
-  if(result.isSecret || ['pelicular','horizon','grandiose','zenith','unworldly','colossal','infinite','insanity','impossible'].includes(baseTier.key)){
+  if(!state.lowDetailMode && (result.isSecret || ['pelicular','horizon','grandiose','zenith','unworldly','colossal','infinite','insanity','impossible'].includes(baseTier.key))){
     const flash = document.getElementById('flashBg');
     flash.style.background = `radial-gradient(circle at 50% 40%, ${result.isSecret ? '#a855f7' : tierGlowColor(baseTier.key)}, transparent 70%)`;
     flash.classList.remove('go');
@@ -4656,21 +4708,50 @@ function pushLog(result){
   if(state.log.length > 4) state.log.pop(); // only the last 4 are ever actually read (see '&' secret)
 }
 
+function applyLowDetailMode(){
+  document.documentElement.classList.toggle('low-detail-mode', !!state.lowDetailMode);
+  const toggle = document.getElementById('lowDetailModeToggle');
+  if(toggle) toggle.checked = !!state.lowDetailMode;
+}
+
+function setLowDetailMode(enabled){
+  state.lowDetailMode = !!enabled;
+  applyLowDetailMode();
+  dbSaveMeta();
+  // Rebuild rank-bearing views once on the toggle so inline gradient/font styles are removed
+  // immediately in Low Detail Mode and restored immediately when it is turned back off.
+  if(lastRenderedStage) renderStage(lastRenderedStage.result, lastRenderedStage.count, lastRenderedStage.trollOverride, lastRenderedStage.clicksNote);
+  renderInventory();
+  buildIndexAccordion();
+  buildSecretsAccordion();
+  renderSettingsView();
+}
+
+function setLegacyColorFontEnabled(enabled){
+  state.rankVisualStyle = enabled ? 'legacycolorfont' : 'modernrandom';
+  applyRankVisualStyle();
+  dbSaveMeta();
+
+  // Re-render every rank-bearing surface immediately so the choice takes effect without a reload.
+  if(lastRenderedStage) renderStage(lastRenderedStage.result, lastRenderedStage.count, lastRenderedStage.trollOverride, lastRenderedStage.clicksNote);
+  renderInventory();
+  buildIndexAccordion();
+  buildSecretsAccordion();
+  renderSettingsView();
+}
+
 function setupLegacyColorFontToggle(){
   const toggle = document.getElementById('legacyColorFontToggle');
   if(!toggle) return;
   toggle.checked = isLegacyColorFontEnabled();
-  toggle.addEventListener('change', ()=>{
-    state.rankVisualStyle = toggle.checked ? 'legacycolorfont' : 'modernrandom';
-    document.documentElement.classList.toggle('legacycolorfont-active', toggle.checked);
-    dbSaveMeta();
+  toggle.addEventListener('change', ()=> setLegacyColorFontEnabled(toggle.checked));
+}
 
-    // Re-render every rank-bearing surface immediately so the choice takes effect without a reload.
-    if(lastRenderedStage) renderStage(lastRenderedStage.result, lastRenderedStage.count, lastRenderedStage.trollOverride, lastRenderedStage.clicksNote);
-    renderInventory();
-    buildIndexAccordion();
-    buildSecretsAccordion();
-  });
+function setupLowDetailModeToggle(){
+  const toggle = document.getElementById('lowDetailModeToggle');
+  if(!toggle) return;
+  toggle.checked = !!state.lowDetailMode;
+  toggle.addEventListener('change', ()=> setLowDetailMode(toggle.checked));
 }
 
 function applyRankVisualStyle(){
@@ -4678,6 +4759,22 @@ function applyRankVisualStyle(){
   document.documentElement.classList.toggle('legacycolorfont-active', enabled);
   const toggle = document.getElementById('legacyColorFontToggle');
   if(toggle) toggle.checked = enabled;
+}
+
+function renderSettingsView(){
+  applyLowDetailMode();
+  applyRankVisualStyle();
+  const autoUseEl = document.getElementById('settingsAutoUseOptions');
+  if(!autoUseEl) return;
+  const helpers = [
+    { unlock:'autoPushpin', key:'pushpin', title:'Auto use Pushpin', detail:'Use Pushpin automatically when a pinned recipe has unfinished materials.' },
+    { unlock:'autoGloves', key:'gloves', title:'Auto use Universal Recipe Gloves', detail:'Use Universal Recipe Gloves automatically when a pinned recipe has unfinished materials.' },
+  ];
+  autoUseEl.innerHTML = helpers.map(helper => {
+    if(!hasBallUpgrade(helper.unlock)) return `<div class="settings-card"><span class="settings-copy"><b>${helper.title}</b><small>Unlock this option from the Balls tab.</small></span></div>`;
+    return `<label class="settings-card setting-toggle"><span class="settings-copy"><b>${helper.title}</b><small>${helper.detail}</small></span><input type="checkbox" data-settings-auto-use="${helper.key}" ${state.ballAutoUse[helper.key] ? 'checked' : ''} role="switch"></label>`;
+  }).join('');
+  autoUseEl.querySelectorAll('[data-settings-auto-use]').forEach(input => input.addEventListener('change', ()=> setBallAutoUse(input.dataset.settingsAutoUse, input.checked)));
 }
 
 function updateStatStrip(){
@@ -6615,7 +6712,8 @@ function setBallAutoUse(key, enabled){
   if(!hasBallUpgrade(unlockKey)) return;
   state.ballAutoUse[key] = !!enabled;
   dbSaveMeta();
-  renderBallsView();
+  if(currentView === 'balls') renderBallsView();
+  renderSettingsView();
 }
 
 function renderBallUpgradeCards(){
@@ -6630,10 +6728,7 @@ function renderBallUpgradeCards(){
     const canBuy = !maxed && (!owned || ballUpgradeIsLevelled(upgrade)) && canAffordBallCost(cost);
     const desc = typeof upgrade.desc === 'function' ? upgrade.desc(level) : upgrade.desc;
     const buttonLabel = maxed ? 'Maxed' : (!ballUpgradeIsLevelled(upgrade) && owned ? 'Owned' : `Buy${ballUpgradeIsLevelled(upgrade) ? ` · ${ballUpgradeLevel(upgrade.key) + 1}/${upgrade.max}` : ''}`);
-    const autoToggle = upgrade.autoUse && owned ? `
-      <label class="stat" style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;">
-        <input type="checkbox" data-ball-auto-use="${upgrade.autoUse}" ${state.ballAutoUse[upgrade.autoUse] ? 'checked' : ''}> Auto-use enabled
-      </label>` : '';
+    const autoToggle = '';
     return `<div class="ball-upgrade-card ${owned ? 'owned' : ''}">
       <h3>${escapeHtml(upgrade.title)}</h3>
       <p>${escapeHtml(desc)}</p>
@@ -6642,7 +6737,6 @@ function renderBallUpgradeCards(){
     </div>`;
   }).join('');
   el.querySelectorAll('[data-ball-upgrade]').forEach(button => button.addEventListener('click', ()=> purchaseBallUpgrade(button.dataset.ballUpgrade)));
-  el.querySelectorAll('[data-ball-auto-use]').forEach(input => input.addEventListener('change', ()=> setBallAutoUse(input.dataset.ballAutoUse, input.checked)));
 }
 
 function renderBallsView(){
@@ -6699,6 +6793,7 @@ function refreshLiveViews(){
   if(currentView === 'items'){ renderItemCards(); renderConsumableCards(); renderEquipCards(); }
   if(currentView === 'inventory') renderInventory();
   if(currentView === 'balls') renderBallsView();
+  if(currentView === 'settings') renderSettingsView();
 }
 
 /* ============================================================
@@ -6867,7 +6962,7 @@ function doRoll(){
   // a genuinely Unworldly+ rank from the current area for 3 seconds before revealing the truth.
   // Inventory, log, and stats above are already committed to the REAL result — this is display-only.
   const trollArea = WORLDS[state.worldIdx].areas[state.areaIdx];
-  const fake = Math.random() < TROLL_CHANCE ? rollTrollFake(trollArea, best.name) : null;
+  const fake = !state.lowDetailMode && Math.random() < TROLL_CHANCE ? rollTrollFake(trollArea, best.name) : null;
   if(fake){
     state.lastRollWasTroll = true;
     rollGeneration++;
@@ -6930,7 +7025,8 @@ document.getElementById('rollBtn').addEventListener('click', doRoll);
 // giant synchronous loop. A single click's own internal roll loop (bulk) can already be large,
 // so multiplying that by a big clickCount in one synchronous pass is what was freezing/crashing
 // the tab on mobile. Chunking keeps each frame's work bounded so the main thread stays responsive.
-const BULK_ROLL_CHUNK_BUDGET_MS = 8; // max synchronous work per frame before yielding
+const BULK_ROLL_CHUNK_BUDGET_MS = 8; // normal max synchronous work per frame before yielding
+function bulkRollChunkBudgetMs(){ return state.lowDetailMode ? 14 : BULK_ROLL_CHUNK_BUDGET_MS; }
 
 function performBulkRolls(clickCount){
   if(clickCount <= 0) return;
@@ -6940,7 +7036,7 @@ function performBulkRolls(clickCount){
 
   function processChunk(){
     const chunkStart = performance.now();
-    while(i < clickCount && (performance.now() - chunkStart) < BULK_ROLL_CHUNK_BUDGET_MS){
+    while(i < clickCount && (performance.now() - chunkStart) < bulkRollChunkBudgetMs()){
       const { best, totalRolls } = performClick();
       grandTotalRolls += totalRolls;
       if(best && (!overallBest || best.finalRng > overallBest.finalRng)) overallBest = best;
@@ -7046,7 +7142,7 @@ function spawnSkillcheckCircle(){
       timerLabel.classList.toggle('perfect-now', isPerfectNow && hasBallUpgrade('showPerfectTime'));
     };
     updateTimerLabel();
-    skillcheck.displayTicker = setInterval(updateTimerLabel, 50);
+    skillcheck.displayTicker = setInterval(updateTimerLabel, state.lowDetailMode ? 250 : 50);
   }
 
   const despawnTimer = setTimeout(()=>{
@@ -7543,9 +7639,12 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
 
     simModal.style.display = 'flex';
     progressBar.style.width = '0%';
-    progressText.textContent = `initializing 10-worker full offline simulation...`;
+    progressText.textContent = `initializing full offline simulation...`;
 
-    const workerCount = totalRolls > 0 ? Math.min(OFFLINE_WORKER_COUNT, totalRolls) : 0;
+    const configuredWorkerCount = state.lowDetailMode
+      ? Math.max(2, Math.min(OFFLINE_WORKER_COUNT, Number(navigator.hardwareConcurrency) || OFFLINE_WORKER_COUNT))
+      : OFFLINE_WORKER_COUNT;
+    const workerCount = totalRolls > 0 ? Math.min(configuredWorkerCount, totalRolls) : 0;
     const currentArea = WORLDS[state.worldIdx].areas[state.areaIdx];
     const maxRollChance = currentArea.isUniversalPool ? (1/3) : LUCK_AFFECTED_CHANCE_CAP;
     let undispatchedRolls = totalRolls;
@@ -7576,7 +7675,7 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
     function updateProgress(){
       const pct = totalRolls > 0 ? Math.round((completedRolls / totalRolls) * 100) : 100;
       progressBar.style.width = `${pct}%`;
-      progressText.textContent = `running 10 workers: ${completedRolls.toLocaleString()} / ${totalRolls.toLocaleString()} full offline rolls completed`;
+      progressText.textContent = `running ${workerCount} workers: ${completedRolls.toLocaleString()} / ${totalRolls.toLocaleString()} full offline rolls completed`;
     }
 
     function finalize(){
@@ -7654,7 +7753,8 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
         finishWorker(worker);
         return;
       }
-      const batchRolls = Math.min(OFFLINE_ROLL_BATCH_SIZE, undispatchedRolls);
+      const workerBatchSize = state.lowDetailMode ? OFFLINE_ROLL_BATCH_SIZE * 2 : OFFLINE_ROLL_BATCH_SIZE;
+      const batchRolls = Math.min(workerBatchSize, undispatchedRolls);
       undispatchedRolls -= batchRolls;
       worker._batchInFlight = batchRolls;
       worker.postMessage({
@@ -7692,7 +7792,7 @@ async function runOfflineSimulations(totalRolls, elapsedSeconds, pool, luckMult,
         if(undispatchedRolls <= 0){
           finishWorker(worker);
         } else {
-          waitForAnimationFrames(OFFLINE_BATCH_YIELD_FRAMES).then(() => dispatchNextBatch(worker));
+          waitForAnimationFrames(state.lowDetailMode ? 1 : OFFLINE_BATCH_YIELD_FRAMES).then(() => dispatchNextBatch(worker));
         }
       };
       worker.onerror = err => {
@@ -8246,7 +8346,9 @@ async function initInner(){
 
   await dbLoadAll();
   applyRankVisualStyle();
+  applyLowDetailMode();
   setupLegacyColorFontToggle();
+  setupLowDetailModeToggle();
 
   // DATA-LOSS GUARD: if it looks like a real save vanished, stop here. Don't render the game,
   // don't run anticheat/offline-progress, and CRITICALLY don't let dbSaveMeta() run — that's
@@ -8299,6 +8401,7 @@ async function initInner(){
   renderConsumableCards();
   renderEquipCards();
   renderBallsView();
+  renderSettingsView();
   setupConsumableBulkCraftControls();
   setupItemCategorySelect();
   updateStatStrip();
