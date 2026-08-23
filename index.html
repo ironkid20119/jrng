@@ -2381,23 +2381,24 @@ const EQUIPS = {
   exponentia: {
     key:'exponentia', name:'Exponentia',
     desc:'It refuses to idle. Its luck only grows by raising itself to a higher power.',
-    luckMult:1.25, luckExponent:1.05, rpsMult:0, rankValue:583000000000,
+    luckMult:1.25, luckExponent:1.05, rpsMult:0, rankValue:75000000000,
     bonus:'No offline RPS. Your total equipped luck is raised to the power of 1.05. Every 3rd click: 1/25 chance for +250 rolls with (current luck)^1.5, capped at ×10,000 luck. Every 75th click: +750 rolls with (current luck)^1.33, capped at ×10,000 luck.',
     clickBonus:[
       { everyNClicks:3, oneIn:25, rolls:250, dynamicLuckMultFn:()=> Math.min(10000, Math.pow(effectiveLuckMult(), 1.5)) },
       { everyNClicks:75, chance:1, rolls:750, dynamicLuckMultFn:()=> Math.min(10000, Math.pow(effectiveLuckMult(), 1.33)) },
     ],
-    // Rank value: 40×PIZZA (372B) + 280×Obliterator (210B) + 1×Garbage Compacter (0.2B)
-    // + 2×Entropy (0.1B) + 1×Spectral (0.68B) + 5×Glitchite (0.0125B) + 1×Unstable Core (0.0075B)
-    // = 583B exactly. Seven unique ranks across The Fridge, Wasteland, and Aberration.
+    // Rank value: 5×PIZZA (46.5B) + 20×Obliterator (15B) + 50,000×Slop (2.5B)
+    // + 100,000×Fragments (0.5B) + 1×Entropy (0.05B) + 202×Glitchite (0.505B)
+    // + 1,326×Unstable Core (9.945B) = 75B exactly. Seven unique ranks across The Fridge,
+    // Wasteland, and Aberration, with the lower-rarity Slop and Fragments deliberately requiring volume.
     requires:[
-      { name:'PIZZA', area:'The Fridge', amount:40 },
-      { name:'Obliterator', area:'Wasteland', amount:280 },
-      { name:'Garbage Compacter', area:'Wasteland', amount:1 },
-      { name:'Entropy', area:'Wasteland', amount:2 },
-      { name:'Spectral', area:'Aberration', amount:1 },
-      { name:'Glitchite', area:'Aberration', amount:5 },
-      { name:'Unstable Core', area:'Aberration', amount:1 },
+      { name:'PIZZA', area:'The Fridge', amount:5 },
+      { name:'Obliterator', area:'Wasteland', amount:20 },
+      { name:'Slop', area:'Wasteland', amount:50000 },
+      { name:'Fragments', area:'Wasteland', amount:100000 },
+      { name:'Entropy', area:'Wasteland', amount:1 },
+      { name:'Glitchite', area:'Aberration', amount:202 },
+      { name:'Unstable Core', area:'Aberration', amount:1326 },
     ],
   },
 };
