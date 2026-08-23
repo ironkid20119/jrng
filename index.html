@@ -1082,7 +1082,7 @@
           <input id="showFpsToggle" type="checkbox" role="switch">
         </label>
         <label class="settings-card setting-toggle" title="Major performance mode: removes almost all visual polish and enables more aggressive worker routing.">
-          <span class="settings-copy"><b>Super optimize</b><small>Maximum performance. Makes the game intentionally ugly and asks three times before enabling.</small></span>
+          <span class="settings-copy"><b>Super optimize</b><small>Maximum performance. Makes the game intentionally ugly.</small></span>
           <input id="superOptimizeToggle" type="checkbox" role="switch">
         </label>
       </div>
@@ -2816,7 +2816,7 @@ function effectiveLuckMult(){
   if(equip && equip.luckMult) mult *= equip.luckMult;
   // [Exponentia] raises its complete equipped luck value to a power after applying its own multiplier.
   if(equip && equip.luckExponent) mult = Math.pow(mult, equip.luckExponent);
-  // [Expoballs] raises the complete axe/equip luck value by +0.01 exponent per level, capped at ^1.05.
+  // [Expoballs] raises the complete axe/equip luck value by +0.0125 exponent per level, reaching ^1.0625 at five levels.
   if(ballUpgradeLevel('expoballs') > 0) mult = Math.pow(mult, expoballsLuckExponent());
   // [Coin Bag] (equip): active stacks add their luck% ADDITIVELY on top of everything else so
   // far (not another flat multiplier stacking multiplicatively), matching "+5% of your current
@@ -6833,7 +6833,7 @@ function offlineTickspeedMultiplier(){
 }
 
 function expoballsLuckExponent(){
-  return 1 + ballUpgradeLevel('expoballs') * 0.01;
+  return 1 + ballUpgradeLevel('expoballs') * 0.0125;
 }
 
 // The unpurchased baseline is one click per second; each of the five permanent Ball levels
@@ -6985,7 +6985,7 @@ const BALL_UPGRADES = [
   { key:'discount', title:'Discount', max:10, costForLevel:level=>({ black:level + 1 }), desc:level=>`Level ${level}/10. Recipes are ${level}% cheaper; Balls upgrades are excluded.` },
   { key:'doubleChance', title:'Double chance', max:5, costForLevel:level=>({ black:2 + level * 2 }), desc:level=>`Level ${level}/5. Balls have +${level}% chance to duplicate when they spawn.` },
   { key:'offlineTickspeed', title:'Offline tickspeed', max:5, costForLevel:level=>({ pink:level + 1 }), desc:level=>`Level ${level}/5. Offline roll speed is +${level * 20}%.` },
-  { key:'expoballs', title:'Expoballs', max:5, costForLevel:()=>({ cyan:5 }), desc:level=>`Level ${level}/5. Luck exponent is ^${(1 + level * 0.01).toFixed(2)}.` },
+  { key:'expoballs', title:'Expoballs', max:5, costForLevel:()=>({ cyan:5 }), desc:level=>`Level ${level}/5. Luck exponent is ^${(1 + level * 0.0125).toFixed(4)}.` },
   { key:'holdToClick', title:'Hold to click', max:5, costForLevel:()=>({ pink:2 }), desc:level=>`Level ${level}/5. ${formatHoldClickInterval(HOLD_TO_CLICK_INTERVALS_MS[Math.min(5, level)])}; each level improves held rolling, ending at 1 click every 1/4s.` },
   { key:'unlockJuniAxe', title:'???', cost:{ black:5, blue:5, cyan:5, green:5, pink:5, purple:5, red:5, white:5, yellow:5 }, desc:'unlocks ???' },
 ];
