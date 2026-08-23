@@ -139,6 +139,13 @@
   .stat-strip .s{ display:flex; flex-direction:column; gap:2px; align-items:flex-end; }
   .stat-strip .s .label{ color:var(--text-faint); font-size:9px; letter-spacing:0.1em; text-transform:uppercase;}
   .stat-strip .s .val{ color:var(--text); font-weight:700; font-size:14px; }
+  .fps-counter{
+    position:fixed; top:10px; right:10px; z-index:1200; display:none;
+    padding:5px 8px; border:1px solid var(--border-lit); border-radius:7px;
+    background:rgba(8,7,12,.88); color:var(--text-dim); font:700 11px var(--mono);
+    pointer-events:none; backdrop-filter:blur(6px);
+  }
+  .fps-counter.show{ display:block; }
 
   /* ---------- Panels (view switcher) ---------- */
   .view{ display:none; }
@@ -365,6 +372,13 @@
   }
   .inv-row .iname{ font-family:var(--display); font-weight:700; font-size:14px; display:inline-block; }
   .inv-row .imeta{ font-family:var(--mono); font-size:10px; color:var(--text-faint); margin-top:2px; }
+  .compact-variant-counts{ display:flex; align-items:center; gap:3px; flex-wrap:wrap; justify-content:flex-end; }
+  .compact-variant-count{
+    border:0; background:transparent; color:inherit; padding:0; font:inherit; cursor:pointer;
+    text-decoration:underline dotted rgba(233,229,245,.45); text-underline-offset:3px;
+  }
+  .compact-variant-count:disabled{ cursor:default; opacity:.5; text-decoration:none; }
+  .compact-variant-separator{ color:var(--text-faint); }
   .inv-row .icount{
     font-family:var(--mono); font-size:12px; color:var(--text-dim);
     background:var(--bg-2); border:1px solid var(--border-lit);
@@ -931,6 +945,7 @@
 </div>
 
 <div class="wrap">
+  <div id="fpsCounter" class="fps-counter" aria-live="polite">FPS: --</div>
   <header class="top">
     <div class="brand">
       <h1 id="logoTitle" style="cursor:pointer; user-select:none;">Juni's RNG Game</h1>
@@ -1032,6 +1047,10 @@
         <label class="settings-card setting-toggle" title="Groups normal, Weird, Odd, Rainbow, and Grayscale holdings into one Inventory row with a pipe-separated owned-count summary.">
           <span class="settings-copy"><b>Compact Inventory variants</b><small>Hide separate variant rows and show owned as normal | Weird | Odd | Rainbow | Grayscale.</small></span>
           <input id="compactInventoryVariantsToggle" type="checkbox" role="switch">
+        </label>
+        <label class="settings-card setting-toggle" title="Displays the current rendering frame rate in the top-right corner.">
+          <span class="settings-copy"><b>Show FPS</b><small>Show a lightweight live FPS counter in the top right.</small></span>
+          <input id="showFpsToggle" type="checkbox" role="switch">
         </label>
       </div>
       <div class="settings-section-title">Automatic recipe helpers</div>
@@ -2659,6 +2678,7 @@ let state = {
   rankVisualStyle: 'modernrandom', // 'modernrandom' or 'legacycolorfont'
   lowDetailMode: false, // removes expensive visuals and lowers live UI work for performance
   compactInventoryVariants: false, // groups normal + variant holdings into one flat Inventory row
+  showFps: false, // optional top-right live frame counter
   errRedirectorUntil: null, // timestamp — while in the future, the 404 area's rarity-truncation gimmick is suppressed
   doublinatorUntil: null, // timestamp — ×2 bulk/luck/rps while in the future
   doublinatorCooldownUntil: null, // timestamp — cannot activate another Doublinator before this time
@@ -3620,6 +3640,78 @@ try{
   persistenceWorker = null;
 }
 
+// A second, dedicated worker for Low Detail Mode. Unlike the persistence worker and offline-roll
+// workers, this one handles presentation-only inventory ordering. It receives a compact immutable
+// snapshot, returns sorted keys, and never touches game state or reward calculations.
+const LOW_DETAIL_WORKER_SRC = `
+  self.onmessage = function(event){
+    const msg = event.data;
+    if(!msg || msg.type !== 'sort-inventory') return;
+    const orderedKeys = msg.items.slice().sort((a, b) => {
+      if(a.isSecret && !b.isSecret) return -1;
+      if(!a.isSecret && b.isSecret) return 1;
+      return b.lastRng - a.lastRng;
+    }).map(item => item.key);
+    self.postMessage({ type:'inventory-order', requestId:msg.requestId, signature:msg.signature, orderedKeys });
+  };
+`;
+let lowDetailWorker = null;
+let lowDetailWorkerUrl = null;
+let lowDetailInventoryRequestId = 0;
+let lowDetailInventoryPendingSignature = null;
+let lowDetailInventoryOrderCache = { signature:null, orderedKeys:[] };
+
+function stopLowDetailWorker(){
+  if(lowDetailWorker){ lowDetailWorker.terminate(); lowDetailWorker = null; }
+  if(lowDetailWorkerUrl){ URL.revokeObjectURL(lowDetailWorkerUrl); lowDetailWorkerUrl = null; }
+  lowDetailInventoryPendingSignature = null;
+  lowDetailInventoryOrderCache = { signature:null, orderedKeys:[] };
+}
+
+function ensureLowDetailWorker(){
+  if(!state.lowDetailMode || typeof Worker === 'undefined') return null;
+  if(lowDetailWorker) return lowDetailWorker;
+  try{
+    lowDetailWorkerUrl = URL.createObjectURL(new Blob([LOW_DETAIL_WORKER_SRC], { type:'application/javascript' }));
+    lowDetailWorker = new Worker(lowDetailWorkerUrl);
+    lowDetailWorker.onmessage = event => {
+      const msg = event.data;
+      if(!msg || msg.type !== 'inventory-order') return;
+      lowDetailInventoryPendingSignature = null;
+      lowDetailInventoryOrderCache = { signature:msg.signature, orderedKeys:msg.orderedKeys || [] };
+      if(currentView === 'inventory') renderInventory();
+    };
+    lowDetailWorker.onerror = () => stopLowDetailWorker();
+  }catch(_){
+    stopLowDetailWorker();
+  }
+  return lowDetailWorker;
+}
+
+function orderedInventoryItems(items){
+  const sortLocal = values => [...values].sort((a,b)=> {
+    if(a.isSecret && !b.isSecret) return -1;
+    if(!a.isSecret && b.isSecret) return 1;
+    return b.lastRng - a.lastRng;
+  });
+  if(!state.lowDetailMode || items.length < 24) return sortLocal(items);
+  const signature = items.map(item => `${item.key}:${item.lastRng}:${item.isSecret ? 1 : 0}`).sort().join('|');
+  if(lowDetailInventoryOrderCache.signature === signature){
+    const byKey = new Map(items.map(item => [item.key, item]));
+    const ordered = lowDetailInventoryOrderCache.orderedKeys.map(key => byKey.get(key)).filter(Boolean);
+    if(ordered.length === items.length) return ordered;
+  }
+  const worker = ensureLowDetailWorker();
+  if(worker && lowDetailInventoryPendingSignature !== signature){
+    lowDetailInventoryPendingSignature = signature;
+    worker.postMessage({
+      type:'sort-inventory', requestId:++lowDetailInventoryRequestId, signature,
+      items:items.map(item => ({ key:item.key, lastRng:item.lastRng, isSecret:!!item.isSecret })),
+    });
+  }
+  return items;
+}
+
 function buildMetaSnapshot(){
   return {
     rolls: state.rolls,
@@ -3644,6 +3736,7 @@ function buildMetaSnapshot(){
     rankVisualStyle: state.rankVisualStyle,
     lowDetailMode: !!state.lowDetailMode,
     compactInventoryVariants: !!state.compactInventoryVariants,
+    showFps: !!state.showFps,
     errRedirectorUntil: state.errRedirectorUntil,
     doublinatorUntil: state.doublinatorUntil,
     doublinatorCooldownUntil: state.doublinatorCooldownUntil,
@@ -3858,6 +3951,7 @@ function applyMetaToState(meta){
   state.rankVisualStyle = meta.rankVisualStyle === 'legacycolorfont' ? 'legacycolorfont' : 'modernrandom';
   state.lowDetailMode = !!meta.lowDetailMode;
   state.compactInventoryVariants = !!meta.compactInventoryVariants;
+  state.showFps = !!meta.showFps;
   state.errRedirectorUntil = meta.errRedirectorUntil || null;
   state.doublinatorUntil = meta.doublinatorUntil || null;
   state.doublinatorCooldownUntil = meta.doublinatorCooldownUntil || null;
@@ -4692,6 +4786,7 @@ function applyLowDetailMode(){
 
 function setLowDetailMode(enabled){
   state.lowDetailMode = !!enabled;
+  if(!state.lowDetailMode) stopLowDetailWorker();
   applyLowDetailMode();
   dbSaveMeta();
   // Rebuild rank-bearing views once on the toggle so inline gradient/font styles are removed
@@ -4731,9 +4826,16 @@ function setupLowDetailModeToggle(){
 }
 
 function setCompactInventoryVariants(enabled){
+  const wasEnabled = !!state.compactInventoryVariants;
   state.compactInventoryVariants = !!enabled;
   const toggle = document.getElementById('compactInventoryVariantsToggle');
   if(toggle) toggle.checked = state.compactInventoryVariants;
+  // Compact rows are anchored on the normal/default rank. On first enable, make the filter act
+  // like Normal was selected while still showing every owned variant count in each compact row.
+  if(state.compactInventoryVariants && !wasEnabled){
+    const variantFilter = document.getElementById('filterVariant');
+    if(variantFilter && !variantFilter.value) variantFilter.value = 'normal';
+  }
   dbSaveMeta();
   renderInventory();
 }
@@ -4743,6 +4845,47 @@ function setupCompactInventoryVariantsToggle(){
   if(!toggle) return;
   toggle.checked = !!state.compactInventoryVariants;
   toggle.addEventListener('change', ()=> setCompactInventoryVariants(toggle.checked));
+}
+
+let fpsAnimationFrame = null;
+let fpsFrameCount = 0;
+let fpsWindowStart = 0;
+function stopFpsCounter(){
+  if(fpsAnimationFrame != null){ cancelAnimationFrame(fpsAnimationFrame); fpsAnimationFrame = null; }
+  fpsFrameCount = 0;
+  fpsWindowStart = 0;
+}
+function runFpsCounter(timestamp){
+  const counter = document.getElementById('fpsCounter');
+  if(!state.showFps || !counter){ stopFpsCounter(); return; }
+  if(!fpsWindowStart) fpsWindowStart = timestamp;
+  fpsFrameCount++;
+  const elapsed = timestamp - fpsWindowStart;
+  if(elapsed >= 500){
+    counter.textContent = `FPS: ${Math.round((fpsFrameCount * 1000) / elapsed)}`;
+    fpsFrameCount = 0;
+    fpsWindowStart = timestamp;
+  }
+  fpsAnimationFrame = requestAnimationFrame(runFpsCounter);
+}
+function applyShowFps(){
+  const counter = document.getElementById('fpsCounter');
+  const toggle = document.getElementById('showFpsToggle');
+  if(toggle) toggle.checked = !!state.showFps;
+  if(counter) counter.classList.toggle('show', !!state.showFps);
+  if(state.showFps && fpsAnimationFrame == null) fpsAnimationFrame = requestAnimationFrame(runFpsCounter);
+  if(!state.showFps) stopFpsCounter();
+}
+function setShowFps(enabled){
+  state.showFps = !!enabled;
+  applyShowFps();
+  dbSaveMeta();
+}
+function setupShowFpsToggle(){
+  const toggle = document.getElementById('showFpsToggle');
+  if(!toggle) return;
+  toggle.checked = !!state.showFps;
+  toggle.addEventListener('change', ()=> setShowFps(toggle.checked));
 }
 
 function applyRankVisualStyle(){
@@ -4757,6 +4900,7 @@ function renderSettingsView(){
   applyRankVisualStyle();
   const compactToggle = document.getElementById('compactInventoryVariantsToggle');
   if(compactToggle) compactToggle.checked = !!state.compactInventoryVariants;
+  applyShowFps();
   const autoUseEl = document.getElementById('settingsAutoUseOptions');
   if(!autoUseEl) return;
   const helpers = [
@@ -4853,12 +4997,14 @@ function renderInventory(){
 
   const selWorld = fWorld.value;
   const selArea = fArea.value;
-  const selVariant = fVariant.value;
+  // Compact mode is normal/default-rank oriented even after a page reload, unless the player
+  // explicitly picks another variant filter.
+  const selVariant = (state.compactInventoryVariants && !fVariant.value) ? 'normal' : fVariant.value;
   const selRank = fRank.value;
 
   const worlds = [...new Set(allItems.map(i => areaWorldMap[i.areaLabel] || '?').filter(Boolean))].sort();
   const areas = [...new Set(allItems.map(i => i.areaLabel))].sort();
-  const variants = [...new Set(allItems.map(i => i.variant ? i.variant.label : '').filter(Boolean))].sort();
+  const variants = [{ value:'normal', label:'Normal' }, ...VARIANT_CHAIN.map(variant => ({ value:variant.key, label:variant.label }))];
   const ranks = [...new Set(allItems.map(i => i.name))].sort();
 
   function rebuildSelect(el, values, placeholder){
@@ -4868,7 +5014,7 @@ function renderInventory(){
   }
   rebuildSelect(fWorld, worlds, 'All worlds');
   rebuildSelect(fArea, areas, 'All areas');
-  rebuildSelect(fVariant, variants, 'All variants');
+  fVariant.innerHTML = `<option value="">All variants</option>` + variants.map(variant => `<option value="${variant.value}" ${variant.value===selVariant?'selected':''}>${variant.label}</option>`).join('');
   rebuildSelect(fRank, ranks, 'All ranks');
 
   // Restore selections
@@ -4878,11 +5024,13 @@ function renderInventory(){
   fRank.value = selRank;
 
   // Apply filters
-  let items = allItems;
-  if(fWorld.value) items = items.filter(i => (areaWorldMap[i.areaLabel] || '') === fWorld.value);
-  if(fArea.value) items = items.filter(i => i.areaLabel === fArea.value);
-  if(fVariant.value) items = items.filter(i => (i.variant ? i.variant.label : '') === fVariant.value);
-  if(fRank.value) items = items.filter(i => i.name === fRank.value);
+  let itemsBeforeVariant = allItems;
+  if(fWorld.value) itemsBeforeVariant = itemsBeforeVariant.filter(i => (areaWorldMap[i.areaLabel] || '') === fWorld.value);
+  if(fArea.value) itemsBeforeVariant = itemsBeforeVariant.filter(i => i.areaLabel === fArea.value);
+  if(fRank.value) itemsBeforeVariant = itemsBeforeVariant.filter(i => i.name === fRank.value);
+  let items = itemsBeforeVariant;
+  if(fVariant.value === 'normal') items = items.filter(i => !i.variant);
+  else if(fVariant.value) items = items.filter(i => i.variant && i.variant.key === fVariant.value);
 
   const totalCount = allItems.reduce((s,i)=> s + i.count, 0);
   const allCompactGroupCount = state.compactInventoryVariants
@@ -4895,15 +5043,11 @@ function renderInventory(){
     return;
   }
 
-  items.sort((a,b)=> {
-    if(a.isSecret && !b.isSecret) return -1;
-    if(!a.isSecret && b.isSecret) return 1;
-    return b.lastRng - a.lastRng;
-  });
+  const displayItems = orderedInventoryItems(items);
 
   if(!state.compactInventoryVariants){
     summary.textContent = `${allItems.length} unique · ${totalCount.toLocaleString()} total`;
-    list.innerHTML = items.map(it => {
+    list.innerHTML = displayItems.map(it => {
       const variantTxt = it.variant ? ` · ${it.variant.label}` : '';
       const suffix = it.variant ? ' ✦' : (it.isSecret ? ' 🔒' : '');
       const nameEl = rankNameHtml(it.name, it.tierCls, it.variant, '', it.isSecret ? null : it.tierKey);
@@ -4921,13 +5065,24 @@ function renderInventory(){
   }
 
   const variantOrder = [null, ...VARIANT_CHAIN.map(variant => variant.key)];
+  const groupKeyForItem = item => `${item.isSecret ? 'secret' : 'rank'}|${item.areaLabel}|${item.name}`;
   const grouped = new Map();
+  // Visible groups honor the selected variant. Their count summary then includes every owned
+  // variant in the same filtered world/area/rank scope, not just the selected one.
   for(const item of items){
-    const groupKey = `${item.isSecret ? 'secret' : 'rank'}|${item.areaLabel}|${item.name}`;
-    if(!grouped.has(groupKey)) grouped.set(groupKey, { representative:item, counts:Object.fromEntries(variantOrder.map(key => [key == null ? 'normal' : key, 0])) });
-    const group = grouped.get(groupKey);
+    const groupKey = groupKeyForItem(item);
+    if(!grouped.has(groupKey)) grouped.set(groupKey, {
+      representative:item,
+      counts:Object.fromEntries(variantOrder.map(key => [key == null ? 'normal' : key, 0])),
+      ownedItems:{},
+    });
+  }
+  for(const item of itemsBeforeVariant){
+    const group = grouped.get(groupKeyForItem(item));
+    if(!group) continue;
     const variantKey = item.variant ? item.variant.key : 'normal';
     group.counts[variantKey] = (group.counts[variantKey] || 0) + item.count;
+    group.ownedItems[variantKey] = item;
     if(item.lastRng > group.representative.lastRng) group.representative = item;
   }
   const compactItems = [...grouped.values()].sort((a,b)=> {
@@ -4938,17 +5093,33 @@ function renderInventory(){
   list.innerHTML = compactItems.map(group => {
     const it = group.representative;
     const nameEl = rankNameHtml(it.name, it.tierCls, null, '', it.isSecret ? null : it.tierKey);
-    const variantCounts = variantOrder.map(key => (group.counts[key == null ? 'normal' : key] || 0).toLocaleString()).join(' | ');
+    const variantCounts = variantOrder.map((key, index) => {
+      const variantKey = key == null ? 'normal' : key;
+      const count = group.counts[variantKey] || 0;
+      const countHtml = `<button type="button" class="compact-variant-count" data-compact-variant-area="${escapeHtml(it.areaLabel)}" data-compact-variant-name="${escapeHtml(it.name)}" data-compact-variant-key="${variantKey}" ${count > 0 ? '' : 'disabled'}>${count.toLocaleString()}</button>`;
+      return `${index ? '<span class="compact-variant-separator">|</span>' : ''}${countHtml}`;
+    }).join('');
+    const metadata = it.isSecret
+      ? `${it.areaLabel} · ${it.tierLabel} · rarity hidden`
+      : `${it.areaLabel} · ${fmtRng(it.baseRng)} · ${it.tierLabel}`;
     return `
       <div class="inv-row compact-variant-row">
         <div>
           <div class="iname">${nameEl}${it.isSecret ? ' 🔒' : ''}</div>
-          <div class="imeta">${it.areaLabel} · ${fmtRng(it.baseRng)} · ${it.tierLabel}</div>
+          <div class="imeta">${metadata}</div>
         </div>
-        <span class="icount" title="normal | Weird | Odd | Rainbow | Grayscale">${variantCounts}</span>
+        <span class="icount compact-variant-counts" title="normal | Weird | Odd | Rainbow | Grayscale; click an owned value for its RNG">${variantCounts}</span>
       </div>
     `;
   }).join('');
+  list.querySelectorAll('[data-compact-variant-key]').forEach(button => button.addEventListener('click', ()=>{
+    const variantKey = button.dataset.compactVariantKey;
+    const item = Object.values(state.inventory).find(entry => entry.areaLabel === button.dataset.compactVariantArea && entry.name === button.dataset.compactVariantName && (variantKey === 'normal' ? !entry.variant : entry.variant && entry.variant.key === variantKey));
+    if(!item) return;
+    if(item.isSecret){ alertUser('Secret rank rarity is hidden.'); return; }
+    const variantLabel = variantKey === 'normal' ? 'Normal' : (VARIANT_CHAIN.find(variant => variant.key === variantKey)?.label || variantKey);
+    alertUser(`${item.name} · ${variantLabel}: 1/${fmtRngForResult(item)}`);
+  }));
 }
 
 function setupInventoryFilters(){
@@ -8380,6 +8551,8 @@ async function initInner(){
   setupLegacyColorFontToggle();
   setupLowDetailModeToggle();
   setupCompactInventoryVariantsToggle();
+  setupShowFpsToggle();
+  applyShowFps();
 
   // DATA-LOSS GUARD: if it looks like a real save vanished, stop here. Don't render the game,
   // don't run anticheat/offline-progress, and CRITICALLY don't let dbSaveMeta() run — that's
