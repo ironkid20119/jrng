@@ -166,6 +166,20 @@
     font:12px var(--mono); color:var(--text-dim); line-height:1.55;
   }
 
+  /* Perilous danger atmosphere: an intentionally slow, Insanity-tier-like red gradient and a
+     large black vignette. Both fade in/out over the requested 3.8 seconds. */
+  body::before, body::after{ content:''; position:fixed; inset:0; pointer-events:none; z-index:4; opacity:0; transition:opacity 3.8s ease; }
+  body::before{ background:linear-gradient(110deg,#210000,#6f0000,#140000,#94000d,#210000); background-size:400% 100%; animation:perilous-insanity-flow 14s linear infinite; mix-blend-mode:screen; }
+  body::after{ background:radial-gradient(ellipse at center, transparent 18%, rgba(0,0,0,.92) 100%); }
+  html.perilous-active body::before, html.perilous-active body::after{ opacity:.72; }
+  html.perilous-active body::after{ opacity:1; }
+  @keyframes perilous-insanity-flow{ from{background-position:0% 50%;} to{background-position:400% 50%;} }
+  .perilous-meter{ margin:0 0 12px; padding:10px 12px; border:1px solid #a81520; border-radius:10px; background:rgba(45,0,4,.88); font-family:var(--mono); color:#ffd2d2; }
+  .perilous-meter-head{ display:flex; justify-content:space-between; gap:12px; font-size:11px; margin-bottom:7px; text-transform:uppercase; letter-spacing:.08em; }
+  .perilous-meter-bar{ height:10px; border-radius:6px; background:#190006; overflow:hidden; border:1px solid #670812; }
+  .perilous-meter-fill{ height:100%; width:0%; background:linear-gradient(90deg,#8a0b16,#ff1d2e,#ffd04a); transition:width .12s linear; }
+  .perilous-meter-note{ margin-top:7px; color:#ff9da5; font-size:10px; line-height:1.4; }
+
   /* ---------- Panels (view switcher) ---------- */
   .view{ display:none; }
   .view.active{ display:block; animation:fadeIn .18s ease; }
@@ -994,6 +1008,11 @@
       <div class="axe-strip" id="axeStrip"></div>
       <div class="world-tabs" id="worldTabs"></div>
       <div class="area-select" id="areaSelect"></div>
+      <div id="perilousMeter" class="perilous-meter" hidden>
+        <div class="perilous-meter-head"><span>Perilous danger</span><span id="perilousMeterValue">0.00%</span></div>
+        <div class="perilous-meter-bar"><div id="perilousMeterFill" class="perilous-meter-fill"></div></div>
+        <div id="perilousMeterNote" class="perilous-meter-note">Leave before danger reaches 100% or lose this visit’s Perilous rolls.</div>
+      </div>
 
       <div class="stage" id="stage">
         <div class="result-placeholder">Press roll to find your first item.</div>
@@ -1060,6 +1079,13 @@
   </div>
 
   <!-- SETTINGS VIEW -->
+  <div class="view" id="view-roulette">
+    <div class="panel">
+      <div class="section-title">Roulette</div>
+      <div class="balls-empty">WIP. contains nothing as of now lol!</div>
+    </div>
+  </div>
+
   <div class="view" id="view-settings">
     <div class="panel">
       <h2 class="ptitle">Settings</h2>
@@ -1128,7 +1154,7 @@
     </div>
   </div>
 
-  <footer class="foot">junis rng game · world 1 · v1</footer>
+  <footer class="foot">junis rng game · world 1 · v1.8</footer>
 </div>
 
 <nav class="bottom-nav">
@@ -1137,6 +1163,7 @@
   <button class="nav-btn" data-view="index"><span class="icon">📖</span>Index</button>
   <button class="nav-btn" data-view="items"><span class="icon">🪓</span>Items</button>
   <button class="nav-btn" data-view="balls"><span class="icon">🔮</span>Balls<span id="ballsNavDot" class="balls-nav-dot" hidden aria-label="Collectible balls available"></span></button>
+  <button id="rouletteNavBtn" class="nav-btn" data-view="roulette" hidden><span class="icon">🎰</span>Roulette</button>
   <button class="nav-btn" data-view="settings"><span class="icon">⚙</span>Settings</button>
 </nav>
 
@@ -1990,6 +2017,31 @@ const WORLD2 = {
         },
       ],
     },
+    {
+      key:'perilous', label:'Perilous', perilous:true,
+      ranks:[
+        { name:'Perlite', rng:1 },
+        { name:'Omitium', rng:85 },
+        { name:'Fadite', rng:300 },
+        { name:'Embrite', rng:725 },
+        { name:'Voidite', rng:6850, mutations:[{ name:'Evanescence', rng:782187842537 }] },
+        { name:'Aporia', rng:38416 },
+        { name:'Kenite', rng:63716, mutations:[{ name:'Kenosis', rng:8176618 }] },
+        { name:'Abeyance', rng:91762 },
+        { name:'Impermanence', rng:317519, mutations:[{ name:'Entropicium', rng:18151815181 }] },
+        { name:'Cessation', rng:2615728 },
+        { name:'Obstarite', rng:24916526, mutations:[{ name:'Oblivion', rng:43816745197 }] },
+        { name:'Incessant', rng:73523752 },
+        { name:'Catastrophe', rng:172577376 },
+        { name:'Armageddon', rng:237159572, mutations:[{ name:'Ragnarok', rng:89000000000000 }] },
+        { name:'Nilihity', rng:490715177 },
+        { name:'Nexull', rng:892518772 },
+        { name:'Aphanisis', rng:2684185386 },
+        { name:'Eterium', rng:6149525841 },
+        { name:'Nixisite', rng:9486176971 },
+        { name:'Ciphite', rng:12651962275 },
+      ],
+    },
   ],
 };
 
@@ -2633,6 +2685,18 @@ const CONSUMABLES = {
       { name:'GOLDEN TOILET AWARD', area:'Placeholder Land', amount:100 },
     ],
   },
+  stablizer: {
+    key:'stablizer', name:'Stablizer',
+    desc:'Inject with caution.',
+    effect:'On use: Perilous danger progresses ×2 slower for 30 minutes. Only one can be owned at a time, and only one can be active at a time.',
+    useWithoutPin:true, maxOwned:1, durationSeconds:30*60,
+    requires:[
+      { name:'Kenosis', area:'Perilous', amount:150 },
+      { name:'Obstarite', area:'Perilous', amount:80 },
+      { name:'Armageddon', area:'Perilous', amount:8 },
+      { name:'Nilihity', area:'Perilous', amount:4 },
+    ],
+  },
   doublinator: {
     key:'doublinator', name:'Doublinator',
     desc:'2',
@@ -2658,7 +2722,7 @@ const CONSUMABLES = {
     ],
   },
 };
-const CONSUMABLE_ORDER = ['pushpin','gloves','bomb','nullbomb','watergun','errredirector','nukinamachina','juniaxeswing','doublinator','boiconsumable'];
+const CONSUMABLE_ORDER = ['pushpin','gloves','bomb','nullbomb','watergun','errredirector','nukinamachina','juniaxeswing','stablizer','doublinator','boiconsumable'];
 
 /* ============================================================
    BALLS
@@ -2721,7 +2785,138 @@ let state = {
   spawnedBalls: [], // { id, key, expiresAt }; collected balls are removed, expired balls are pruned
   ballUpgrades: {}, // permanent Balls-tab upgrades and their level counters
   ballAutoUse: {}, // player-selected toggles unlocked by the auto-use ball upgrades
+  stablizerUntil: null, // timestamp — Perilous meter progresses at half speed while active
+  perilousVisit: null, // { meter, gains:{ inventoryKey:count }, startedAt } while currently risking Perilous
 };
+
+const PERILOUS_METER_TICK_MS = 30;
+const PERILOUS_PASSIVE_GAIN = 0.05;
+const PERILOUS_CLICK_GAIN = 0.5;
+const PERILOUS_RARE_CLICK_RNG = 50000000;
+const PERILOUS_METER_RELIEF_RNG = 500000000;
+const PERILOUS_METER_RELIEF = 7.5;
+
+function currentArea(){
+  const world = WORLDS[state.worldIdx];
+  return world && world.areas[state.areaIdx] ? world.areas[state.areaIdx] : null;
+}
+function isPerilousArea(area=currentArea()){
+  return !!(area && area.perilous);
+}
+function isStablizerActive(){
+  return !!state.stablizerUntil && Date.now() < state.stablizerUntil;
+}
+function perilousMeterSpeedMult(){ return isStablizerActive() ? 0.5 : 1; }
+
+function ensurePerilousVisit(){
+  if(!isPerilousArea()) return null;
+  if(!state.perilousVisit || typeof state.perilousVisit !== 'object'){
+    state.perilousVisit = { meter:0, gains:{}, startedAt:Date.now(), lastMeterAt:Date.now() };
+  }
+  state.perilousVisit.meter = Math.max(0, Math.min(100, Number(state.perilousVisit.meter) || 0));
+  if(!state.perilousVisit.gains || typeof state.perilousVisit.gains !== 'object') state.perilousVisit.gains = {};
+  return state.perilousVisit;
+}
+
+function updatePerilousPresentation(){
+  const active = isPerilousArea();
+  document.documentElement.classList.toggle('perilous-active', active);
+  const wrap = document.getElementById('perilousMeter');
+  const fill = document.getElementById('perilousMeterFill');
+  const value = document.getElementById('perilousMeterValue');
+  const note = document.getElementById('perilousMeterNote');
+  if(!wrap) return;
+  wrap.hidden = !active;
+  if(!active) return;
+  const visit = ensurePerilousVisit();
+  const meter = visit ? visit.meter : 0;
+  if(fill) fill.style.width = `${meter}%`;
+  if(value) value.textContent = `${meter.toFixed(2)}%`;
+  if(note) note.textContent = isStablizerActive()
+    ? `Stablizer active — danger rises at half speed for ${fmtDuration(Math.ceil((state.stablizerUntil - Date.now()) / 1000))}.`
+    : 'Leave before danger reaches 100% or lose this visit’s Perilous rolls.';
+}
+
+function recordPerilousGain(result, count){
+  const visit = ensurePerilousVisit();
+  if(!visit || !result || result.areaLabel !== 'Perilous') return;
+  const key = invKey(result.areaLabel, result.name, result.variant ? result.variant.key : null);
+  visit.gains[key] = (visit.gains[key] || 0) + Math.max(0, Number(count) || 0);
+}
+
+function recalculateBestAfterPerilousRollback(){
+  if(state.best && state.best.areaLabel !== 'Perilous') return;
+  let best = null;
+  for(const item of Object.values(state.inventory)){
+    if(!best || item.lastRng > best.finalRng){
+      best = { name:item.name, baseRng:item.baseRng, finalRng:item.lastRng, tier:tierFor(item.baseRng), variant:item.variant, areaLabel:item.areaLabel, isSecret:!!item.isSecret };
+    }
+  }
+  state.best = best;
+}
+
+function leavePerilousSafely(){
+  if(!state.perilousVisit) return;
+  state.perilousVisit = null;
+  updatePerilousPresentation();
+}
+
+function ejectFromPerilous(){
+  const visit = state.perilousVisit;
+  if(!visit) return;
+  for(const [key, lostCount] of Object.entries(visit.gains || {})){
+    const item = state.inventory[key];
+    if(!item) continue;
+    item.count -= Math.min(item.count, Math.max(0, Number(lostCount) || 0));
+    if(item.count <= 0){
+      delete state.inventory[key];
+      dbDeleteInvItem(key);
+    } else {
+      dbSaveInvItem(item);
+    }
+  }
+  state.log = state.log.filter(entry => entry.areaLabel !== 'Perilous');
+  state.perilousVisit = null;
+  state.perilousEjected = true;
+  const naturalWorld = WORLDS.findIndex(world => world === WORLD1);
+  state.worldIdx = naturalWorld >= 0 ? naturalWorld : 0;
+  state.areaIdx = Math.max(0, WORLDS[state.worldIdx].areas.findIndex(area => area.label === 'Natural'));
+  recalculateBestAfterPerilousRollback();
+  renderWorldTabs(); renderAreaSelect(); buildIndexAccordion(); updateAberrationVisual(); renderInventory(); renderAxeStrip(); updateStatStrip();
+  alertUser('Perilous reached 100%. You were thrown back to Natural and lost this visit’s Perilous rolls.');
+  dbSaveMeta();
+}
+
+function adjustPerilousMeter(amount){
+  const visit = ensurePerilousVisit();
+  if(!visit) return;
+  visit.meter = Math.max(0, Math.min(100, visit.meter + amount));
+  updatePerilousPresentation();
+  if(visit.meter >= 100) ejectFromPerilous();
+}
+
+function processPerilousClick(results){
+  if(!isPerilousArea()) return;
+  const list = Array.isArray(results) ? results : [];
+  if(!list.some(result => result.baseRng > PERILOUS_RARE_CLICK_RNG)) adjustPerilousMeter(PERILOUS_CLICK_GAIN * perilousMeterSpeedMult());
+  const reliefHits = list.filter(result => result.baseRng > PERILOUS_METER_RELIEF_RNG).length;
+  if(reliefHits) adjustPerilousMeter(-PERILOUS_METER_RELIEF * reliefHits);
+}
+
+let lastPerilousMetaSaveAt = 0;
+function tickPerilousMeter(){
+  if(!isPerilousArea()) return;
+  const visit = ensurePerilousVisit();
+  const now = Date.now();
+  const previous = Number(visit.lastMeterAt) || now;
+  const elapsedTicks = Math.max(0, (now - previous) / PERILOUS_METER_TICK_MS);
+  visit.lastMeterAt = now;
+  if(elapsedTicks > 0) adjustPerilousMeter(PERILOUS_PASSIVE_GAIN * elapsedTicks * perilousMeterSpeedMult());
+  if(now - lastPerilousMetaSaveAt >= 1000){
+    lastPerilousMetaSaveAt = now;
+    dbSaveMeta();
+  }
+}
 
 function isErrRedirectorActive(){
   return !!state.errRedirectorUntil && Date.now() < state.errRedirectorUntil;
@@ -3788,6 +3983,8 @@ function buildMetaSnapshot(){
     spawnedBalls: state.spawnedBalls,
     ballUpgrades: state.ballUpgrades,
     ballAutoUse: state.ballAutoUse,
+    stablizerUntil: state.stablizerUntil,
+    perilousVisit: state.perilousVisit,
   };
 }
 
@@ -4004,6 +4201,8 @@ function applyMetaToState(meta){
   state.spawnedBalls = Array.isArray(meta.spawnedBalls) ? meta.spawnedBalls : [];
   state.ballUpgrades = (meta.ballUpgrades && typeof meta.ballUpgrades === 'object') ? meta.ballUpgrades : {};
   state.ballAutoUse = (meta.ballAutoUse && typeof meta.ballAutoUse === 'object') ? meta.ballAutoUse : {};
+  state.stablizerUntil = meta.stablizerUntil || null;
+  state.perilousVisit = (meta.perilousVisit && typeof meta.perilousVisit === 'object') ? meta.perilousVisit : null;
   normalizeBallState();
   saveLoadedSuccessfully = true;
 }
@@ -4209,6 +4408,7 @@ function addToInventory(result, count){
     state.inventory[key] = item;
     dbSaveInvItem(item);
   }
+  recordPerilousGain(result, count);
 }
 
 function getOwnedCount(areaLabel, name, variantKey){
@@ -4397,7 +4597,7 @@ function buildAreaPool(world, area, opts){
   if(area.isUniversalPool){
     for(const w of WORLDS){
       for(const a of w.areas){
-        if(a.key === area.key) continue;
+        if(a.key === area.key || a.perilous) continue; // All can never bypass Perilous’s danger gimmick.
         for(const r of a.ranks){
           if(r.condition && !r.condition(w, a, opts)) continue;
           pool.push({ name:r.name, rng:r.rng * areaDebuffMult, isMutation:false, injectedAreaLabel:a.label });
@@ -4555,6 +4755,9 @@ function rollOnceForArea(world, area, luckMult, opts){
         l *= equippedAxe.synergyPushpinLuckMult;
       }
     }
+    // Perilous applies its 5× reduction and hard ×750 ceiling after every item-specific effect,
+    // so no Pushpin, Emblem, consumable, mutation, or bonus-roll path can exceed the area limit.
+    if(area.perilous) l = Math.min(l / 5, 750);
     return l;
   }
 
@@ -5040,6 +5243,7 @@ function renderWorldTabs(){
   el.innerHTML = WORLDS.map((w,i) => `<button class="world-tab ${i===state.worldIdx?'active':''}" data-idx="${i}">${w.label}</button>`).join('');
   el.querySelectorAll('.world-tab').forEach(btn=>{
     btn.addEventListener('click', ()=>{
+      if(isPerilousArea()) leavePerilousSafely();
       state.worldIdx = parseInt(btn.dataset.idx);
       state.areaIdx = 0;
       renderWorldTabs();
@@ -5062,6 +5266,7 @@ function updateAberrationVisual(){
   const area = world ? world.areas[state.areaIdx] : null;
   const isAberration = !!(area && area.key === 'dreamland'); // internal key kept for save compat
   document.documentElement.classList.toggle('aberration-active', isAberration);
+  updatePerilousPresentation();
 }
 
 function renderAreaSelect(){
@@ -5070,7 +5275,11 @@ function renderAreaSelect(){
   el.innerHTML = world.areas.map((a,i) => `<button class="area-btn ${i===state.areaIdx?'active':''}" data-idx="${i}">${a.label}</button>`).join('');
   el.querySelectorAll('.area-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      state.areaIdx = parseInt(btn.dataset.idx);
+      const nextAreaIdx = parseInt(btn.dataset.idx);
+      const leavingPerilous = isPerilousArea() && !world.areas[nextAreaIdx].perilous;
+      if(leavingPerilous) leavePerilousSafely();
+      state.areaIdx = nextAreaIdx;
+      if(isPerilousArea()) ensurePerilousVisit();
       renderAreaSelect();
       updateAberrationVisual();
       dbSaveMeta();
@@ -6109,7 +6318,7 @@ function renderConsumableCards(){
 
     const craftAmount = getConsumableCraftAmount();
     const requirements = consumableRequirements(key, craftAmount);
-    let canCraft = true;
+    let canCraft = !(item.maxOwned != null && count + craftAmount > item.maxOwned);
     const reqHtml = requirements.map(req=>{
       const have = getReqOwnedCount(req);
       const ok = have >= req.amount;
@@ -6166,6 +6375,9 @@ function renderConsumableCards(){
       const msLeft = state.errRedirectorUntil - now;
       statusHtml = `<div class="buff-active">📡 404 static cleared — ${fmtDuration(Math.ceil(msLeft/1000))} left</div>`;
     }
+    if(key === 'stablizer' && isStablizerActive()){
+      statusHtml = `<div class="buff-active">⚠ Perilous danger ×2 slower — ${fmtDuration(Math.ceil((state.stablizerUntil-now)/1000))} left</div>`;
+    }
     if(key === 'doublinator'){
       if(isDoublinatorActive()){
         statusHtml = `<div class="buff-active">×2 bulk · ×2 luck · ×2 rps — ${fmtDuration(Math.ceil((state.doublinatorUntil-now)/1000))} left</div>`;
@@ -6214,6 +6426,14 @@ function renderConsumableCards(){
     } else if(key === 'errredirector'){
       const useDisabled = count <= 0;
       const useTitle = count <= 0 ? 'None owned' : (isErrRedirectorActive() ? 'Extends the current 12h window' : '');
+      actionHtml = `
+        <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft ×${craftAmount.toLocaleString()}</button>
+        <button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>
+      `;
+    } else if(key === 'stablizer'){
+      const active = isStablizerActive();
+      const useDisabled = count <= 0 || active;
+      const useTitle = count <= 0 ? 'None owned' : active ? 'Already active' : '';
       actionHtml = `
         <button class="btn small secondary" data-craft-consumable="${key}" ${canCraft?'':'disabled'}>Craft ×${craftAmount.toLocaleString()}</button>
         <button class="btn small ${useDisabled?'secondary':''}" data-use-consumable="${key}" ${useDisabled?'disabled':''} title="${useTitle}">Use${count > 0 ? ` (${count})` : ''}</button>
@@ -6364,6 +6584,10 @@ function craftConsumable(key, quantity=1){
   const item = CONSUMABLES[key];
   if(!item) return false;
   const craftQuantity = Math.max(1, Math.min(Math.floor(Number(quantity) || 1), 1000000));
+  if(item.maxOwned != null && getConsumableCount(key) + craftQuantity > item.maxOwned){
+    alertUser(`You can only own ${item.maxOwned} ${item.name} at a time.`);
+    return false;
+  }
   const requirements = consumableRequirements(key, craftQuantity);
   for(const req of requirements){
     if(getReqOwnedCount(req) < req.amount) return false;
@@ -6499,6 +6723,16 @@ function useConsumable(key, options={}){
     const base = isErrRedirectorActive() ? state.errRedirectorUntil : now;
     state.errRedirectorUntil = base + CONSUMABLES.errredirector.durationSeconds * 1000;
     dbSaveMeta(); refreshCards(); refreshInventory();
+    return true;
+  }
+
+  if(key === 'stablizer'){
+    const now = Date.now();
+    if(isStablizerActive()) return deny('Stablizer is already active. Only one can be active at a time.');
+    state.consumables.stablizer--;
+    state.stablizerUntil = now + CONSUMABLES.stablizer.durationSeconds * 1000;
+    dbSaveMeta(); refreshCards();
+    updatePerilousPresentation();
     return true;
   }
 
@@ -6801,6 +7035,7 @@ function normalizeBallState(){
     upgradedBombs: !!sourceUpgrades.upgradedBombs,
     sentientWaterhose: !!sourceUpgrades.sentientWaterhose,
     unlockJuniAxe: !!sourceUpgrades.unlockJuniAxe,
+    roulette: !!sourceUpgrades.roulette,
     manualAutoroll: Math.min(BALL_UPGRADE_LIMITS.manualAutoroll, Math.max(0, Math.floor(Number(sourceUpgrades.manualAutoroll) || 0))),
     discount: Math.min(BALL_UPGRADE_LIMITS.discount, Math.max(0, Math.floor(Number(sourceUpgrades.discount) || 0))),
     doubleChance: Math.min(BALL_UPGRADE_LIMITS.doubleChance, Math.max(0, Math.floor(Number(sourceUpgrades.doubleChance) || 0))),
@@ -6988,6 +7223,15 @@ const BALL_UPGRADES = [
   { key:'expoballs', title:'Expoballs', max:5, costForLevel:()=>({ cyan:5 }), desc:level=>`Level ${level}/5. Luck exponent is ^${(1 + level * 0.0125).toFixed(4)}.` },
   { key:'holdToClick', title:'Hold to click', max:5, costForLevel:()=>({ pink:2 }), desc:level=>`Level ${level}/5. ${formatHoldClickInterval(HOLD_TO_CLICK_INTERVALS_MS[Math.min(5, level)])}; each level improves held rolling, ending at 1 click every 1/4s.` },
   { key:'unlockJuniAxe', title:'???', cost:{ black:5, blue:5, cyan:5, green:5, pink:5, purple:5, red:5, white:5, yellow:5 }, desc:'unlocks ???' },
+  { key:'roulette', title:'Roulette', requires:[
+      { axe:'nanaxe' },
+      { name:'Catastrophe', area:'Perilous', amount:20 },
+      { name:'Armageddon', area:'Perilous', amount:12 },
+      { name:'Incessant', area:'Perilous', amount:50 },
+      { ball:'pink', amount:25 },
+      { ball:'black', amount:5 },
+      { name:'Aphanisis', area:'Perilous', amount:1 },
+    ], desc:'unlock the machine!' },
 ];
 const BALL_UPGRADE_BY_KEY = Object.fromEntries(BALL_UPGRADES.map(upgrade => [upgrade.key, upgrade]));
 
@@ -7016,18 +7260,47 @@ function spendBallCost(cost){
   for(const [key, amount] of Object.entries(cost)) state.balls[key] -= amount;
 }
 
+function ballUpgradeRequirements(upgrade){
+  if(upgrade && Array.isArray(upgrade.requires)) return upgrade.requires;
+  return Object.entries(ballUpgradeCost(upgrade)).map(([ball, amount]) => ({ ball, amount }));
+}
+function ballUpgradeRequirementOwned(req){
+  if(req.axe) return state.ownedAxes.includes(req.axe) ? 1 : 0;
+  return getReqOwnedCount(req);
+}
+function canAffordBallUpgrade(upgrade){
+  return ballUpgradeRequirements(upgrade).every(req => ballUpgradeRequirementOwned(req) >= (req.amount || 1));
+}
+function spendBallUpgradeRequirements(upgrade){
+  for(const req of ballUpgradeRequirements(upgrade)){
+    if(req.axe) continue; // nan.axe is an unlock prerequisite and is never consumed.
+    consumeRequirement(req);
+  }
+}
+function ballUpgradeRequirementsHtml(upgrade){
+  return ballUpgradeRequirements(upgrade).map(req => {
+    if(req.axe){
+      const axe = AXES[req.axe];
+      const owned = state.ownedAxes.includes(req.axe);
+      return `<span class="ball-cost ${owned ? '' : 'short'}">${escapeHtml(axe ? axe.name : req.axe)} ${owned ? '✓' : 'required'}</span>`;
+    }
+    if(req.ball) return ballCostHtml({ [req.ball]:req.amount });
+    const have = getReqOwnedCount(req);
+    return `<span class="ball-cost ${have >= req.amount ? '' : 'short'}">${escapeHtml(req.name)} ${have.toLocaleString()} / ${req.amount.toLocaleString()}</span>`;
+  }).join('');
+}
+
 function purchaseBallUpgrade(key){
   normalizeBallState();
   const upgrade = BALL_UPGRADE_BY_KEY[key];
   if(!upgrade) return false;
   if(!ballUpgradeIsLevelled(upgrade) && ballUpgradeOwned(upgrade)) return false;
   if(ballUpgradeIsMaxed(upgrade)) return false;
-  const cost = ballUpgradeCost(upgrade);
-  if(!canAffordBallCost(cost)){
-    alertUser('You do not have enough balls for that upgrade.');
+  if(!canAffordBallUpgrade(upgrade)){
+    alertUser('You do not meet this upgrade’s requirements.');
     return false;
   }
-  spendBallCost(cost);
+  spendBallUpgradeRequirements(upgrade);
   if(ballUpgradeIsLevelled(upgrade)) state.ballUpgrades[key] = ballUpgradeLevel(key) + 1;
   else state.ballUpgrades[key] = true;
   dbSaveMeta();
@@ -7035,6 +7308,7 @@ function purchaseBallUpgrade(key){
   renderSettingsView();
   renderAxeStrip();
   updateStatStrip();
+  updateRouletteAvailability();
   if(currentView === 'items') refreshLiveViews();
   return true;
 }
@@ -7058,15 +7332,14 @@ function renderBallUpgradeCards(){
     const level = ballUpgradeLevel(upgrade.key);
     const owned = ballUpgradeOwned(upgrade);
     const maxed = ballUpgradeIsMaxed(upgrade);
-    const cost = ballUpgradeCost(upgrade);
-    const canBuy = !maxed && (!owned || ballUpgradeIsLevelled(upgrade)) && canAffordBallCost(cost);
+    const canBuy = !maxed && (!owned || ballUpgradeIsLevelled(upgrade)) && canAffordBallUpgrade(upgrade);
     const desc = typeof upgrade.desc === 'function' ? upgrade.desc(level) : upgrade.desc;
     const buttonLabel = maxed ? 'Maxed' : (!ballUpgradeIsLevelled(upgrade) && owned ? 'Owned' : `Buy${ballUpgradeIsLevelled(upgrade) ? ` · ${ballUpgradeLevel(upgrade.key) + 1}/${upgrade.max}` : ''}`);
     const autoToggle = '';
     return `<div class="ball-upgrade-card ${owned ? 'owned' : ''}">
       <h3>${escapeHtml(upgrade.title)}</h3>
       <p>${escapeHtml(desc)}</p>
-      <div class="upgrade-cost">${maxed ? '<span class="ball-cost">MAXED</span>' : ballCostHtml(cost)}</div>
+      <div class="upgrade-cost">${maxed ? '<span class="ball-cost">MAXED</span>' : ballUpgradeRequirementsHtml(upgrade)}</div>
       <button class="btn small ${canBuy ? '' : 'secondary'}" type="button" data-ball-upgrade="${upgrade.key}" ${canBuy ? '' : 'disabled'}>${buttonLabel}</button>${autoToggle}
     </div>`;
   }).join('');
@@ -7111,7 +7384,15 @@ function renderBallsView(){
 
 let currentView = 'roll';
 
+function hasRouletteUnlocked(){ return hasBallUpgrade('roulette'); }
+function updateRouletteAvailability(){
+  const nav = document.getElementById('rouletteNavBtn');
+  if(nav) nav.hidden = !hasRouletteUnlocked();
+  if(!hasRouletteUnlocked() && currentView === 'roulette') currentView = 'roll';
+}
+
 function showView(name){
+  if(name === 'roulette' && !hasRouletteUnlocked()) name = 'roll';
   currentView = name;
   document.querySelectorAll('.view').forEach(v=> v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
@@ -7128,6 +7409,7 @@ function refreshLiveViews(){
   if(currentView === 'inventory') renderInventory();
   if(currentView === 'balls') renderBallsView();
   if(currentView === 'settings') renderSettingsView();
+  updateRouletteAvailability();
 }
 
 /* ============================================================
@@ -7208,6 +7490,7 @@ function processClickBonusRules(rules, world, area, results, updateBest){
 // identically using the current axe/equip stats — the skillcheck is not a separate, weaker path.
 // Returns { best, totalRolls } — does NOT touch the stage/troll-roll display, callers do that.
 function performClick(){
+  state.perilousEjected = false;
   tryAutoUseRecipeConsumables();
   state.trollstoneEligible = !!state.lastRollWasTroll;
   state.lastRollWasTroll = false;
@@ -7283,14 +7566,22 @@ function performClick(){
   for(const r of results){
     addToInventory(r, 1);
   }
-  pushLog(best);
+  processPerilousClick(results);
+  const ejected = !!state.perilousEjected;
+  if(!ejected) pushLog(best);
 
-  return { best, totalRolls: bulk + clickBonusFired };
+  return { best, totalRolls: bulk + clickBonusFired, ejected };
 }
 
 function doRoll(){
-  const { best, totalRolls } = performClick();
+  const { best, totalRolls, ejected } = performClick();
   trySpawnBallsFromPlayerClick();
+  if(ejected){
+    refreshLiveViews();
+    updateStatStrip();
+    dbSaveMeta();
+    return;
+  }
 
   // Troll roll: 1/5,000 chance PER CLICK, no requirement on the real result. When it fires, shows
   // a genuinely Unworldly+ rank from the current area for 3 seconds before revealing the truth.
@@ -8140,6 +8431,13 @@ async function resolveOfflineProgress(){
   // Defense in depth: every caller must have a current trusted-time verification before this
   // function is allowed to create any idle rewards or offline bonus rolls.
   if(!canAwardIdleGains()) return null;
+  // Perilous never generates idle rolls or offline-bonus results. Reset the baseline so leaving
+  // it open cannot later be converted into gains after moving out of the area.
+  if(isPerilousArea()){
+    state.lastSeenAt = Date.now();
+    dbSaveMeta();
+    return null;
+  }
   const axe = currentAxe();
   const equip = currentEquip();
   const rps = effectiveRps();
@@ -8721,6 +9019,7 @@ async function initInner(){
   renderEquipCards();
   renderBallsView();
   renderSettingsView();
+  updateRouletteAvailability();
   setupConsumableBulkCraftControls();
   setupItemCategorySelect();
   updateStatStrip();
@@ -8798,10 +9097,15 @@ setInterval(async ()=>{
   }
 }, 30000);
 
+// Perilous danger must progress at its specified 0.03-second cadence. The function measures real
+// elapsed time as well, so a backgrounded Perilous visit cannot be used to wait out the escape timer.
+setInterval(tickPerilousMeter, PERILOUS_METER_TICK_MS);
+
 // Live countdowns and timed-effect recovery. All timer timestamps are persisted in meta, so this
 // loop rehydrates their UI/effects after a refresh instead of treating them as session-only state.
 let wasErrRedirectorActive = isErrRedirectorActive();
 let wasDoublinatorActive = isDoublinatorActive();
+let wasStablizerActive = isStablizerActive();
 setInterval(()=>{
   const now = Date.now();
   const ballsExpired = pruneExpiredBalls(now);
@@ -8816,6 +9120,7 @@ setInterval(()=>{
     if(state.wgunStacks && state.wgunStacks.length) renderConsumableCards();
     if(state.errRedirectorUntil) renderConsumableCards();
     if(state.doublinatorUntil || state.doublinatorCooldownUntil) renderConsumableCards();
+    if(state.stablizerUntil) renderConsumableCards();
   }
   // Expire old watergun stacks and update strip if changed
   if(state.wgunStacks && state.wgunStacks.length){
@@ -8855,6 +9160,17 @@ setInterval(()=>{
     doublinatorStateChanged = true;
   }
   if(doublinatorStateChanged) dbSaveMeta();
+
+  const nowStablizerActive = isStablizerActive();
+  if(nowStablizerActive !== wasStablizerActive){
+    wasStablizerActive = nowStablizerActive;
+    updatePerilousPresentation();
+  }
+  if(state.stablizerUntil && state.stablizerUntil <= now){
+    state.stablizerUntil = null;
+    dbSaveMeta();
+    updatePerilousPresentation();
+  }
 }, 1000);
 document.addEventListener('visibilitychange', async ()=>{
   if(document.visibilityState === 'hidden'){
