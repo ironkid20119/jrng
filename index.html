@@ -2907,12 +2907,16 @@ let lastPerilousMetaSaveAt = 0;
 function tickPerilousMeter(){
   if(!isPerilousArea()) return;
   const visit = ensurePerilousVisit();
+  if(!visit) return;
   const now = Date.now();
   const previous = Number(visit.lastMeterAt) || now;
-  const elapsedTicks = Math.max(0, (now - previous) / PERILOUS_METER_TICK_MS);
+  // Cap the elapsed time to 1 second per tick to prevent massive jumps if the browser throttles
+  // the interval (e.g. in a background tab), while still enforcing the "no idling" rule.
+  const elapsedMs = Math.min(1000, now - previous);
+  const elapsedTicks = Math.max(0, elapsedMs / PERILOUS_METER_TICK_MS);
   visit.lastMeterAt = now;
   if(elapsedTicks > 0) adjustPerilousMeter(PERILOUS_PASSIVE_GAIN * elapsedTicks * perilousMeterSpeedMult());
-  if(now - lastPerilousMetaSaveAt >= 1000){
+  if(now - lastPerilousMetaSaveAt >= 2000){
     lastPerilousMetaSaveAt = now;
     dbSaveMeta();
   }
@@ -7522,40 +7526,46 @@ function performClick(){
   const area = world.areas[state.areaIdx];
   const updateBest = (r) => { if(!best || r.finalRng > best.finalRng) best = r; };
 
-  // [Magic Wand] Glitter Spread: a perRollBonus fires independently on EVERY roll in this click
-  // (base rolls AND its own chained bonus rolls), not once per click like normal click bonuses.
-  // Capped per-click via chainCapPerClick so a lucky chain can't run away indefinitely.
-  let perRollBonusFired = 0;
-  if(axe.perRollBonus){
-    perRollBonusFired = processPerRollBonus(axe.perRollBonus, world, area, results, updateBest, bulk);
-  }
-  if(equip && equip.perRollBonus){
-    perRollBonusFired += processPerRollBonus(equip.perRollBonus, world, area, results, updateBest, bulk);
-  }
+  let clickBonusFired = 0;
 
-  // Click-triggered bonus rolls from the axe (e.g. Food Eater, Dreamers Prism, GlowAxe Guidance)
-  let clickBonusFired = processClickBonusRules(axe.clickBonus, world, area, results, updateBest) + perRollBonusFired;
-
-  // Click-triggered bonus rolls from the equipped item, if any (same rule shape as axes)
-  if(equip){
-    clickBonusFired += processClickBonusRules(ballAdjustedAxenadesRules(equip, 'clickBonus'), world, area, results, updateBest);
-  }
-
-  // [Coin Bag] (equip): on click, 1/5 chance to add a 15-second luck/mutation-luck stack.
-  if(equip && equip.key === 'coinbag' && equip.coinBagStackChance){
-    if(Math.random() < equip.coinBagStackChance){
-      if(!state.coinBagStacks) state.coinBagStacks = [];
-      state.coinBagStacks.push({ expiresAt: Date.now() + equip.coinBagStackDurationMs });
+  // Perilous is a danger zone where all axe and equipment bonuses are disabled. Only the base
+  // bulk rolls are permitted; no per-roll bonuses, click bonuses, sunrays, or coin-bag stacks fire.
+  if(!isPerilousArea()){
+    // [Magic Wand] Glitter Spread: a perRollBonus fires independently on EVERY roll in this click
+    // (base rolls AND its own chained bonus rolls), not once per click like normal click bonuses.
+    // Capped per-click via chainCapPerClick so a lucky chain can't run away indefinitely.
+    let perRollBonusFired = 0;
+    if(axe.perRollBonus){
+      perRollBonusFired = processPerRollBonus(axe.perRollBonus, world, area, results, updateBest, bulk);
     }
-  }
+    if(equip && equip.perRollBonus){
+      perRollBonusFired += processPerRollBonus(equip.perRollBonus, world, area, results, updateBest, bulk);
+    }
 
-  // Sunrays: every N clicks, add bonus rolls (e.g. GlowAxe every 75th click)
-  if(axe.sunrays && state.clickCount % axe.sunrays.everyNClicks === 0){
-    for(let i=0;i<axe.sunrays.rolls;i++){
-      const r = rollOnceForArea(world, area, axe.sunrays.luckMult);
-      results.push(r);
-      clickBonusFired++;
-      updateBest(r);
+    // Click-triggered bonus rolls from the axe (e.g. Food Eater, Dreamers Prism, GlowAxe Guidance)
+    clickBonusFired = processClickBonusRules(axe.clickBonus, world, area, results, updateBest) + perRollBonusFired;
+
+    // Click-triggered bonus rolls from the equipped item, if any (same rule shape as axes)
+    if(equip){
+      clickBonusFired += processClickBonusRules(ballAdjustedAxenadesRules(equip, 'clickBonus'), world, area, results, updateBest);
+    }
+
+    // [Coin Bag] (equip): on click, 1/5 chance to add a 15-second luck/mutation-luck stack.
+    if(equip && equip.key === 'coinbag' && equip.coinBagStackChance){
+      if(Math.random() < equip.coinBagStackChance){
+        if(!state.coinBagStacks) state.coinBagStacks = [];
+        state.coinBagStacks.push({ expiresAt: Date.now() + equip.coinBagStackDurationMs });
+      }
+    }
+
+    // Sunrays: every N clicks, add bonus rolls (e.g. GlowAxe every 75th click)
+    if(axe.sunrays && state.clickCount % axe.sunrays.everyNClicks === 0){
+      for(let i=0;i<axe.sunrays.rolls;i++){
+        const r = rollOnceForArea(world, area, axe.sunrays.luckMult);
+        results.push(r);
+        clickBonusFired++;
+        updateBest(r);
+      }
     }
   }
   state.rolls += clickBonusFired;
