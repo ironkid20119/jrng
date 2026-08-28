@@ -129,6 +129,13 @@
     color:transparent;
   }
 
+  /* Braille mode style: forces a Braille-compatible font and ensures all text looks uniform.
+     Enabled automatically on April 1st or via the secret toggle. */
+  html.braille-active, html.braille-active * {
+    font-family: 'Segoe UI Symbol', 'Apple Color Emoji', 'Arial Unicode MS', sans-serif !important;
+    letter-spacing: 0.05em !important;
+  }
+
   .stat-strip{
     display:flex;
     gap:18px;
@@ -989,6 +996,8 @@
 
 <div class="wrap">
   <div id="fpsCounter" class="fps-counter" aria-live="polite">FPS: --</div>
+  <!-- Hidden hotspot for the Braille mode unlock sequence -->
+  <div id="brailleHotspot" style="position:fixed; top:0; right:0; width:60px; height:60px; z-index:9999; cursor:default;"></div>
   <header class="top">
     <div class="brand">
       <h1 id="logoTitle" style="cursor:pointer; user-select:none;">Juni's RNG Game</h1>
@@ -1114,6 +1123,7 @@
       </div>
       <div class="settings-section-title">Automatic recipe helpers</div>
       <div id="settingsAutoUseOptions" class="settings-grid"></div>
+      <div id="settingsBrailleSection"></div>
       <div class="settings-section-title">Save and update tools</div>
       <div class="settings-maintenance">
         <button id="cacheResetBtn" class="cache-reset-btn" type="button">⟳ Force reload latest version (keeps your save)</button>
@@ -2787,6 +2797,8 @@ let state = {
   ballAutoUse: {}, // player-selected toggles unlocked by the auto-use ball upgrades
   stablizerUntil: null, // timestamp — Perilous meter progresses at half speed while active
   perilousVisit: null, // { meter, gains:{ inventoryKey:count }, startedAt } while currently risking Perilous
+  brailleUnlocked: false, // permanently true once the secret tab sequence is entered
+  brailleEnabled: false, // manual toggle for Braille mode (overrides April 1st auto-enable if set)
 };
 
 const PERILOUS_METER_TICK_MS = 30;
@@ -2842,6 +2854,89 @@ function recordPerilousGain(result, count){
   if(!visit || !result || result.areaLabel !== 'Perilous') return;
   const key = invKey(result.areaLabel, result.name, result.variant ? result.variant.key : null);
   visit.gains[key] = (visit.gains[key] || 0) + Math.max(0, Number(count) || 0);
+}
+
+/* ============================================================
+   BRAILLE MODE (April Fools / Secret Unlock)
+   ============================================================ */
+const BRAILLE_MAP = {
+  'a': '⠁', 'b': '⠃', 'c': '⠉', 'd': '⠙', 'e': '⠑', 'f': '⠋', 'g': '⠛', 'h': '⠓', 'i': '⠊', 'j': '⠚',
+  'k': '⠅', 'l': '⠇', 'm': '⠍', 'n': '⠝', 'o': '⠕', 'p': '⠗', 'q': '⠟', 'r': '⠗', 's': '⠎', 't': '⠞',
+  'u': '⠥', 'v': '⠧', 'w': '⠺', 'x': '⠭', 'y': '⠽', 'z': '⠵',
+  '0': '⠼⠚', '1': '⠼⠁', '2': '⠼⠃', '3': '⠼⠉', '4': '⠼⠙', '5': '⠼⠑', '6': '⠼⠋', '7': '⠼⠛', '8': '⠼⠓', '9': '⠼⠊',
+  '.': '⠲', ',': '⠂', ';': '⠆', ':': '⠒', '!': '⠖', '?': '⠦', '"': '⠶', '(': '⠦', ')': '⠴', '-': '⠤',
+  ' ': ' ',
+};
+
+function toBraille(str){
+  if(!str) return '';
+  return str.toLowerCase().split('').map(c => BRAILLE_MAP[c] || c).join('');
+}
+
+function isAprilFools(){
+  const now = new Date();
+  return now.getMonth() === 3 && now.getDate() === 1;
+}
+
+function isBrailleActive(){
+  return state.brailleEnabled || (isAprilFools() && state.brailleEnabled !== false);
+}
+
+function applyBrailleMode(){
+  const active = isBrailleActive();
+  document.documentElement.classList.toggle('braille-active', active);
+  
+  // Recursively translate all text nodes in the body if active.
+  // Note: This is a heavy operation, so we only do it on state changes or full renders.
+  if(active) {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+    let node;
+    while(node = walker.nextNode()) {
+      if(node.parentElement && (node.parentElement.tagName === 'SCRIPT' || node.parentElement.tagName === 'STYLE')) continue;
+      const original = node.getAttribute ? node.getAttribute('data-original-text') : null;
+      if(!original) {
+        const text = node.textContent;
+        if(text.trim().length > 0) {
+          if(node.parentElement) node.parentElement.setAttribute('data-original-text', text);
+          node.textContent = toBraille(text);
+        }
+      } else {
+        node.textContent = toBraille(original);
+      }
+    }
+  } else {
+    // Restore original text
+    document.querySelectorAll('[data-original-text]').forEach(el => {
+      const original = el.getAttribute('data-original-text');
+      // We need to find the text node child
+      for(const child of el.childNodes) {
+        if(child.nodeType === Node.TEXT_NODE) {
+          child.textContent = original;
+          break;
+        }
+      }
+      el.removeAttribute('data-original-text');
+    });
+  }
+}
+
+let brailleSequence = [];
+const BRAILLE_UNLOCK_SEQUENCE = ['roll', 'roll', 'settings', 'items', 'index', 'index', 'settings', 'roll'];
+
+function recordBrailleSequence(viewName){
+  brailleSequence.push(viewName);
+  if(brailleSequence.length > BRAILLE_UNLOCK_SEQUENCE.length) brailleSequence.shift();
+  
+  if(JSON.stringify(brailleSequence) === JSON.stringify(BRAILLE_UNLOCK_SEQUENCE)) {
+    if(!state.brailleUnlocked) {
+      state.brailleUnlocked = true;
+      state.brailleEnabled = true;
+      alertUser('Unlocked "IM BLIND HELP" in Settings!');
+      dbSaveMeta();
+      applyBrailleMode();
+      renderSettingsView();
+    }
+  }
 }
 
 function recalculateBestAfterPerilousRollback(){
@@ -3989,6 +4084,8 @@ function buildMetaSnapshot(){
     ballAutoUse: state.ballAutoUse,
     stablizerUntil: state.stablizerUntil,
     perilousVisit: state.perilousVisit,
+    brailleUnlocked: !!state.brailleUnlocked,
+    brailleEnabled: state.brailleEnabled,
   };
 }
 
@@ -4207,6 +4304,8 @@ function applyMetaToState(meta){
   state.ballAutoUse = (meta.ballAutoUse && typeof meta.ballAutoUse === 'object') ? meta.ballAutoUse : {};
   state.stablizerUntil = meta.stablizerUntil || null;
   state.perilousVisit = (meta.perilousVisit && typeof meta.perilousVisit === 'object') ? meta.perilousVisit : null;
+  state.brailleUnlocked = !!meta.brailleUnlocked;
+  state.brailleEnabled = meta.brailleEnabled;
   normalizeBallState();
   saveLoadedSuccessfully = true;
 }
@@ -5205,6 +5304,11 @@ function setupShowFpsToggle(){
   toggle.checked = !!state.showFps;
   toggle.addEventListener('change', ()=> setShowFps(toggle.checked));
 }
+function setBrailleEnabled(enabled){
+  state.brailleEnabled = !!enabled;
+  applyBrailleMode();
+  dbSaveMeta();
+}
 
 function applyRankVisualStyle(){
   const enabled = isLegacyColorFontEnabled();
@@ -5220,6 +5324,23 @@ function renderSettingsView(){
   if(compactToggle) compactToggle.checked = !!state.compactInventoryVariants;
   applyShowFps();
   applySuperOptimize();
+  
+  const brailleSection = document.getElementById('settingsBrailleSection');
+  if(brailleSection) {
+    brailleSection.innerHTML = state.brailleUnlocked ? `
+      <div class="settings-section-title">Secret</div>
+      <label class="settings-card setting-toggle">
+        <span class="settings-copy">
+          <b>IM BLIND HELP</b>
+          <small>Toggle Braille mode text translation.</small>
+        </span>
+        <input type="checkbox" id="brailleToggle" ${state.brailleEnabled ? 'checked' : ''} role="switch">
+      </label>
+    ` : '';
+    const bToggle = document.getElementById('brailleToggle');
+    if(bToggle) bToggle.addEventListener('change', () => setBrailleEnabled(bToggle.checked));
+  }
+
   const autoUseEl = document.getElementById('settingsAutoUseOptions');
   if(!autoUseEl) return;
   const helpers = [
@@ -7401,8 +7522,24 @@ function showView(name){
   document.querySelectorAll('.view').forEach(v=> v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b=> b.classList.toggle('active', b.dataset.view === name));
+  
+  // Secret sequence detection for Braille mode
+  if(isBrailleHotspotActive) recordBrailleSequence(name);
+  
   refreshLiveViews();
 }
+
+let isBrailleHotspotActive = false;
+document.addEventListener('DOMContentLoaded', ()=>{
+  const hotspot = document.getElementById('brailleHotspot');
+  if(hotspot) {
+    hotspot.addEventListener('mousedown', () => { isBrailleHotspotActive = true; });
+    hotspot.addEventListener('mouseup', () => { setTimeout(() => { isBrailleHotspotActive = false; }, 100); });
+    // Also support touch for mobile
+    hotspot.addEventListener('touchstart', () => { isBrailleHotspotActive = true; });
+    hotspot.addEventListener('touchend', () => { setTimeout(() => { isBrailleHotspotActive = false; }, 100); });
+  }
+});
 
 document.querySelectorAll('.nav-btn').forEach(btn=>{
   btn.addEventListener('click', ()=> showView(btn.dataset.view));
@@ -8976,6 +9113,7 @@ async function initInner(){
   setupShowFpsToggle();
   setupSuperOptimizeToggle();
   applyShowFps();
+  applyBrailleMode();
 
   // DATA-LOSS GUARD: if it looks like a real save vanished, stop here. Don't render the game,
   // don't run anticheat/offline-progress, and CRITICALLY don't let dbSaveMeta() run — that's
