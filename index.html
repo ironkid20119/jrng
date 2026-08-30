@@ -1286,13 +1286,6 @@ function trollRolledFiveInLastThousand(){
   return state.trollRollHistory.filter(r => r >= cutoff).length >= 5;
 }
 
-// "injector" rank's condition. There is currently no in-game Injector item/consumable to actually
-// set this — state.injectorActive exists so the rank's condition doesn't crash, but nothing in
-// this pass turns it on. Flagging this clearly rather than quietly inventing a whole new item.
-function isInjectorActive(){
-  return !!state.injectorActive;
-}
-
 // Picks a random Unworldly+ rank (or mutation) from the given area. Excludes the actual roll's
 // name if it happens to also be Unworldly+, so the fake is always visibly different from the
 // truth when possible. Returns null if the area has no Unworldly+ ranks at all.
@@ -2004,7 +1997,7 @@ const WORLD0 = {
           }
         },
         { name: 'craziest TROLLSTONE', rng: 3333333, requirement: 'Must be troll rolled 5 times within your last 1,000 rolls', condition: () => trollRolledFiveInLastThousand() },
-        { name: 'injector', rng: 66666666, requirement: 'Must have Injector active', condition: () => isInjectorActive() },
+        { name: 'injector', rng: 66666666, requirement: 'Must have Stablizer active', condition: () => isStablizerActive() },
         { name: 'super gimmick crystal', rng: 5000000000, requirement: 'Must have over 250,000,000 Gimmick Crystal', condition: () => getOwnedCount('Gimmicks', 'Gimmick Crystal', null) > 250000000 },
         { name: 'ONE CHANCE', rng: 77777777777, requirement: "Must ONLY be rolled from one swing of Juni's Axe", condition: (w, a, opts) => !!opts.isJuniSwing },
         { name: '1%', rng: 250000000000000, requirement: 'Must have juni axe (1% power) equipped', condition: () => currentAxe().key === 'juniaxe1power' },
@@ -2883,7 +2876,6 @@ let state = {
   stablizerUntil: null, // timestamp — Perilous meter progresses at half speed while active
   perilousVisit: null, // { meter, gains:{ inventoryKey:count }, startedAt } while currently risking Perilous
   trollRollHistory: [], // array of state.rolls snapshots at each troll-roll trigger, pruned to a 1,000-roll window
-  injectorActive: false, // stub — no Injector item exists yet to ever set this true; see isInjectorActive()
 };
 
 const PERILOUS_METER_TICK_MS = 30;
