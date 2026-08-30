@@ -129,13 +129,6 @@
     color:transparent;
   }
 
-  /* Braille mode style: forces a Braille-compatible font and ensures all text looks uniform.
-     Enabled automatically on April 1st or via the secret toggle. */
-  html.braille-active, html.braille-active * {
-    font-family: 'Segoe UI Symbol', 'Apple Color Emoji', 'Arial Unicode MS', sans-serif !important;
-    letter-spacing: 0.05em !important;
-  }
-
   .stat-strip{
     display:flex;
     gap:18px;
@@ -596,6 +589,22 @@
   .t-infinite{ background:linear-gradient(90deg,#ff0055,#ffaa00,#00ff9d,#00aaff,#aa00ff,#ff0055); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:hueflow 4s linear infinite; }
   .t-insanity{ font-family:var(--display); background:linear-gradient(90deg,#ff003c,#1a0008,#ff003c); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:hueflow 1.4s linear infinite, jitter .12s steps(2) infinite; text-shadow:0 0 20px rgba(255,0,60,0.6); }
   .t-impossible{ font-family:var(--display); font-weight:900; background:linear-gradient(90deg,#ff0055,#ff9900,#ffee00,#33ff77,#00e5ff,#7c5cff,#ff5ca8,#ff0055); background-size:400% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:transparent; animation:hueflow 2.2s linear infinite; text-shadow:0 0 30px rgba(255,255,255,0.35); letter-spacing:0.01em; }
+  /* WIPE HYPE: deliberately NOT a gradient across the string — each .wipehype-char span carries
+     its own independent pink/white color (set inline per-character in wipeHypeCharsHtml) and its
+     own shake timing, so characters shake out of sync with each other instead of the whole word
+     moving as one unit. text-shadow here is shared/static across all characters. */
+  .t-wipehype{ font-family:var(--display); font-weight:900; letter-spacing:0.01em; text-shadow:0 0 24px rgba(255,47,176,0.6), 0 0 36px rgba(255,255,255,0.3); }
+  .t-wipehype .wipehype-char{ display:inline-block; animation-name:wipehypeshake; animation-timing-function:linear; animation-iteration-count:infinite; }
+  @keyframes wipehypeshake{
+    0%{ transform:translate(0,0) rotate(0deg); }
+    15%{ transform:translate(-3px,2px) rotate(-6deg); }
+    30%{ transform:translate(3px,-3px) rotate(5deg); }
+    45%{ transform:translate(-2px,-2px) rotate(-4deg); }
+    60%{ transform:translate(3px,3px) rotate(6deg); }
+    75%{ transform:translate(-3px,1px) rotate(-5deg); }
+    90%{ transform:translate(2px,-2px) rotate(4deg); }
+    100%{ transform:translate(0,0) rotate(0deg); }
+  }
   .t-secret{
     font-family:var(--display); font-weight:800;
     background:linear-gradient(90deg,#4c0080,#a855f7,#1a0033,#a855f7,#4c0080);
@@ -669,12 +678,18 @@
   html.low-stim .t-infinite,
   html.low-stim .t-insanity,
   html.low-stim .t-impossible,
+  html.low-stim .t-wipehype,
   html.low-stim [style*="hueflow"]{
     animation:none !important;
     background:none !important;
     -webkit-text-fill-color:var(--accent) !important;
     color:var(--accent) !important;
     text-shadow:none !important;
+  }
+  html.low-stim .t-wipehype .wipehype-char{
+    animation:none !important;
+    transform:none !important;
+    color:var(--accent) !important;
   }
   html.low-stim .flash-bg.go{
     animation:none !important;
@@ -996,8 +1011,6 @@
 
 <div class="wrap">
   <div id="fpsCounter" class="fps-counter" aria-live="polite">FPS: --</div>
-  <!-- Hidden hotspot for the Braille mode unlock sequence -->
-  <div id="brailleHotspot" style="position:fixed; top:0; right:0; width:60px; height:60px; z-index:9999; cursor:default;"></div>
   <header class="top">
     <div class="brand">
       <h1 id="logoTitle" style="cursor:pointer; user-select:none;">Juni's RNG Game</h1>
@@ -1123,7 +1136,6 @@
       </div>
       <div class="settings-section-title">Automatic recipe helpers</div>
       <div id="settingsAutoUseOptions" class="settings-grid"></div>
-      <div id="settingsBrailleSection"></div>
       <div class="settings-section-title">Save and update tools</div>
       <div class="settings-maintenance">
         <button id="cacheResetBtn" class="cache-reset-btn" type="button">⟳ Force reload latest version (keeps your save)</button>
@@ -1245,7 +1257,8 @@ const TIERS = [
   { key:'colossal',    label:'Colossal',    min:1000000000,   max:25000000000,  cls:'t-colossal' },
   { key:'infinite',    label:'Infinite',    min:25000000000,  max:70000000000,  cls:'t-infinite' },
   { key:'insanity',    label:'Insanity',    min:70000000000,  max:500000000000, cls:'t-insanity' },
-  { key:'impossible',  label:'Impossible',  min:500000000000, max:Infinity,     cls:'t-impossible' },
+  { key:'impossible',  label:'Impossible',  min:500000000000, max:1e21,         cls:'t-impossible' },
+  { key:'wipehype',    label:'WIPE HYPE',   min:1e21,         max:Infinity,     cls:'t-wipehype' },
 ];
 
 // Troll rolls: 1/5,000 chance PER CLICK, no requirement on what you actually rolled. When it
@@ -1256,6 +1269,29 @@ const TIERS = [
 // to state before this ever runs.
 const TROLL_CHANCE = 1 / 5000;
 const TROLL_TIER_KEYS = ['unworldly','colossal','infinite','insanity','impossible'];
+
+// "craziest TROLLSTONE" needs "troll rolled 5 times within your last 1,000 rolls" — a rolling
+// window keyed off state.rolls (the roll counter) rather than wall-clock time, so it tracks
+// actual roll volume regardless of how fast/slow those rolls happened. Stores the state.rolls
+// value at each troll-roll trigger; prune anything more than 1,000 rolls behind the current count.
+function recordTrollRollForTrollstone(){
+  if(!Array.isArray(state.trollRollHistory)) state.trollRollHistory = [];
+  state.trollRollHistory.push(state.rolls);
+  const cutoff = state.rolls - 1000;
+  state.trollRollHistory = state.trollRollHistory.filter(r => r >= cutoff);
+}
+function trollRolledFiveInLastThousand(){
+  if(!Array.isArray(state.trollRollHistory)) return false;
+  const cutoff = state.rolls - 1000;
+  return state.trollRollHistory.filter(r => r >= cutoff).length >= 5;
+}
+
+// "injector" rank's condition. There is currently no in-game Injector item/consumable to actually
+// set this — state.injectorActive exists so the rank's condition doesn't crash, but nothing in
+// this pass turns it on. Flagging this clearly rather than quietly inventing a whole new item.
+function isInjectorActive(){
+  return !!state.injectorActive;
+}
 
 // Picks a random Unworldly+ rank (or mutation) from the given area. Excludes the actual roll's
 // name if it happens to also be Unworldly+, so the fake is always visibly different from the
@@ -1626,6 +1662,8 @@ const WORLD1 = {
   label:'World 1',
   global: [
     { name:'Destiny', rng:1770000000000 },
+    { name:'el powder', rng:125 },
+    { name:'WOKE', rng:6825000000000000000000000 },
   ],
   areas:[
     {
@@ -1695,7 +1733,10 @@ const WORLD1 = {
 const SUBWORLD1 = {
   key:'subworld1',
   label:'Subworld 1',
-  global: [],
+  global: [
+    { name:'el powder', rng:125 },
+    { name:'WOKE', rng:6825000000000000000000000 },
+  ],
   areas:[
     {
       key:'fridge', label:'The Fridge',
@@ -1707,6 +1748,7 @@ const SUBWORLD1 = {
         { name:'Fruits', rng:2850000 },
         { name:'Eggs', rng:59610000 },
         { name:'A Cat', rng:300000000 },
+        { name:'orange juice', rng:892500000 },
         { name:'PIZZA', rng:9300000000 },
         { name:'Orange', rng:70000000000, mutations:[{name:'Universe Sized Apple Made For Destroying Universes Without Orange', rng:200000000000}] },
         { name:'Fish', rng:6900000000000 },
@@ -1775,7 +1817,11 @@ const SUBWORLD1 = {
 const WORLD0 = {
   key:'world0',
   label:'Fun',
-  global: [],
+  global: [
+    { name:'very bad rank', rng:6942910000000000000 },
+    { name:'el powder', rng:125 },
+    { name:'WOKE', rng:6825000000000000000000000 },
+  ],
   areas:[
     {
       key:'2048', label:'2048',
@@ -1821,6 +1867,36 @@ const WORLD0 = {
         { name:'Tile 274b', rng:274877906944 },
         { name:'Tile 549b', rng:549755813888 },
         { name:'Tile 1t', rng:1099511627776 },
+        { name:'Tile 2t', rng:2199023255552 },
+        { name:'Tile 4t', rng:4398046511104 },
+        { name:'Tile 9t', rng:8796093022208 },
+        { name:'Tile 18t', rng:17592186044416 },
+        { name:'Tile 35t', rng:35184372088832 },
+        { name:'Tile 70t', rng:70368744177664 },
+        { name:'Tile 141t', rng:140737488355328 },
+        { name:'Tile 281t', rng:281474976710656 },
+        { name:'Tile 563t', rng:562949953421312 },
+        { name:'Tile 1q', rng:1125899906842624 },
+        { name:'Tile 2q', rng:2251799813685248 },
+        { name:'Tile 5q', rng:4503599627370496 },
+        { name:'Tile 9q', rng:9007199254740992 },
+        { name:'Tile 18q', rng:18014398509481984 },
+        { name:'Tile 36q', rng:36028797018963968 },
+        { name:'Tile 72q', rng:72057594037927936 },
+        { name:'Tile 144q', rng:144115188075855872 },
+        { name:'Tile 288q', rng:288230376151711744 },
+        { name:'Tile 576q', rng:576460752303423488 },
+        { name:'Tile 1Qi', rng:1152921504606846976 },
+        { name:'Tile 2Qi', rng:2305843009213693952 },
+        { name:'Tile 5Qi', rng:4611686018427387904 },
+        { name:'Tile 9Qi', rng:9223372036854775808 },
+        { name:'Tile 18Qi', rng:18446744073709551616 },
+        { name:'Tile 37Qi', rng:36893488147419103232 },
+        { name:'Tile 74Qi', rng:73786976294838206464 },
+        { name:'Tile 148Qi', rng:147573952589676412928 },
+        { name:'Tile 295Qi', rng:295147905179352825856 },
+        { name:'Tile 590Qi', rng:590295810358705651712 },
+        { name:'Tile 1Qn', rng:1180591620717411303424 },
       ]
     },
     {
@@ -1841,6 +1917,7 @@ const WORLD0 = {
         { name:'Unusual', rng:7501 }, { name:'Good', rng:30001 }, { name:'Epic', rng:90001 }, { name:'Pelicular', rng:250001 },
         { name:'Horizon', rng:1000001 }, { name:'Grandiose', rng:7500001 }, { name:'Zenith', rng:30000001 }, { name:'Unworldly', rng:100000001 },
         { name:'Colossal', rng:1000000001 }, { name:'Infinite', rng:25000000001 }, { name:'Insanity', rng:70000000001 }, { name:'Impossible', rng:500000000001 },
+        { name:'WIPE HYPE', rng:1e21 + 1000000 }, // 1e21+1 collapses back to 1e21 as a double (tier boundary is exclusive on min), so a larger precision-safe offset is used to land correctly in the WIPE HYPE tier
       ]
     },
     {
@@ -1926,6 +2003,11 @@ const WORLD0 = {
             return true;
           }
         },
+        { name: 'craziest TROLLSTONE', rng: 3333333, requirement: 'Must be troll rolled 5 times within your last 1,000 rolls', condition: () => trollRolledFiveInLastThousand() },
+        { name: 'injector', rng: 66666666, requirement: 'Must have Injector active', condition: () => isInjectorActive() },
+        { name: 'super gimmick crystal', rng: 5000000000, requirement: 'Must have over 250,000,000 Gimmick Crystal', condition: () => getOwnedCount('Gimmicks', 'Gimmick Crystal', null) > 250000000 },
+        { name: 'ONE CHANCE', rng: 77777777777, requirement: "Must ONLY be rolled from one swing of Juni's Axe", condition: (w, a, opts) => !!opts.isJuniSwing },
+        { name: '1%', rng: 250000000000000, requirement: 'Must have juni axe (1% power) equipped', condition: () => currentAxe().key === 'juniaxe1power' },
       ]
     },
     {
@@ -1981,8 +2063,10 @@ const WORLD2 = {
   label:'World 2',
   global:[
     { name:'crazy tate', rng:75000000000 },
-    // The user-supplied "999.999...e15" is represented as the practical JavaScript limit of 1e18.
-    { name:'Was A Second World Necessary? Probably Yeah But This Is The Rarest Rank Ingame and It Has The LONGEST NAME EVER Itll Probably STRETCH EVERYTHING SO FAR ITLL BE FUNNY MAYBE Lol AND It Only Spawns In This God Damn World of Unseriousness and Seriousness And No One Will PROBABLY EVER NEVER GET THIS RANK EVER', rng:1000000000000000000 },
+    { name:'el powder', rng:125 },
+    { name:'WOKE', rng:6825000000000000000000000 },
+    // Moved from the prior practical JS-double limit of 1e18 up to 1e30, per later balance pass.
+    { name:'Was A Second World Necessary? Probably Yeah But This Is The Rarest Rank Ingame and It Has The LONGEST NAME EVER Itll Probably STRETCH EVERYTHING SO FAR ITLL BE FUNNY MAYBE Lol AND It Only Spawns In This God Damn World of Unseriousness and Seriousness And No One Will PROBABLY EVER NEVER GET THIS RANK EVER', rng:1e30 },
   ],
   areas:[
     {
@@ -2023,6 +2107,7 @@ const WORLD2 = {
             { name:'ALMOST RAREST Boi', rng:7500000000 },
             { name:'Boi-Ultimate', rng:25000000000 },
             { name:'RAREST Boi', rng:100000000000 },
+            { name:'i lied this is the rarest Boi ever lol', rng:25000000000000000000000 },
           ],
         },
       ],
@@ -2797,8 +2882,8 @@ let state = {
   ballAutoUse: {}, // player-selected toggles unlocked by the auto-use ball upgrades
   stablizerUntil: null, // timestamp — Perilous meter progresses at half speed while active
   perilousVisit: null, // { meter, gains:{ inventoryKey:count }, startedAt } while currently risking Perilous
-  brailleUnlocked: false, // permanently true once the secret tab sequence is entered
-  brailleEnabled: false, // manual toggle for Braille mode (overrides April 1st auto-enable if set)
+  trollRollHistory: [], // array of state.rolls snapshots at each troll-roll trigger, pruned to a 1,000-roll window
+  injectorActive: false, // stub — no Injector item exists yet to ever set this true; see isInjectorActive()
 };
 
 const PERILOUS_METER_TICK_MS = 30;
@@ -2854,89 +2939,6 @@ function recordPerilousGain(result, count){
   if(!visit || !result || result.areaLabel !== 'Perilous') return;
   const key = invKey(result.areaLabel, result.name, result.variant ? result.variant.key : null);
   visit.gains[key] = (visit.gains[key] || 0) + Math.max(0, Number(count) || 0);
-}
-
-/* ============================================================
-   BRAILLE MODE (April Fools / Secret Unlock)
-   ============================================================ */
-const BRAILLE_MAP = {
-  'a': '⠁', 'b': '⠃', 'c': '⠉', 'd': '⠙', 'e': '⠑', 'f': '⠋', 'g': '⠛', 'h': '⠓', 'i': '⠊', 'j': '⠚',
-  'k': '⠅', 'l': '⠇', 'm': '⠍', 'n': '⠝', 'o': '⠕', 'p': '⠗', 'q': '⠟', 'r': '⠗', 's': '⠎', 't': '⠞',
-  'u': '⠥', 'v': '⠧', 'w': '⠺', 'x': '⠭', 'y': '⠽', 'z': '⠵',
-  '0': '⠼⠚', '1': '⠼⠁', '2': '⠼⠃', '3': '⠼⠉', '4': '⠼⠙', '5': '⠼⠑', '6': '⠼⠋', '7': '⠼⠛', '8': '⠼⠓', '9': '⠼⠊',
-  '.': '⠲', ',': '⠂', ';': '⠆', ':': '⠒', '!': '⠖', '?': '⠦', '"': '⠶', '(': '⠦', ')': '⠴', '-': '⠤',
-  ' ': ' ',
-};
-
-function toBraille(str){
-  if(!str) return '';
-  return str.toLowerCase().split('').map(c => BRAILLE_MAP[c] || c).join('');
-}
-
-function isAprilFools(){
-  const now = new Date();
-  return now.getMonth() === 3 && now.getDate() === 1;
-}
-
-function isBrailleActive(){
-  return state.brailleEnabled || (isAprilFools() && state.brailleEnabled !== false);
-}
-
-function applyBrailleMode(){
-  const active = isBrailleActive();
-  document.documentElement.classList.toggle('braille-active', active);
-  
-  // Recursively translate all text nodes in the body if active.
-  // Note: This is a heavy operation, so we only do it on state changes or full renders.
-  if(active) {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-    let node;
-    while(node = walker.nextNode()) {
-      if(node.parentElement && (node.parentElement.tagName === 'SCRIPT' || node.parentElement.tagName === 'STYLE')) continue;
-      const original = node.getAttribute ? node.getAttribute('data-original-text') : null;
-      if(!original) {
-        const text = node.textContent;
-        if(text.trim().length > 0) {
-          if(node.parentElement) node.parentElement.setAttribute('data-original-text', text);
-          node.textContent = toBraille(text);
-        }
-      } else {
-        node.textContent = toBraille(original);
-      }
-    }
-  } else {
-    // Restore original text
-    document.querySelectorAll('[data-original-text]').forEach(el => {
-      const original = el.getAttribute('data-original-text');
-      // We need to find the text node child
-      for(const child of el.childNodes) {
-        if(child.nodeType === Node.TEXT_NODE) {
-          child.textContent = original;
-          break;
-        }
-      }
-      el.removeAttribute('data-original-text');
-    });
-  }
-}
-
-let brailleSequence = [];
-const BRAILLE_UNLOCK_SEQUENCE = ['roll', 'roll', 'settings', 'items', 'index', 'index', 'settings', 'roll'];
-
-function recordBrailleSequence(viewName){
-  brailleSequence.push(viewName);
-  if(brailleSequence.length > BRAILLE_UNLOCK_SEQUENCE.length) brailleSequence.shift();
-  
-  if(JSON.stringify(brailleSequence) === JSON.stringify(BRAILLE_UNLOCK_SEQUENCE)) {
-    if(!state.brailleUnlocked) {
-      state.brailleUnlocked = true;
-      state.brailleEnabled = true;
-      alertUser('Unlocked "IM BLIND HELP" in Settings!');
-      dbSaveMeta();
-      applyBrailleMode();
-      renderSettingsView();
-    }
-  }
 }
 
 function recalculateBestAfterPerilousRollback(){
@@ -3002,16 +3004,12 @@ let lastPerilousMetaSaveAt = 0;
 function tickPerilousMeter(){
   if(!isPerilousArea()) return;
   const visit = ensurePerilousVisit();
-  if(!visit) return;
   const now = Date.now();
   const previous = Number(visit.lastMeterAt) || now;
-  // Cap the elapsed time to 1 second per tick to prevent massive jumps if the browser throttles
-  // the interval (e.g. in a background tab), while still enforcing the "no idling" rule.
-  const elapsedMs = Math.min(1000, now - previous);
-  const elapsedTicks = Math.max(0, elapsedMs / PERILOUS_METER_TICK_MS);
+  const elapsedTicks = Math.max(0, (now - previous) / PERILOUS_METER_TICK_MS);
   visit.lastMeterAt = now;
   if(elapsedTicks > 0) adjustPerilousMeter(PERILOUS_PASSIVE_GAIN * elapsedTicks * perilousMeterSpeedMult());
-  if(now - lastPerilousMetaSaveAt >= 2000){
+  if(now - lastPerilousMetaSaveAt >= 1000){
     lastPerilousMetaSaveAt = now;
     dbSaveMeta();
   }
@@ -3467,7 +3465,86 @@ const ITEM_ID_TABLE = [
   [277,"Wasteland","Pollution"],
   [278,"Wasteland","Ruincrystal"],
   [279,"Wasteland","Slop"],
-  [280,"Wasteland","Unfunctional Tool"]
+  [280,"Wasteland","Unfunctional Tool"],
+  [281,"Natural","el powder"],
+  [282,"Wasteland","el powder"],
+  [283,"Aberration","el powder"],
+  [284,"The Fridge","el powder"],
+  [285,"Scary Land","el powder"],
+  [286,"404","el powder"],
+  [287,"Factoritization","el powder"],
+  [288,"2048","el powder"],
+  [289,"ABC","el powder"],
+  [290,"Tiers","el powder"],
+  [291,"Gimmicks","el powder"],
+  [292,"LAME world","el powder"],
+  [293,"All","el powder"],
+  [294,"Placeholder Land","el powder"],
+  [295,"winterstone","el powder"],
+  [296,"Boi World","el powder"],
+  [297,"Perilous","el powder"],
+  [300,"Natural","WOKE"],
+  [301,"Wasteland","WOKE"],
+  [302,"Aberration","WOKE"],
+  [303,"The Fridge","WOKE"],
+  [304,"Scary Land","WOKE"],
+  [305,"404","WOKE"],
+  [306,"Factoritization","WOKE"],
+  [307,"2048","WOKE"],
+  [308,"ABC","WOKE"],
+  [309,"Tiers","WOKE"],
+  [310,"Gimmicks","WOKE"],
+  [311,"LAME world","WOKE"],
+  [312,"All","WOKE"],
+  [313,"Placeholder Land","WOKE"],
+  [314,"winterstone","WOKE"],
+  [315,"Boi World","WOKE"],
+  [316,"Perilous","WOKE"],
+  [319,"2048","very bad rank"],
+  [320,"ABC","very bad rank"],
+  [321,"Tiers","very bad rank"],
+  [322,"Gimmicks","very bad rank"],
+  [323,"LAME world","very bad rank"],
+  [324,"All","very bad rank"],
+  [325,"Placeholder Land","very bad rank"],
+  [326,"2048","Tile 2t"],
+  [327,"2048","Tile 4t"],
+  [328,"2048","Tile 9t"],
+  [329,"2048","Tile 18t"],
+  [330,"2048","Tile 35t"],
+  [331,"2048","Tile 70t"],
+  [332,"2048","Tile 141t"],
+  [333,"2048","Tile 281t"],
+  [334,"2048","Tile 563t"],
+  [335,"2048","Tile 1q"],
+  [336,"2048","Tile 2q"],
+  [337,"2048","Tile 5q"],
+  [338,"2048","Tile 9q"],
+  [339,"2048","Tile 18q"],
+  [340,"2048","Tile 36q"],
+  [341,"2048","Tile 72q"],
+  [342,"2048","Tile 144q"],
+  [343,"2048","Tile 288q"],
+  [344,"2048","Tile 576q"],
+  [345,"2048","Tile 1Qi"],
+  [346,"2048","Tile 2Qi"],
+  [347,"2048","Tile 5Qi"],
+  [348,"2048","Tile 9Qi"],
+  [349,"2048","Tile 18Qi"],
+  [350,"2048","Tile 37Qi"],
+  [351,"2048","Tile 74Qi"],
+  [352,"2048","Tile 148Qi"],
+  [353,"2048","Tile 295Qi"],
+  [354,"2048","Tile 590Qi"],
+  [355,"2048","Tile 1Qn"],
+  [356,"Tiers","WIPE HYPE"],
+  [357,"Boi World","i lied this is the rarest Boi ever lol"],
+  [358,"The Fridge","orange juice"],
+  [359,"Gimmicks","craziest TROLLSTONE"],
+  [360,"Gimmicks","injector"],
+  [361,"Gimmicks","super gimmick crystal"],
+  [362,"Gimmicks","ONE CHANCE"],
+  [363,"Gimmicks","1%"]
 ];
 
 // variantId: 1 = normal (no variant), 2..5 = VARIANT_CHAIN index+2. Also permanent/versioned —
@@ -4084,8 +4161,7 @@ function buildMetaSnapshot(){
     ballAutoUse: state.ballAutoUse,
     stablizerUntil: state.stablizerUntil,
     perilousVisit: state.perilousVisit,
-    brailleUnlocked: !!state.brailleUnlocked,
-    brailleEnabled: state.brailleEnabled,
+    trollRollHistory: state.trollRollHistory,
   };
 }
 
@@ -4304,8 +4380,7 @@ function applyMetaToState(meta){
   state.ballAutoUse = (meta.ballAutoUse && typeof meta.ballAutoUse === 'object') ? meta.ballAutoUse : {};
   state.stablizerUntil = meta.stablizerUntil || null;
   state.perilousVisit = (meta.perilousVisit && typeof meta.perilousVisit === 'object') ? meta.perilousVisit : null;
-  state.brailleUnlocked = !!meta.brailleUnlocked;
-  state.brailleEnabled = meta.brailleEnabled;
+  state.trollRollHistory = Array.isArray(meta.trollRollHistory) ? meta.trollRollHistory : [];
   normalizeBallState();
   saveLoadedSuccessfully = true;
 }
@@ -4946,6 +5021,27 @@ function rollOnce(opts){
    RENDERING HELPERS
    ============================================================ */
 
+// WIPE HYPE (legacy color font only): unlike every other tier, this is explicitly NOT a linear or
+// radial gradient across the whole string — each character gets its own independently-random
+// pink/white color and its own randomized shake-animation delay/duration, so the whole rank name
+// reads as violently, chaotically shaking rather than one smooth uniform effect. Deterministic per
+// character position + rank name (not Math.random()) so the same rank always renders the same way
+// rather than re-randomizing on every re-render.
+const WIPE_HYPE_COLORS = ['#ff2fb0', '#ffffff', '#ff7fd0', '#ffffff'];
+function wipeHypeCharsHtml(text){
+  let out = '';
+  for(let i = 0; i < text.length; i++){
+    const ch = text[i];
+    if(ch === ' '){ out += ' '; continue; }
+    const h = hashRankName(text + '|' + i);
+    const color = WIPE_HYPE_COLORS[h % WIPE_HYPE_COLORS.length];
+    const dur = (0.1 + (h % 7) * 0.02).toFixed(2); // 0.10s–0.22s, per-char varied
+    const delay = ((h % 11) * 0.017).toFixed(3);    // desynced start so chars don't shake in unison
+    out += `<span class="wipehype-char" style="color:${color}; animation-duration:${dur}s; animation-delay:-${delay}s;">${ch}</span>`;
+  }
+  return out;
+}
+
 // Renders a rank name with: tier class (for glow/structural styling) + this rank's own unique
 // deterministic color/font (inline style, wins over the tier's flat color) + 50% variant overlay.
 // displayText optionally overrides what's actually shown (e.g. "???" for a mystery-hidden rank)
@@ -4953,7 +5049,10 @@ function rollOnce(opts){
 // rank is finally revealed, its "???" placeholder already looked/felt exactly like its true self.
 function rankNameHtml(name, tierCls, variant, extraCls, tierKey, displayText){
   extraCls = extraCls || '';
-  const text = escapeHtml(displayText != null ? displayText : name);
+  const rawText = displayText != null ? displayText : name;
+  const text = tierKey === 'wipehype' && isLegacyColorFontEnabled() && !(state.lowDetailMode || state.superOptimize)
+    ? wipeHypeCharsHtml(escapeHtml(rawText))
+    : escapeHtml(rawText);
   const styleAttr = tierKey ? ` style="${rankVisualStyleAttr(name, tierKey)}"` : '';
   if(!variant) return `<span class="${tierCls} ${extraCls}"${styleAttr}>${text}</span>`;
   // vwrap carries variant class for CSS scoping; inner text has this rank's own color/font; vlayer
@@ -5304,11 +5403,6 @@ function setupShowFpsToggle(){
   toggle.checked = !!state.showFps;
   toggle.addEventListener('change', ()=> setShowFps(toggle.checked));
 }
-function setBrailleEnabled(enabled){
-  state.brailleEnabled = !!enabled;
-  applyBrailleMode();
-  dbSaveMeta();
-}
 
 function applyRankVisualStyle(){
   const enabled = isLegacyColorFontEnabled();
@@ -5324,23 +5418,6 @@ function renderSettingsView(){
   if(compactToggle) compactToggle.checked = !!state.compactInventoryVariants;
   applyShowFps();
   applySuperOptimize();
-  
-  const brailleSection = document.getElementById('settingsBrailleSection');
-  if(brailleSection) {
-    brailleSection.innerHTML = state.brailleUnlocked ? `
-      <div class="settings-section-title">Secret</div>
-      <label class="settings-card setting-toggle">
-        <span class="settings-copy">
-          <b>IM BLIND HELP</b>
-          <small>Toggle Braille mode text translation.</small>
-        </span>
-        <input type="checkbox" id="brailleToggle" ${state.brailleEnabled ? 'checked' : ''} role="switch">
-      </label>
-    ` : '';
-    const bToggle = document.getElementById('brailleToggle');
-    if(bToggle) bToggle.addEventListener('change', () => setBrailleEnabled(bToggle.checked));
-  }
-
   const autoUseEl = document.getElementById('settingsAutoUseOptions');
   if(!autoUseEl) return;
   const helpers = [
@@ -7029,7 +7106,7 @@ function triggerInstantConsumableBatch(key){
   function processChunk(){
     const chunkStart = performance.now();
     while(i < totalPlanned && (performance.now() - chunkStart) < DETONATION_CHUNK_BUDGET_MS){
-      const r = rollOnceForArea(world, area, cfg.luckMult, { mutationLuckMult: cfg.mutationLuckMult || 1, isBomb:true });
+      const r = rollOnceForArea(world, area, cfg.luckMult, { mutationLuckMult: cfg.mutationLuckMult || 1, isBomb:true, isJuniSwing: key === 'juniaxeswing' });
       const inv = invKey(r.areaLabel, r.name, r.variant ? r.variant.key : null);
       if(!counts[inv]) counts[inv] = { result:r, count:0 };
       counts[inv].count++;
@@ -7522,24 +7599,8 @@ function showView(name){
   document.querySelectorAll('.view').forEach(v=> v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b=> b.classList.toggle('active', b.dataset.view === name));
-  
-  // Secret sequence detection for Braille mode
-  if(isBrailleHotspotActive) recordBrailleSequence(name);
-  
   refreshLiveViews();
 }
-
-let isBrailleHotspotActive = false;
-document.addEventListener('DOMContentLoaded', ()=>{
-  const hotspot = document.getElementById('brailleHotspot');
-  if(hotspot) {
-    hotspot.addEventListener('mousedown', () => { isBrailleHotspotActive = true; });
-    hotspot.addEventListener('mouseup', () => { setTimeout(() => { isBrailleHotspotActive = false; }, 100); });
-    // Also support touch for mobile
-    hotspot.addEventListener('touchstart', () => { isBrailleHotspotActive = true; });
-    hotspot.addEventListener('touchend', () => { setTimeout(() => { isBrailleHotspotActive = false; }, 100); });
-  }
-});
 
 document.querySelectorAll('.nav-btn').forEach(btn=>{
   btn.addEventListener('click', ()=> showView(btn.dataset.view));
@@ -7663,46 +7724,40 @@ function performClick(){
   const area = world.areas[state.areaIdx];
   const updateBest = (r) => { if(!best || r.finalRng > best.finalRng) best = r; };
 
-  let clickBonusFired = 0;
+  // [Magic Wand] Glitter Spread: a perRollBonus fires independently on EVERY roll in this click
+  // (base rolls AND its own chained bonus rolls), not once per click like normal click bonuses.
+  // Capped per-click via chainCapPerClick so a lucky chain can't run away indefinitely.
+  let perRollBonusFired = 0;
+  if(axe.perRollBonus){
+    perRollBonusFired = processPerRollBonus(axe.perRollBonus, world, area, results, updateBest, bulk);
+  }
+  if(equip && equip.perRollBonus){
+    perRollBonusFired += processPerRollBonus(equip.perRollBonus, world, area, results, updateBest, bulk);
+  }
 
-  // Perilous is a danger zone where all axe and equipment bonuses are disabled. Only the base
-  // bulk rolls are permitted; no per-roll bonuses, click bonuses, sunrays, or coin-bag stacks fire.
-  if(!isPerilousArea()){
-    // [Magic Wand] Glitter Spread: a perRollBonus fires independently on EVERY roll in this click
-    // (base rolls AND its own chained bonus rolls), not once per click like normal click bonuses.
-    // Capped per-click via chainCapPerClick so a lucky chain can't run away indefinitely.
-    let perRollBonusFired = 0;
-    if(axe.perRollBonus){
-      perRollBonusFired = processPerRollBonus(axe.perRollBonus, world, area, results, updateBest, bulk);
+  // Click-triggered bonus rolls from the axe (e.g. Food Eater, Dreamers Prism, GlowAxe Guidance)
+  let clickBonusFired = processClickBonusRules(axe.clickBonus, world, area, results, updateBest) + perRollBonusFired;
+
+  // Click-triggered bonus rolls from the equipped item, if any (same rule shape as axes)
+  if(equip){
+    clickBonusFired += processClickBonusRules(ballAdjustedAxenadesRules(equip, 'clickBonus'), world, area, results, updateBest);
+  }
+
+  // [Coin Bag] (equip): on click, 1/5 chance to add a 15-second luck/mutation-luck stack.
+  if(equip && equip.key === 'coinbag' && equip.coinBagStackChance){
+    if(Math.random() < equip.coinBagStackChance){
+      if(!state.coinBagStacks) state.coinBagStacks = [];
+      state.coinBagStacks.push({ expiresAt: Date.now() + equip.coinBagStackDurationMs });
     }
-    if(equip && equip.perRollBonus){
-      perRollBonusFired += processPerRollBonus(equip.perRollBonus, world, area, results, updateBest, bulk);
-    }
+  }
 
-    // Click-triggered bonus rolls from the axe (e.g. Food Eater, Dreamers Prism, GlowAxe Guidance)
-    clickBonusFired = processClickBonusRules(axe.clickBonus, world, area, results, updateBest) + perRollBonusFired;
-
-    // Click-triggered bonus rolls from the equipped item, if any (same rule shape as axes)
-    if(equip){
-      clickBonusFired += processClickBonusRules(ballAdjustedAxenadesRules(equip, 'clickBonus'), world, area, results, updateBest);
-    }
-
-    // [Coin Bag] (equip): on click, 1/5 chance to add a 15-second luck/mutation-luck stack.
-    if(equip && equip.key === 'coinbag' && equip.coinBagStackChance){
-      if(Math.random() < equip.coinBagStackChance){
-        if(!state.coinBagStacks) state.coinBagStacks = [];
-        state.coinBagStacks.push({ expiresAt: Date.now() + equip.coinBagStackDurationMs });
-      }
-    }
-
-    // Sunrays: every N clicks, add bonus rolls (e.g. GlowAxe every 75th click)
-    if(axe.sunrays && state.clickCount % axe.sunrays.everyNClicks === 0){
-      for(let i=0;i<axe.sunrays.rolls;i++){
-        const r = rollOnceForArea(world, area, axe.sunrays.luckMult);
-        results.push(r);
-        clickBonusFired++;
-        updateBest(r);
-      }
+  // Sunrays: every N clicks, add bonus rolls (e.g. GlowAxe every 75th click)
+  if(axe.sunrays && state.clickCount % axe.sunrays.everyNClicks === 0){
+    for(let i=0;i<axe.sunrays.rolls;i++){
+      const r = rollOnceForArea(world, area, axe.sunrays.luckMult);
+      results.push(r);
+      clickBonusFired++;
+      updateBest(r);
     }
   }
   state.rolls += clickBonusFired;
@@ -7737,6 +7792,7 @@ function doRoll(){
   const fake = !state.lowDetailMode && !state.superOptimize && Math.random() < TROLL_CHANCE ? rollTrollFake(trollArea, best.name) : null;
   if(fake){
     state.lastRollWasTroll = true;
+    recordTrollRollForTrollstone();
     rollGeneration++;
     const myGeneration = rollGeneration;
     renderStage(best, totalRolls, fake);
@@ -9113,7 +9169,6 @@ async function initInner(){
   setupShowFpsToggle();
   setupSuperOptimizeToggle();
   applyShowFps();
-  applyBrailleMode();
 
   // DATA-LOSS GUARD: if it looks like a real save vanished, stop here. Don't render the game,
   // don't run anticheat/offline-progress, and CRITICALLY don't let dbSaveMeta() run — that's
