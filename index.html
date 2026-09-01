@@ -1828,6 +1828,27 @@ const SUBWORLD1 = {
         { name:'FINALE', rng:1307674368000 },
       ]
     },
+    {
+      key:'cinnamon', label:'Cinnamon',
+      ranks:[
+        { name:'cinnamon', rng:1 },
+        { name:'cinnamon Tasty', rng:500 },
+        { name:'cinnamon Bar', rng:10000 },
+        { name:'cinnamon Candy', rng:200000, mutations:[{name:'THE MIGHTY CINNAMON TOAST CRUNCH', rng:777777777777777}] },
+        { name:'very cinnabar-y Cinnamon (dont eat)', rng:8000000 },
+        { name:'SCARY cinnamon', rng:33666333 },
+        { name:'very evil Cinnamon', rng:77777776 },
+        { name:'peppermint (whats this doing here??)', rng:100000000 },
+        { name:'"what am i doing? im supposed to be making progress NOT jokes like THIS!" Cinnamon', rng:694200000 },
+        { name:'lucky Cinnamon', rng:777777777 },
+        { name:'1 billion Cinnamon', rng:1000000000 },
+        { name:'Cinnafinity', rng:4000000000 },
+        { name:'cinnamon Galaxy', rng:7500000000 },
+        { name:'infinite cinnamon', rng:60000000000 },
+        { name:'cinna-sanity', rng:70000000000 },
+        { name:'the scary evil gigantic house sized cinnamon box', rng:666666666666 },
+      ]
+    },
   ]
 };
 
@@ -2926,6 +2947,9 @@ function isPerilousArea(area=currentArea()){
   if(roulettePerilousAlwaysActive()) return true;
   return !!(area && area.perilous);
 }
+function isInCinnamonArea(area=currentArea()){
+  return !!(area && area.key === 'cinnamon');
+}
 function isStablizerActive(){
   return !!state.stablizerUntil && Date.now() < state.stablizerUntil;
 }
@@ -3583,6 +3607,9 @@ function effectiveLuckMult(){
   const axe = currentAxe();
   const equip = currentEquip();
   let mult = axe.stats.luckMult;
+  // Secret, undocumented synergy: Food Eater's luck is x25 better specifically in Cinnamon —
+  // never stated anywhere in the UI, just something a player might notice.
+  if(axe.key === 'foodeater' && isInCinnamonArea()) mult *= 25;
   if(equip && equip.luckMult) mult *= equip.luckMult;
   // [Exponentia] raises its complete equipped luck value to a power after applying its own multiplier.
   if(equip && equip.luckExponent) mult = Math.pow(mult, equip.luckExponent);
@@ -4072,7 +4099,24 @@ const ITEM_ID_TABLE = [
   [368,"Scary Land","uhh maybe end of something. idk lol!"],
   [369,"Scary Land","light Crystal"],
   [370,"Natural","flowers"],
-  [371,"Natural","最後の花"]
+  [371,"Natural","最後の花"],
+  [372,"Cinnamon","cinnamon"],
+  [373,"Cinnamon","cinnamon Tasty"],
+  [374,"Cinnamon","cinnamon Bar"],
+  [375,"Cinnamon","cinnamon Candy"],
+  [376,"Cinnamon","THE MIGHTY CINNAMON TOAST CRUNCH"],
+  [377,"Cinnamon","very cinnabar-y Cinnamon (dont eat)"],
+  [378,"Cinnamon","SCARY cinnamon"],
+  [379,"Cinnamon","very evil Cinnamon"],
+  [380,"Cinnamon","peppermint (whats this doing here??)"],
+  [381,"Cinnamon","\"what am i doing? im supposed to be making progress NOT jokes like THIS!\" Cinnamon"],
+  [382,"Cinnamon","lucky Cinnamon"],
+  [383,"Cinnamon","1 billion Cinnamon"],
+  [384,"Cinnamon","Cinnafinity"],
+  [385,"Cinnamon","cinnamon Galaxy"],
+  [386,"Cinnamon","infinite cinnamon"],
+  [387,"Cinnamon","cinna-sanity"],
+  [388,"Cinnamon","the scary evil gigantic house sized cinnamon box"]
 ];
 
 // variantId: 1 = normal (no variant), 2..5 = VARIANT_CHAIN index+2. Also permanent/versioned —
