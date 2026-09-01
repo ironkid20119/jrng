@@ -976,6 +976,17 @@
   </div>
 </div>
 
+<!-- OFFLINE CATCH-UP LOADING OVERLAY: shown while resolveOfflineProgress() is simulating a long
+     away-time gap. After 5s without finishing, an "itll catch up..." button appears — clicking it
+     hides this overlay and lets the rest of the app become usable immediately, while the
+     simulation keeps running in the background and quietly applies its results once done. -->
+<div id="offlineCatchupOverlay" style="display:none; position:fixed; inset:0; z-index:99997; background:#0a0a1a; color:#dee5ff; font-family:var(--mono, monospace); align-items:center; justify-content:center; padding:24px; text-align:center;">
+  <div style="max-width:480px;">
+    <div id="offlineCatchupMessage" style="font-size:14px; line-height:1.7; margin-bottom:22px; min-height:3em;"></div>
+    <button id="offlineCatchupSkipBtn" type="button" style="display:none; font-family:inherit; font-size:13px; padding:10px 20px; background:#1a1a3a; color:#dee5ff; border:1px solid #8888ff; border-radius:6px; cursor:pointer; font-weight:700;">itll catch up...</button>
+  </div>
+</div>
+
 <!-- STORAGE ENGINE SWITCH MODAL: hidden dev/recovery path only, reachable via forceLoadEngine()
      from the browser console — not linked from any normal UI. Asks whether to copy the current
      save into the newly-chosen engine. -->
@@ -6930,7 +6941,12 @@ function ballAdjustedConsumableEffect(item){
   if(item.key === 'bomb' && hasBallUpgrade('upgradedBombs')) return 'On use: charges for 15 minutes. Once triggered, fires 1,250,000 rolls in your current area at ×100 luck and ×5 mutation luck.';
   if(item.key === 'nukinamachina' && hasBallUpgrade('upgradedBombs')) return 'On use: adds 5,000,000 rolls in your current area at ×150 luck and ×10 mutation luck.';
   if(item.key === 'nullbomb' && hasBallUpgrade('upgradedBombs')) return 'On use: charges for 4h 4m 4s. Once triggered, fires 40.4 million rolls in your current area at ×404 luck and ×4.04 mutation luck.';
-  if(item.key === 'watergun' && hasBallUpgrade('sentientWaterhose')) return 'On use: AFK roll speed +1× per stack, up to ×4 total (3 uses max). Each stack lasts 1 hour.';
+  if(item.key === 'watergun'){
+    const durationLevel = ballUpgradeLevel('moreWatergun');
+    const durationText = durationLevel > 0 ? `${fmtDuration(watergunStackDurationSeconds())}` : '1 hour';
+    if(hasBallUpgrade('sentientWaterhose')) return `On use: AFK roll speed +1× per stack, up to ×4 total (3 uses max). Each stack lasts ${durationText}.`;
+    if(durationLevel > 0) return `On use: AFK roll speed ×0.5 faster, stacks up to ×2.5 total (3 uses max). Each stack lasts ${durationText}.`;
+  }
   return item.effect;
 }
 
@@ -7529,7 +7545,7 @@ function useConsumable(key, options={}){
       return deny(`Already at max watergun stacks (×${upgradedWatergunCapMult().toFixed(1)})! Wait for one to expire first.`);
     }
     state.consumables.watergun--;
-    state.wgunStacks.push({ expiresAt: now + CONSUMABLES.watergun.durationSeconds * 1000 });
+    state.wgunStacks.push({ expiresAt: now + watergunStackDurationSeconds() * 1000 });
     dbSaveMeta(); refreshCards(); refreshStats();
     return true;
   }
@@ -7921,6 +7937,12 @@ function upgradedWatergunCapMult(){
   return 1 + CONSUMABLES.watergun.maxStacks * upgradedWatergunStackMult();
 }
 
+// "MORE WATERGUN idk" ball upgrade: each level adds +1 hour to every Sentient Watergun stack's
+// duration (base 1 hour, up to +7 at max level = 8 hours per stack).
+function watergunStackDurationSeconds(){
+  return CONSUMABLES.watergun.durationSeconds + ballUpgradeLevel('moreWatergun') * 3600;
+}
+
 function ballAdjustedConsumableConfig(key){
   const cfg = CONSUMABLES[key];
   if(!cfg || !hasBallUpgrade('upgradedBombs')) return cfg;
@@ -8033,6 +8055,7 @@ const BALL_UPGRADES = [
   { key:'upgradedPushpin', title:'Upgrade Pushpin', cost:{ green:10, red:20 }, desc:'Pushpin gives ×2.5 luck to the most common unfinished material and ×5 luck to the rarest unfinished material.' },
   { key:'upgradedBombs', title:'Upgrade bomb related items', cost:{ purple:2, white:50, blue:40 }, desc:'improves the bomb related items' },
   { key:'sentientWaterhose', title:'Sentient waterhose', cost:{ red:50, yellow:250, blue:25 }, desc:'Sentient Watergun gives +1× offline-roll speed per stack instead of +0.5×.' },
+  { key:'moreWatergun', title:'MORE WATERGUN idk', max:7, costForLevel:level=>({ pink:3 + level }), desc:level=>`Level ${level}/7. Each Sentient Watergun stack lasts ${1 + level} hour${level===1?'':'s'} instead of 1.` },
   { key:'manualAutoroll', title:'Manual autoroll upgrade', max:10, costForLevel:level=>({ black:level + 1 }), desc:level=>`Level ${level}/10. Each level adds +10% sphere appearance speed, sphere duration, and sphere efficiency.` },
   { key:'discount', title:'Discount', max:10, costForLevel:level=>({ black:level + 1 }), desc:level=>`Level ${level}/10. Recipes are ${level}% cheaper; Balls upgrades are excluded.` },
   { key:'doubleChance', title:'Double chance', max:5, costForLevel:level=>({ black:2 + level * 2 }), desc:level=>`Level ${level}/5. Balls have +${level}% chance to duplicate when they spawn.` },
@@ -9580,6 +9603,30 @@ function renderOfflineBanner(report){
   document.getElementById('dismissOffline').addEventListener('click', ()=>{ el.innerHTML=''; });
 }
 
+// Runs when resolveOfflineProgress() finishes in the background AFTER the person already clicked
+// "itll catch up..." and moved on. Mirrors the normal (non-skipped) completion path: persist the
+// now-updated state, refresh the views a completed catch-up would normally affect, and show the
+// same offline banner — just later, and without blocking anything in the meantime. If the person
+// has since started a Roulette run (swapping `state` to a temp save), the just-finished report
+// still reflects real progress made on the main save, but re-rendering main-save-specific views
+// mid-run would show the wrong save's data, so those are skipped in that case — the banner itself
+// is harmless either way and still shown so the result isn't silently lost.
+function applyBackgroundOfflineReport(report){
+  if(!report) return;
+  dbSaveMeta();
+  if(!isRouletteActive()){
+    renderAxeStrip();
+    renderWorldTabs();
+    renderAreaSelect();
+    updateAberrationVisual();
+    buildIndexAccordion();
+    renderInventory();
+    updateStatStrip();
+  }
+  renderOfflineBanner(report);
+}
+
+
 /* ============================================================
    ANTICHEAT — Cloudflare time verification
    ============================================================ */
@@ -9776,6 +9823,98 @@ function showInitCrashGuard(err){
   }
 }
 
+/* ============================================================
+   OFFLINE CATCH-UP LOADING OVERLAY
+   Shown while resolveOfflineProgress() simulates a long away-time gap. Randomized message on
+   every show; after 5s without finishing, an "itll catch up..." button appears so the person isn't
+   stuck staring at a screen — dismissing it lets the rest of the app load immediately while the
+   simulation keeps running in the background (see initInner's use of this).
+   ============================================================ */
+
+// "you rolled a {variant} {rank} which is {rarity} lmao" pulls a genuinely random rank (base or
+// mutation) from anywhere in the whole game, and a genuinely random variant stack (using the same
+// chained-roll logic as a real catch, so multi-stacked variants are possible here too) — the
+// displayed rarity is the rank's own rng multiplied by whatever variant multiplier resulted,
+// exactly mirroring how a real catch's finalRng is computed.
+function allRanksFlatForLoadingMessage(){
+  const out = [];
+  for(const w of WORLDS){
+    for(const a of w.areas){
+      for(const r of a.ranks){
+        if(r.rng !== Infinity) out.push({ name:r.name, rng:r.rng });
+        if(r.mutations) for(const m of r.mutations){
+          if(m.rng !== Infinity) out.push({ name:m.name, rng:m.rng });
+        }
+      }
+    }
+  }
+  return out;
+}
+function randomRolledLoadingMessage(){
+  const ranks = allRanksFlatForLoadingMessage();
+  const pick = ranks[Math.floor(Math.random() * ranks.length)];
+  const variant = rollVariant(); // same chained roll a real catch uses — can stack multiple tiers
+  const finalRng = variant ? pick.rng * variant.totalMult : pick.rng;
+  const variantLabel = variant ? `${variant.label} ` : '';
+  return `you rolled a ${variantLabel}${pick.name} which is 1/${fmtRng(finalRng)} lmao`;
+}
+
+// "{garbled}" — takes 5-10 random words pooled from every OTHER static loading message and mashes
+// them into a fake sentence.
+function garbledLoadingMessage(){
+  const words = OFFLINE_LOADING_STATIC_MESSAGES.join(' ').split(/\s+/).filter(Boolean);
+  const count = 5 + Math.floor(Math.random() * 6); // 5-10 inclusive
+  const picked = [];
+  for(let i=0;i<count;i++) picked.push(words[Math.floor(Math.random() * words.length)]);
+  return picked.join(' ');
+}
+
+function uSuckOrWinLoadingMessage(){
+  return Math.random() < 1/100 ? 'u WIN' : 'u suck';
+}
+
+const OFFLINE_LOADING_STATIC_MESSAGES = [
+  'welcome to juni rng headquarters',
+  'thisll take some time ok',
+  'rarest as of september 1, 2026, 4:16 am UTC-4, the rarest legit rank is rainbow orange! (1/210t)',
+  'accept your fate',
+  'activate the gigglesnoy activator',
+  'Run from Very Evil Idiot',
+  '🐟 1',
+  'hi juni was here',
+];
+
+// Dynamic entries are functions (called fresh each time so their output re-randomizes); static
+// entries are picked as-is. All pooled together for one flat random pick per overlay show.
+function pickOfflineLoadingMessage(){
+  const dynamicGenerators = [garbledLoadingMessage, uSuckOrWinLoadingMessage, randomRolledLoadingMessage];
+  const allOptions = [...OFFLINE_LOADING_STATIC_MESSAGES, ...dynamicGenerators];
+  const pick = allOptions[Math.floor(Math.random() * allOptions.length)];
+  return typeof pick === 'function' ? pick() : pick;
+}
+
+let offlineCatchupSkipTimer = null;
+function showOfflineCatchupOverlay(){
+  const overlay = document.getElementById('offlineCatchupOverlay');
+  const msgEl = document.getElementById('offlineCatchupMessage');
+  const skipBtn = document.getElementById('offlineCatchupSkipBtn');
+  if(!overlay || !msgEl || !skipBtn) return;
+  msgEl.textContent = pickOfflineLoadingMessage();
+  skipBtn.style.display = 'none';
+  overlay.style.display = 'flex';
+  clearTimeout(offlineCatchupSkipTimer);
+  offlineCatchupSkipTimer = setTimeout(()=>{
+    skipBtn.style.display = 'inline-block';
+  }, 5000);
+  skipBtn.onclick = hideOfflineCatchupOverlay;
+}
+function hideOfflineCatchupOverlay(){
+  const overlay = document.getElementById('offlineCatchupOverlay');
+  if(overlay) overlay.style.display = 'none';
+  clearTimeout(offlineCatchupSkipTimer);
+  offlineCatchupSkipTimer = null;
+}
+
 async function initInner(){
   // STORAGE ENGINE CHOICE: silently forces Modern (with a one-time migration for any returning
   // Legacy player) before dbLoadAll() runs, since dbLoadAll branches on it. No longer a
@@ -9827,8 +9966,29 @@ async function initInner(){
 
   let report = null;
   if(canAwardIdleGains()){
-    report = await resolveOfflineProgress();
-    clearTimeVerificationBanner();
+    // Race the actual simulation against the "itll catch up..." skip button. If the skip fires
+    // first, initInner keeps going immediately with report still null (old numbers stay on screen
+    // for now) while the real promise keeps running in the background; applyBackgroundOfflineReport
+    // picks up the result whenever it actually finishes and quietly updates the UI at that point.
+    showOfflineCatchupOverlay();
+    const offlinePromise = resolveOfflineProgress();
+    let skipResolve;
+    const skipPromise = new Promise(res => { skipResolve = res; });
+    const skipBtn = document.getElementById('offlineCatchupSkipBtn');
+    if(skipBtn) skipBtn.addEventListener('click', ()=> skipResolve('skipped'), { once:true });
+
+    const winner = await Promise.race([offlinePromise.then(r => ({ kind:'done', report:r })), skipPromise.then(()=>({ kind:'skipped' }))]);
+    hideOfflineCatchupOverlay();
+
+    if(winner.kind === 'done'){
+      report = winner.report;
+      clearTimeVerificationBanner();
+    } else {
+      // Skipped before finishing — let it keep resolving on its own and apply the result later.
+      offlinePromise.then(bgReport => applyBackgroundOfflineReport(bgReport)).catch(err => {
+        console.error('Background offline catch-up simulation failed after skip:', err);
+      });
+    }
   } else {
     renderTimeVerificationBanner(timeVerification);
   }
