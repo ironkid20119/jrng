@@ -856,6 +856,45 @@
   .ball-cost img{ width:15px; height:15px; image-rendering:pixelated; }
   .ball-upgrade-card.owned{ border-color:rgba(34,197,94,.6); box-shadow:inset 0 0 0 1px rgba(34,197,94,.12); }
 
+  /* ROULETTE */
+  .roulette-lede{ color:var(--text-dim); line-height:1.55; margin-bottom:16px; }
+  .roulette-cost-row{ display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+  .roulette-spin-btn{
+    font-family:var(--display); font-size:16px; font-weight:700; letter-spacing:.03em;
+    padding:13px 26px; border-radius:12px; border:1px solid var(--accent);
+    background:linear-gradient(135deg,rgba(124,92,255,.28),rgba(255,92,168,.18));
+    color:#fff; cursor:pointer; transition:transform .12s ease,box-shadow .12s ease;
+  }
+  .roulette-spin-btn:hover:not(:disabled){ transform:translateY(-2px); box-shadow:0 10px 26px -12px rgba(124,92,255,.7); }
+  .roulette-spin-btn:active:not(:disabled){ transform:scale(.98); }
+  .roulette-spin-btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .roulette-wheels{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin-bottom:18px; }
+  .roulette-wheel{ padding:16px; border:1px solid var(--border); border-radius:14px; background:var(--bg-1); text-align:center; }
+  .roulette-wheel-label{ font:700 10px var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--text-faint); margin-bottom:10px; }
+  .roulette-wheel-result{ font-family:var(--display); font-size:15px; font-weight:700; color:var(--text); line-height:1.35; }
+  .roulette-wheel.spinning .roulette-wheel-result{ color:var(--text-faint); animation:roulette-flicker .09s steps(2) infinite; }
+  @keyframes roulette-flicker{ 0%{opacity:1;} 50%{opacity:.35;} 100%{opacity:1;} }
+  .roulette-status-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; margin-bottom:18px; }
+  .roulette-panel{ padding:14px; border:1px solid var(--border); border-radius:13px; background:var(--bg-1); }
+  .roulette-panel h3{ font-size:13px; margin-bottom:8px; color:var(--text); }
+  .roulette-debuff-list{ list-style:none; display:flex; flex-direction:column; gap:6px; }
+  .roulette-debuff-list li{ font-size:12px; color:var(--bad); font-family:var(--mono); padding:6px 8px; border:1px solid rgba(244,63,94,.35); border-radius:8px; background:rgba(244,63,94,.07); }
+  .roulette-target-desc{ font-size:13px; color:var(--text-dim); line-height:1.5; margin-bottom:10px; }
+  .roulette-target-progress{ height:8px; border-radius:6px; background:var(--bg-2); overflow:hidden; border:1px solid var(--border); }
+  .roulette-target-progress-fill{ height:100%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); transition:width .2s ease; }
+  .roulette-abandon-note{ margin-top:14px; font-size:11px; color:var(--text-faint); font-family:var(--mono); line-height:1.5; }
+  /* Bubble minigame overlay: fixed position, appears/disappears with the debuff's timing */
+  .roulette-bubble{
+    position:fixed; z-index:99998; width:74px; height:74px; border-radius:50%; cursor:pointer;
+    background:radial-gradient(circle at 35% 30%, rgba(255,255,255,.9), rgba(124,92,255,.55) 55%, rgba(255,92,168,.5));
+    border:2px solid #fff; box-shadow:0 0 30px rgba(124,92,255,.8), 0 0 12px rgba(255,255,255,.6);
+    display:flex; align-items:center; justify-content:center; font:700 11px var(--mono); color:#fff;
+    animation:roulette-bubble-pulse 1.5s linear forwards;
+  }
+  @keyframes roulette-bubble-pulse{ 0%{ transform:scale(0.6); opacity:0; } 12%{ transform:scale(1); opacity:1; } 88%{ transform:scale(1); opacity:1; } 100%{ transform:scale(0.7); opacity:0; } }
+  html.low-stim .roulette-bubble{ animation:none; opacity:1; transform:scale(1); }
+  html.low-stim .roulette-wheel.spinning .roulette-wheel-result{ animation:none; opacity:1; }
+
   footer.foot{
     text-align:center;
     color:var(--text-faint);
@@ -937,45 +976,9 @@
   </div>
 </div>
 
-<!-- OFFLINE-ON-LEGACY GUARD: offline play is only supported on the Modern engine (kept simple —
-     Legacy's IndexedDB technically works offline too, but supporting dual offline paths wasn't
-     worth the complexity). Shown when the game detects no network while Legacy is active. -->
-<div id="offlineLegacyGuard" style="display:none; position:fixed; inset:0; z-index:99999; background:#0a1a12; color:#dfffe8; font-family:var(--mono, monospace); align-items:center; justify-content:center; padding:24px; text-align:center;">
-  <div style="max-width:480px;">
-    <div style="font-size:15px; letter-spacing:0.05em; color:#5cff9c; font-weight:700; margin-bottom:14px;">YOU'RE OFFLINE</div>
-    <div style="font-size:14px; line-height:1.6; margin-bottom:22px;">
-      Offline play is only supported on the Modern (stable) save engine. You're currently on Legacy. Switch to Modern to keep playing — your save will be copied over automatically.
-    </div>
-    <button id="offlineLegacyGuardSwitchBtn" type="button" style="font-family:inherit; font-size:13px; padding:10px 20px; background:#123a24; color:#dfffe8; border:1px solid #5cff9c; border-radius:6px; cursor:pointer; font-weight:700;">Switch to Modern &amp; continue</button>
-  </div>
-</div>
-
-<!-- STORAGE ENGINE CHOICE MODAL: asks the player to pick which save engine to use. Blocks init
-     until a choice is made (unless "don't ask again" was previously set). Also reachable later
-     via the logo's secret gesture to switch engines. -->
-<div id="storageEngineModal" class="modal-overlay" style="display:none;">
-  <div class="modal-content" style="max-width:480px;">
-    <h3>choose your save engine</h3>
-    <p style="margin-bottom:16px;">Pick how your save data is stored on this device. You can switch later from the logo.</p>
-    <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;">
-      <button type="button" class="btn" data-engine-choice="legacy" style="text-align:left; padding:14px 16px; display:flex; flex-direction:column; align-items:flex-start; gap:4px;">
-        <span style="font-weight:700;">Legacy (buggy)</span>
-        <span style="font-size:11px; opacity:0.7; font-weight:400;">IndexedDB. The original engine — mostly solid, but the one behind the rare crash/reset bugs.</span>
-      </button>
-      <button type="button" class="btn" data-engine-choice="modern" style="text-align:left; padding:14px 16px; display:flex; flex-direction:column; align-items:flex-start; gap:4px;">
-        <span style="font-weight:700;">Modern (stable)</span>
-        <span style="font-size:11px; opacity:0.7; font-weight:400;">localStorage. Newer, simpler, avoids the IndexedDB-related bugs above.</span>
-      </button>
-    </div>
-    <label style="display:flex; align-items:center; gap:8px; justify-content:center; font-size:12px; color:var(--text-dim); cursor:pointer; margin-bottom:4px;">
-      <input type="checkbox" id="storageEngineDontAsk" style="width:16px; height:16px;">
-      Don't ask again (you can re-enable this from the logo)
-    </label>
-  </div>
-</div>
-
-<!-- STORAGE ENGINE SWITCH MODAL: shown when switching engines later (via the logo), asks whether
-     to copy the current save into the newly-chosen engine. -->
+<!-- STORAGE ENGINE SWITCH MODAL: hidden dev/recovery path only, reachable via forceLoadEngine()
+     from the browser console — not linked from any normal UI. Asks whether to copy the current
+     save into the newly-chosen engine. -->
 <div id="storageEngineSwitchModal" class="modal-overlay" style="display:none;">
   <div class="modal-content" style="max-width:480px;">
     <h3>switch save engine?</h3>
@@ -1103,8 +1106,8 @@
   <!-- SETTINGS VIEW -->
   <div class="view" id="view-roulette">
     <div class="panel">
-      <div class="section-title">Roulette</div>
-      <div class="balls-empty">WIP. contains nothing as of now lol!</div>
+      <h2 class="ptitle">Roulette</h2>
+      <div id="rouletteContent"></div>
     </div>
   </div>
 
@@ -1139,11 +1142,6 @@
       <div class="settings-section-title">Save and update tools</div>
       <div class="settings-maintenance">
         <button id="cacheResetBtn" class="cache-reset-btn" type="button">⟳ Force reload latest version (keeps your save)</button>
-        <button id="storageEngineChangeBtn" class="cache-reset-btn" type="button">💾 Change save engine</button>
-        <div id="storageEngineChangeChoices" style="display:none; gap:8px; margin-top:6px; flex-wrap:wrap;">
-          <button id="storageEngineChangeToLegacy" class="cache-reset-btn" type="button">→ Legacy (buggy)</button>
-          <button id="storageEngineChangeToModern" class="cache-reset-btn" type="button">→ Modern (stable)</button>
-        </div>
       </div>
     </div>
   </div>
@@ -1577,6 +1575,26 @@ const SECRET_RANKS = [
 // Each eligible secret gets its own independent true-rng roll; if multiple hit, the rarest trueRng wins.
 // Secrets can roll variants (Weird/Odd/Rainbow/Grayscale) exactly like normal ranks — each variant
 // of a secret counts as its own separate discovery (used by Secret Tier's full-collection check).
+// "have fun getting this its unaffected by luck AND cant spawn when your offline Lol" — entirely
+// bypasses the normal roll pool (see buildAreaPool's oncePerClickOnly filter). Called exactly ONCE
+// per click (not once per roll — a bulk-10 click still only gets one shot at this, same as a
+// bulk-1 click), with a raw Math.random() check that ignores luck/buffs entirely, same spirit as
+// rollSecretForArea. isOffline is true when called from resolveOfflineProgress, in which case this
+// always returns null — it can never spawn from offline/idle catch-up, only from a live click.
+function rollOncePerClickSpecialRank(world, area, isOffline){
+  if(isOffline) return null;
+  if(world.key !== 'subworld1') return null; // "spawns in sw1 globally" — any area of Subworld 1 only
+  if(Math.random() >= 1 / ONCE_PER_CLICK_RANK.rng) return null;
+  return {
+    name: ONCE_PER_CLICK_RANK.name,
+    baseRng: ONCE_PER_CLICK_RANK.rng,
+    finalRng: ONCE_PER_CLICK_RANK.rng,
+    tier: tierFor(ONCE_PER_CLICK_RANK.rng),
+    variant: null,
+    areaLabel: area.label,
+  };
+}
+
 function rollSecretForArea(world, area){
   let winner = null;
   let winnerTrueRng = null;
@@ -1655,7 +1673,6 @@ const WORLD1 = {
   label:'World 1',
   global: [
     { name:'Destiny', rng:1770000000000 },
-    { name:'el powder', rng:125 },
     { name:'WOKE', rng:6825000000000000000000000 },
   ],
   areas:[
@@ -1671,6 +1688,7 @@ const WORLD1 = {
         { name:'Crystal', rng:100, mutations:[{name:'Apocalypse Crystal', rng:6660000000}] },
         { name:'Silver', rng:250 },
         { name:'Wood', rng:500 },
+        { name:'flowers', rng:725, mutations:[{name:'最後の花', rng:875165375750}] },
         { name:'Creature', rng:1000 },
         { name:'Disaster', rng:6000 },
         { name:'Fire', rng:15000, mutations:[{name:'Plasmaspark', rng:17500000}] },
@@ -1727,7 +1745,11 @@ const SUBWORLD1 = {
   key:'subworld1',
   label:'Subworld 1',
   global: [
-    { name:'el powder', rng:125 },
+    // NOT part of the normal per-roll pool — see ONCE_PER_CLICK_RANK_KEY and
+    // rollOncePerClickSpecialRank() further down. Listed here so it still shows up correctly in
+    // the Index/rank catalog for Subworld 1 (any area), with its real name/rarity/area, even
+    // though buildAreaPool() explicitly filters it back out before any normal roll ever sees it.
+    { name:'have fun getting this its unaffected by luck AND cant spawn when your offline Lol', rng:7777776, oncePerClickOnly:true },
     { name:'WOKE', rng:6825000000000000000000000 },
   ],
   areas:[
@@ -1758,6 +1780,8 @@ const SUBWORLD1 = {
         { name:'You Not Get This', rng:66666 },
         { name:'Not So Epic', rng:100000, mutations:[{name:'So Epic!!!', rng:10000000000}] },
         { name:'The Probably Rarest Thing Ever', rng:10000000 },
+        { name:'uhh maybe end of something. idk lol!', rng:250000000 },
+        { name:'light Crystal', rng:8888888888 },
       ]
     },
     {
@@ -1812,7 +1836,6 @@ const WORLD0 = {
   label:'Fun',
   global: [
     { name:'very bad rank', rng:6942910000000000000 },
-    { name:'el powder', rng:125 },
     { name:'WOKE', rng:6825000000000000000000000 },
   ],
   areas:[
@@ -2028,6 +2051,7 @@ const WORLD0 = {
       ranks:[
         { name:'Weird Fragment', rng:1 },
         { name:'Goofy Gring', rng:25 },
+        { name:'el powder', rng:125 },
         { name:'H-ium', rng:169 },
         { name:'☢️', rng:400 },
         { name:'Canna Beans', rng:700 },
@@ -2056,7 +2080,6 @@ const WORLD2 = {
   label:'World 2',
   global:[
     { name:'crazy tate', rng:75000000000 },
-    { name:'el powder', rng:125 },
     { name:'WOKE', rng:6825000000000000000000000 },
     // Moved from the prior practical JS-double limit of 1e18 up to 1e30, per later balance pass.
     { name:'Was A Second World Necessary? Probably Yeah But This Is The Rarest Rank Ingame and It Has The LONGEST NAME EVER Itll Probably STRETCH EVERYTHING SO FAR ITLL BE FUNNY MAYBE Lol AND It Only Spawns In This God Damn World of Unseriousness and Seriousness And No One Will PROBABLY EVER NEVER GET THIS RANK EVER', rng:1e30 },
@@ -2134,6 +2157,11 @@ const WORLD2 = {
 };
 
 const WORLDS = [WORLD1, SUBWORLD1, WORLD0, WORLD2];
+
+// Direct reference into SUBWORLD1.global — NOT a duplicated copy — so rollOncePerClickSpecialRank()
+// always reflects whatever rng/name is set on the actual data entry above, with no risk of the two
+// silently drifting apart if one is ever edited without the other.
+const ONCE_PER_CLICK_RANK = SUBWORLD1.global.find(g => g.oncePerClickOnly);
 
 /* ---------- Craftable items (axes) ---------- */
 const AXES = {
@@ -2876,6 +2904,8 @@ let state = {
   stablizerUntil: null, // timestamp — Perilous meter progresses at half speed while active
   perilousVisit: null, // { meter, gains:{ inventoryKey:count }, startedAt } while currently risking Perilous
   trollRollHistory: [], // array of state.rolls snapshots at each troll-roll trigger, pruned to a 1,000-roll window
+  roulette: null, // { debuffs:[wheel1Key,wheel2Key], target:{key,...}, startedAt, bubble:{...}, nextBubbleAt, snapshots:[...] } while a Roulette run is active — persisted to its own separate storage keys, see ROULETTE section
+  _rouletteForcedDefaultThisClick: false, // transient, scoped to exactly one performClick() call — see currentAxe()/currentEquip()
 };
 
 const PERILOUS_METER_TICK_MS = 30;
@@ -2890,12 +2920,30 @@ function currentArea(){
   return world && world.areas[state.areaIdx] ? world.areas[state.areaIdx] : null;
 }
 function isPerilousArea(area=currentArea()){
+  // Roulette's "Perilous Always Active" curse: the danger meter/ejection logic runs in every area,
+  // not just the real Perilous area, while this curse is in effect — everything downstream of this
+  // one chokepoint (offline gate, meter tick, click processing, presentation) picks it up for free.
+  if(roulettePerilousAlwaysActive()) return true;
   return !!(area && area.perilous);
 }
 function isStablizerActive(){
   return !!state.stablizerUntil && Date.now() < state.stablizerUntil;
 }
-function perilousMeterSpeedMult(){ return isStablizerActive() ? 0.5 : 1; }
+// ×5 slower under the "Perilous Always Active" curse, stacking multiplicatively with Stablizer's
+// own ×0.5 if both are active at once (e.g. Stablizer used during a Roulette run).
+function perilousMeterSpeedMult(){
+  let mult = isStablizerActive() ? 0.5 : 1;
+  if(roulettePerilousAlwaysActive()) mult *= 0.2; // ×5 slower
+  return mult;
+}
+// The two rarity floors that gate "no danger gain" / "danger relief" become ×2.5 more lenient
+// (i.e. the rarity needed is divided by 2.5, so a less-rare catch now qualifies) under the curse.
+function perilousRareClickRng(){
+  return roulettePerilousAlwaysActive() ? PERILOUS_RARE_CLICK_RNG / 2.5 : PERILOUS_RARE_CLICK_RNG;
+}
+function perilousMeterReliefRng(){
+  return roulettePerilousAlwaysActive() ? PERILOUS_METER_RELIEF_RNG / 2.5 : PERILOUS_METER_RELIEF_RNG;
+}
 
 function ensurePerilousVisit(){
   if(!isPerilousArea()) return null;
@@ -2987,8 +3035,8 @@ function adjustPerilousMeter(amount){
 function processPerilousClick(results){
   if(!isPerilousArea()) return;
   const list = Array.isArray(results) ? results : [];
-  if(!list.some(result => result.baseRng > PERILOUS_RARE_CLICK_RNG)) adjustPerilousMeter(PERILOUS_CLICK_GAIN * perilousMeterSpeedMult());
-  const reliefHits = list.filter(result => result.baseRng > PERILOUS_METER_RELIEF_RNG).length;
+  if(!list.some(result => result.baseRng > perilousRareClickRng())) adjustPerilousMeter(PERILOUS_CLICK_GAIN * perilousMeterSpeedMult());
+  const reliefHits = list.filter(result => result.baseRng > perilousMeterReliefRng()).length;
   if(reliefHits) adjustPerilousMeter(-PERILOUS_METER_RELIEF * reliefHits);
 }
 
@@ -3042,6 +3090,441 @@ function discountedRecipeRequirements(requirements){
   return (requirements || []).map(req => ({ ...req, amount:discountedRecipeAmount(req.amount) }));
 }
 
+// Renders/removes the click-or-lose bubble overlay at a random position on screen.
+function renderRouletteBubble(){
+  let el = document.getElementById('rouletteBubble');
+  const bubble = isRouletteActive() ? state.roulette.bubble : null;
+  if(!bubble){
+    if(el) el.remove();
+    return;
+  }
+  if(!el){
+    el = document.createElement('button');
+    el.type = 'button';
+    el.id = 'rouletteBubble';
+    el.className = 'roulette-bubble';
+    el.textContent = 'CLICK!';
+    document.body.appendChild(el);
+    el.addEventListener('click', rouletteClickBubble);
+  }
+  // Reposition on every fresh spawn so it's not predictable — kept well inside the viewport.
+  const margin = 90;
+  const maxX = Math.max(margin, window.innerWidth - margin);
+  const maxY = Math.max(margin, window.innerHeight - margin);
+  el.style.left = `${margin + Math.random() * (maxX - margin)}px`;
+  el.style.top = `${margin + Math.random() * (maxY - margin)}px`;
+}
+
+// Rough 0-100 progress estimate for the active Wheel 3 target, for the status panel's progress bar.
+// Not exact for every target (some are pass/fail rather than continuous), but gives a sense of how close.
+function rouletteTargetProgressPercent(){
+  if(!isRouletteActive()) return 0;
+  const target = state.roulette.target;
+  switch(target.key){
+    case 'billionRolls': return Math.min(100, (state.rolls / 1000000000) * 100);
+    case 'rarer250b': {
+      let best = 0;
+      for(const item of Object.values(state.inventory)) if(item.baseRng > best) best = item.baseRng;
+      return Math.min(100, (best / 250000000000) * 100);
+    }
+    case 'nanaxe': return state.ownedAxes.includes('nanaxe') ? 100 : 0;
+    case 'juniaxe': return state.ownedAxes.includes('juniaxe1power') ? 100 : 0;
+    case 'uwin': {
+      const gimmicks = WORLD0.areas.find(a => a.key === 'gimmicks');
+      let total = 0, found = 0;
+      for(const r of gimmicks.ranks){
+        if(r.name === 'U Win' || r.name === 'Sakura Tree') continue;
+        if(r.rng < 1000000000){ total++; if(hasEverFoundRank(gimmicks.label, r.name)) found++; }
+      }
+      return total ? (found / total) * 100 : 0;
+    }
+    case 'area100': {
+      const areaLabel = target.area100Label;
+      if(!areaLabel) return 0;
+      let area = null;
+      for(const w of WORLDS){ const found = w.areas.find(a => a.label === areaLabel); if(found){ area = found; break; } }
+      if(!area) return 0;
+      let total = 0, found = 0;
+      for(const r of area.ranks){
+        total++; if(hasEverFoundRank(area.label, r.name)) found++;
+        if(r.mutations) for(const m of r.mutations){ total++; if(hasEverFoundRank(area.label, m.name)) found++; }
+      }
+      return total ? (found / total) * 100 : 0;
+    }
+    default: return 0;
+  }
+}
+
+function rouletteTargetDescription(target){
+  const opt = ROULETTE_WHEEL3.find(o => o.key === target.key);
+  if(!opt) return '';
+  if(target.key === 'area100') return `100% the "${target.area100Label}" area — find every base rank and mutation there (secrets don't count).`;
+  return opt.label + '.';
+}
+
+function renderRouletteView(){
+  const el = document.getElementById('rouletteContent');
+  if(!el) return;
+
+  if(!isRouletteActive()){
+    const blackCount = (state.balls && state.balls.black) || 0;
+    const canAfford = blackCount >= ROULETTE_COST_BLACK_BALLS;
+    el.innerHTML = `
+      <p class="roulette-lede">Spin all three wheels at once for ${ROULETTE_COST_BLACK_BALLS} Black Balls. You'll get two curses to survive and one target to hit — clear it and everything you earned merges back into your real save. Walk away any time; nothing's lost except by getting ejected from Perilous the normal way, and you can pick the run back up here whenever you're ready.</p>
+      <div class="roulette-cost-row">
+        <button type="button" class="roulette-spin-btn" id="rouletteSpinBtn" ${canAfford ? '' : 'disabled'}>Spin</button>
+        <span class="ball-cost"><img src="${BALL_BY_KEY.black.asset}" alt="Black ball"> ${blackCount.toLocaleString()} / ${ROULETTE_COST_BLACK_BALLS}</span>
+      </div>`;
+    const btn = document.getElementById('rouletteSpinBtn');
+    if(btn) btn.addEventListener('click', ()=>{
+      if(startRouletteSpin()){
+        refreshLiveViews();
+        renderWorldTabs(); renderAreaSelect(); buildIndexAccordion(); renderInventory(); renderAxeStrip(); updateStatStrip();
+        renderRouletteView();
+      }
+    });
+    return;
+  }
+
+  const r = state.roulette;
+  const w1 = ROULETTE_WHEEL1.find(o => o.key === r.wheelResults.wheel1);
+  const w2 = ROULETTE_WHEEL2.find(o => o.key === r.wheelResults.wheel2);
+  const w3 = ROULETTE_WHEEL3.find(o => o.key === r.wheelResults.wheel3);
+  const progress = Math.max(0, Math.min(100, rouletteTargetProgressPercent()));
+
+  el.innerHTML = `
+    <p class="roulette-lede">This run is on its own temporary save. Finish the target below to merge everything earned here back into your real save.</p>
+    <div class="roulette-wheels">
+      <div class="roulette-wheel"><div class="roulette-wheel-label">Wheel 1 — Luck</div><div class="roulette-wheel-result">${escapeHtml(w1 ? w1.label : '?')}</div></div>
+      <div class="roulette-wheel"><div class="roulette-wheel-label">Wheel 2 — Curse</div><div class="roulette-wheel-result">${escapeHtml(w2 ? w2.label : '?')}</div></div>
+      <div class="roulette-wheel"><div class="roulette-wheel-label">Wheel 3 — Target</div><div class="roulette-wheel-result">${escapeHtml(w3 ? w3.label : '?')}</div></div>
+    </div>
+    <div class="roulette-status-grid">
+      <div class="roulette-panel">
+        <h3>Active curses</h3>
+        <ul class="roulette-debuff-list">
+          ${r.debuffs.map(key => {
+            const opt = ROULETTE_WHEEL1.find(o=>o.key===key) || ROULETTE_WHEEL2.find(o=>o.key===key);
+            return `<li>${escapeHtml(opt ? opt.label : key)}</li>`;
+          }).join('')}
+          ${r.noConsumables ? '<li>No Consumables</li>' : ''}
+        </ul>
+      </div>
+      <div class="roulette-panel">
+        <h3>Target</h3>
+        <p class="roulette-target-desc">${escapeHtml(rouletteTargetDescription(r.target))}</p>
+        <div class="roulette-target-progress"><div class="roulette-target-progress-fill" style="width:${progress.toFixed(1)}%"></div></div>
+      </div>
+    </div>
+    <div class="roulette-abandon-note">Leaving this tab doesn't lose anything — this run just sits here as your active save until you come back and finish it.</div>`;
+}
+
+/* ============================================================
+   ROULETTE
+   Spending 3 Black Balls starts a temporary, separate save: two debuffs (one from Wheel 1's luck
+   list, one from Wheel 2's stat/item-curse list) plus one target (Wheel 3). The temp save plays
+   out independently of the main save; hitting the target merges its inventory/rolls/currency back
+   into the main save and returns to it, while abandoning it (navigating away without finishing)
+   simply leaves it as the active save to resume later from the Roulette tab — nothing is lost
+   either way except by actually landing back in Perilous and getting ejected, same as normal play.
+
+   Each wheel's options are checked rarest-to-commonest, first hit wins; if an entire pass misses
+   (only possible on Wheel 2, whose odds don't sum to 1), the pass is redone until something lands.
+   ============================================================ */
+const ROULETTE_COST_BLACK_BALLS = 3;
+
+const ROULETTE_WHEEL1 = [ // luck debuffs
+  { key:'luck_001', label:'×0.01 Luck', chance:1/666, luckMult:0.01 },
+  { key:'luck_01',  label:'×0.1 Luck',  chance:1/5,   luckMult:0.1 },
+  { key:'luck_033', label:'×0.33 Luck', chance:1/3,   luckMult:0.33 },
+  { key:'luck_05',  label:'×0.5 Luck',  chance:1/1,   luckMult:0.5 }, // guaranteed catch-all if nothing rarer hits
+];
+
+const ROULETTE_WHEEL2 = [ // stat/item curses
+  { key:'all_at_once', label:'ALL AT ONCE + No Consumables', chance:1/666, combo:['cant_idle','click_default','perilous_always','less_bulk','no_bonuses','bubble'], noConsumables:true },
+  { key:'bubble',        label:'Bubble Click-or-Lose',        chance:1/30 },
+  { key:'no_bonuses',    label:"Bonuses Can't Fire + No Equip", chance:1/20 },
+  { key:'less_bulk',     label:'×5 Less Bulk (min 1)',        chance:1/15 },
+  { key:'perilous_always', label:'Perilous Always Active',    chance:1/8 },
+  { key:'click_default',  label:'1/5 Click = Default Axe + No Equip', chance:1/4 },
+  { key:'cant_idle',     label:"Can't Idle",                  chance:1/2 }, // most common; if this and everything above miss, the pass redoes
+];
+
+const ROULETTE_WHEEL3 = [ // targets, checked rarest-to-commonest (first hit wins)
+  { key:'area100',    label:'100% An Area', chance:1/35 },
+  { key:'juniaxe',     label:'Unlock juni axe (1% power)', chance:1/25 },
+  { key:'uwin',        label:'Get "U Win" (excluding Sakura Tree)', chance:1/15 },
+  { key:'nanaxe',      label:'Craft nan.axe', chance:1/10 },
+  { key:'rarer250b',   label:'Catch Anything Rarer Than 1/250,000,000,000', chance:1/4 },
+  { key:'billionRolls',label:'Get 1,000,000,000 Rolls', chance:1/2 },
+];
+
+const ROULETTE_AREA100_ELIGIBLE = ['Wasteland', 'Scary Land', 'ABC']; // every other area's rarest rank exceeds the 1/25b ceiling, or belongs to World 2 / is the All pool
+
+// Rolls one wheel: rarest-first pass, first hit wins; redo the whole pass if everything misses.
+function rouletteSpinWheel(options){
+  for(let guard = 0; guard < 10000; guard++){ // guard is just a sanity cap against an impossible infinite loop, never expected to matter
+    for(const opt of options){
+      if(Math.random() < opt.chance) return opt;
+    }
+  }
+  return options[options.length - 1]; // unreachable in practice, but keeps this total
+}
+
+function isRouletteActive(){
+  return !!(state.roulette && state.roulette.target);
+}
+
+// Builds a fresh, blank play state for the temp save — same shape as the real default state, so
+// every existing system (rolling, crafting, Perilous, etc.) works completely normally inside it.
+function blankRouletteState(){
+  const fresh = {
+    worldIdx: 0, areaIdx: 0, rolls: 0, best: null, log: [], inventory: {},
+    ownedAxes: ['default'], equippedAxe: 'default', ownedEquips: [], equippedItem: null,
+    lastSeenAt: Date.now(), pinnedRecipe: null, consumables: {}, activeBuffs: {},
+    bombCharge: null, nullBombCharge: null, instantConsumableBatch: null, clickCount: 0,
+    anticheatLockUntil: null, wgunStacks: [], coinBagStacks: [], discoveredSecrets: {},
+    rankVisualStyle: state.rankVisualStyle, lowDetailMode: state.lowDetailMode,
+    compactInventoryVariants: state.compactInventoryVariants, showFps: state.showFps,
+    superOptimize: state.superOptimize, errRedirectorUntil: null, doublinatorUntil: null,
+    doublinatorCooldownUntil: null, boiConsumableUses: 0, balls: blankBallCounts(),
+    spawnedBalls: [], ballUpgrades: {}, ballAutoUse: {}, stablizerUntil: null,
+    perilousVisit: null, trollRollHistory: [], roulette: null, _rouletteForcedDefaultThisClick: false,
+  };
+  return fresh;
+}
+
+// Starts a new spin: costs 3 Black Balls (deducted from — and saved back to — the MAIN save,
+// before we ever switch away from it), spins all three wheels, then swaps the live save for a
+// fresh temp save carrying the resulting debuffs/target. The main save is never stashed in memory
+// — it's simply left on disk exactly as it is, under its own normal storage keys, completely
+// independent of whatever the temp save does from here. Returns false (and changes nothing) if the
+// player can't afford it or a run is already active.
+function startRouletteSpin(){
+  if(isRouletteActive()) return false;
+  if((state.balls.black || 0) < ROULETTE_COST_BLACK_BALLS) return false;
+  state.balls.black -= ROULETTE_COST_BLACK_BALLS;
+  dbSaveMetaImmediate(); // flush the cost synchronously to the MAIN save's own keys before switching away
+
+  const w1 = rouletteSpinWheel(ROULETTE_WHEEL1);
+  const w2 = rouletteSpinWheel(ROULETTE_WHEEL2);
+  const w3 = rouletteSpinWheel(ROULETTE_WHEEL3);
+
+  const debuffKeys = w2.combo ? [w1.key, ...w2.combo] : [w1.key, w2.key];
+  const temp = blankRouletteState();
+  temp.roulette = {
+    wheelResults: { wheel1:w1.key, wheel2:w2.key, wheel3:w3.key },
+    debuffs: debuffKeys,
+    noConsumables: !!w2.noConsumables,
+    target: { key:w3.key, area100Label: w3.key === 'area100' ? ROULETTE_AREA100_ELIGIBLE[Math.floor(Math.random()*ROULETTE_AREA100_ELIGIBLE.length)] : null },
+    startedAt: Date.now(),
+    bubble: null, // { spawnedAt, expiresAt } while a click-or-lose bubble is currently up
+    nextBubbleAt: rouletteHasDebuff(debuffKeys, 'bubble') ? Date.now() + rouletteRandBubbleDelay() : null,
+    snapshots: [], // periodic { at, rolls, inventorySnapshot } used by the bubble-miss rollback
+  };
+  state = temp;
+  setRouletteRunPersisted(true);
+  dbSaveMeta(); // now saves to the Roulette-only keys, per the isRouletteActive() branch added above
+  return true;
+}
+
+function rouletteRandBubbleDelay(){
+  return (3 + Math.random() * 2) * 1000; // 3-5 seconds
+}
+
+function rouletteHasDebuff(debuffList, key){
+  const list = debuffList || (state.roulette && state.roulette.debuffs) || [];
+  return list.includes(key);
+}
+
+// Merges the temp save's inventory/rolls/balls into the MAIN save — read fresh from its own
+// storage keys (never from any in-memory copy, since none is kept) — writes the merged result
+// back to those same main-save keys, then loads it as the live state. Called once the Wheel 3
+// target is completed. The temp save's own Roulette-only storage is cleared afterward.
+function completeRouletteTarget(){
+  if(!isRouletteActive()) return;
+  const temp = state;
+
+  const { meta: mainMeta, items: mainItems } = modernEngineLoad();
+  const mainInventory = {};
+  if(mainItems) for(const it of mainItems) mainInventory[it.key] = it;
+
+  for(const [key, item] of Object.entries(temp.inventory)){
+    if(mainInventory[key]){
+      mainInventory[key].count += item.count;
+      if(item.lastRng > mainInventory[key].lastRng) mainInventory[key].lastRng = item.lastRng;
+    } else {
+      mainInventory[key] = { ...item };
+    }
+  }
+
+  const mergedMeta = mainMeta ? { ...mainMeta } : buildMetaSnapshot();
+  mergedMeta.rolls = (mainMeta ? mainMeta.rolls : 0) + temp.rolls;
+  mergedMeta.balls = { ...blankBallCounts(), ...(mainMeta && mainMeta.balls ? mainMeta.balls : {}) };
+  for(const color of Object.keys(mergedMeta.balls)) mergedMeta.balls[color] += (temp.balls[color] || 0);
+  if(temp.best && (!mergedMeta.best || temp.best.finalRng > mergedMeta.best.finalRng)) mergedMeta.best = temp.best;
+  mergedMeta.roulette = null;
+
+  modernEngineSaveMeta(mergedMeta);
+  modernEngineSaveInventory(mainInventory);
+  clearRouletteStorage();
+
+  applyMetaToState(mergedMeta);
+  state.inventory = mainInventory;
+
+  renderRouletteBubble(); // clears any leftover bubble overlay from the just-ended temp save
+  alertUser('Roulette target complete! Everything earned has been merged into your main save.');
+  renderWorldTabs(); renderAreaSelect(); buildIndexAccordion(); renderInventory(); renderAxeStrip();
+  refreshLiveViews();
+  updateStatStrip();
+}
+
+// Wheel 3 target-completion checks. Called on a light interval while a Roulette run is active
+// (see rouletteTick) rather than only on click, since some targets (e.g. reaching 1b rolls via
+// offline gains) can complete without an explicit click.
+function rouletteTargetComplete(){
+  if(!isRouletteActive()) return false;
+  const target = state.roulette.target;
+  switch(target.key){
+    case 'billionRolls': return state.rolls >= 1000000000;
+    case 'rarer250b': return Object.values(state.inventory).some(item => item.baseRng > 250000000000);
+    case 'nanaxe': return state.ownedAxes.includes('nanaxe');
+    case 'juniaxe': return state.ownedAxes.includes('juniaxe1power');
+    case 'uwin': return rouletteHasUWin();
+    case 'area100': return rouletteArea100Complete(target.area100Label);
+    default: return false;
+  }
+}
+
+// Same "found every other rank rarer than or equal to 1/1,000,000,000 in Gimmicks" check as the
+// real U Win rank, but with Sakura Tree explicitly excluded from what needs to be found — matching
+// "get the U Win rank in Gimmicks EXCLUDING Sakura Tree" rather than requiring the Sunday-only rank.
+function rouletteHasUWin(){
+  const gimmicks = WORLD0.areas.find(a => a.key === 'gimmicks');
+  for(const r of gimmicks.ranks){
+    if(r.name === 'U Win' || r.name === 'Sakura Tree') continue;
+    if(r.rng < 1000000000 && !hasEverFoundRank(gimmicks.label, r.name)) return false;
+  }
+  return true;
+}
+
+function rouletteArea100Complete(areaLabel){
+  if(!areaLabel) return false;
+  let area = null;
+  for(const w of WORLDS){ const found = w.areas.find(a => a.label === areaLabel); if(found){ area = found; break; } }
+  if(!area) return false;
+  for(const r of area.ranks){
+    if(!hasEverFoundRank(area.label, r.name)) return false;
+    if(r.mutations) for(const m of r.mutations) if(!hasEverFoundRank(area.label, m.name)) return false;
+  }
+  return true;
+}
+
+/* ---- Wheel 1: luck debuff ---- */
+function rouletteLuckMult(){
+  if(!isRouletteActive()) return 1;
+  const luckDebuffOpt = ROULETTE_WHEEL1.find(o => rouletteHasDebuff(null, o.key));
+  return luckDebuffOpt ? luckDebuffOpt.luckMult : 1;
+}
+
+/* ---- Wheel 2: individual debuff checks (used by their respective systems' hook points) ---- */
+function rouletteCantIdle(){ return isRouletteActive() && rouletteHasDebuff(null, 'cant_idle'); }
+function roulettePerilousAlwaysActive(){ return isRouletteActive() && rouletteHasDebuff(null, 'perilous_always'); }
+function rouletteNoBonuses(){ return isRouletteActive() && rouletteHasDebuff(null, 'no_bonuses'); }
+function rouletteNoEquip(){ return isRouletteActive() && rouletteHasDebuff(null, 'no_bonuses'); } // "no equippables" is bundled with the bonuses-blocked curse
+function rouletteNoConsumables(){ return isRouletteActive() && !!state.roulette.noConsumables; }
+function rouletteLessBulk(bulk){
+  if(!isRouletteActive() || !rouletteHasDebuff(null, 'less_bulk')) return bulk;
+  return Math.max(1, Math.ceil(bulk / 5));
+}
+// 1/5 chance per click: that click alone uses the default axe with no equip benefit. Rolled fresh
+// on every performClick() call while the debuff is active; a miss leaves the real axe/equip in play.
+function rouletteClickDefaultAxeRoll(){
+  return isRouletteActive() && rouletteHasDebuff(null, 'click_default') && Math.random() < 0.2;
+}
+
+/* ---- Bubble minigame (Wheel 2's "bubble" curse) ----
+   Every 3-5s, a bubble appears and must be clicked within 1.5s or a 15-minute rollback fires. A
+   periodic snapshot (roughly every 30s) tracks rolls/inventory so the rollback has something to
+   restore to; if no snapshot is at least 15 minutes old yet, it rolls back to the oldest one available
+   (i.e. as far back as it can, capped at what's actually been recorded since the debuff started). */
+const ROULETTE_SNAPSHOT_INTERVAL_MS = 30 * 1000;
+const ROULETTE_ROLLBACK_MS = 15 * 60 * 1000;
+
+function rouletteRecordSnapshotIfDue(){
+  if(!isRouletteActive() || !rouletteHasDebuff(null, 'bubble')) return;
+  const r = state.roulette;
+  const now = Date.now();
+  const last = r.snapshots.length ? r.snapshots[r.snapshots.length - 1].at : 0;
+  if(now - last < ROULETTE_SNAPSHOT_INTERVAL_MS) return;
+  r.snapshots.push({
+    at: now,
+    rolls: state.rolls,
+    inventory: JSON.parse(JSON.stringify(state.inventory)),
+    balls: { ...state.balls },
+  });
+  // Keep only what could still be needed (a little over 15 minutes' worth) so this can't grow forever.
+  const cutoff = now - ROULETTE_ROLLBACK_MS - ROULETTE_SNAPSHOT_INTERVAL_MS * 2;
+  r.snapshots = r.snapshots.filter(s => s.at >= cutoff);
+}
+
+function rouletteMaybeSpawnBubble(){
+  if(!isRouletteActive() || !rouletteHasDebuff(null, 'bubble')) return;
+  const r = state.roulette;
+  const now = Date.now();
+  if(r.bubble){
+    if(now > r.bubble.expiresAt) rouletteBubbleMissed();
+    return;
+  }
+  if(r.nextBubbleAt != null && now >= r.nextBubbleAt){
+    r.bubble = { spawnedAt: now, expiresAt: now + 1500 };
+    r.nextBubbleAt = null;
+    renderRouletteBubble();
+  }
+}
+
+function rouletteClickBubble(){
+  if(!isRouletteActive() || !state.roulette.bubble) return;
+  state.roulette.bubble = null;
+  state.roulette.nextBubbleAt = Date.now() + rouletteRandBubbleDelay();
+  renderRouletteBubble();
+  dbSaveMeta();
+}
+
+function rouletteBubbleMissed(){
+  const r = state.roulette;
+  r.bubble = null;
+  r.nextBubbleAt = Date.now() + rouletteRandBubbleDelay();
+  const now = Date.now();
+  const targetAt = now - ROULETTE_ROLLBACK_MS;
+  // Oldest snapshot at or before the 15-minute mark; if none is old enough yet, fall back to the
+  // very oldest one recorded so far (best available approximation of "as much as we can take back").
+  let restore = null;
+  for(const snap of r.snapshots){
+    if(snap.at <= targetAt) restore = snap;
+  }
+  if(!restore && r.snapshots.length) restore = r.snapshots[0];
+  if(restore){
+    state.rolls = restore.rolls;
+    state.inventory = restore.inventory;
+    state.balls = restore.balls;
+    recalculateBestAfterPerilousRollback();
+  }
+  renderRouletteBubble();
+  refreshLiveViews();
+  updateStatStrip();
+  alertUser('Missed the bubble — lost roughly 15 minutes of Roulette progress!');
+  dbSaveMeta();
+}
+
+// Called from the main tick loop while a Roulette run with the bubble curse is active.
+function rouletteTick(){
+  if(!isRouletteActive()) return;
+  rouletteRecordSnapshotIfDue();
+  rouletteMaybeSpawnBubble();
+  if(rouletteTargetComplete()) completeRouletteTarget();
+}
+
 function effectivePinnedRecipeRequirements(){
   const recipe = pinnedRecipeData();
   if(!recipe) return [];
@@ -3082,11 +3565,14 @@ function consumableRequirements(key, quantity=1){
 const MAX_OFFLINE_SECONDS = 7 * 24 * 60 * 60; // 7 day cap
 
 function currentAxe(){
+  if(state._rouletteForcedDefaultThisClick) return AXES.default; // Roulette's "1/5 click = default axe" curse
   return AXES[state.equippedAxe] || AXES.default;
 }
 
 // Returns the currently equipped item's data, or null if bare-handed (no equip slotted).
 function currentEquip(){
+  if(state._rouletteForcedDefaultThisClick) return null; // same curse also strips the equip for this click
+  if(rouletteNoEquip()) return null; // Roulette's "bonuses can't fire + no equippables" curse
   if(!state.equippedItem) return null;
   return EQUIPS[state.equippedItem] || null;
 }
@@ -3111,6 +3597,7 @@ function effectiveLuckMult(){
   }
   mult *= boiConsumableLuckMult();
   if(isDoublinatorActive()) mult *= 2;
+  mult *= rouletteLuckMult();
   return mult;
 }
 
@@ -3122,6 +3609,7 @@ function effectiveBulk(){
   if(equip && equip.bulkMult) bulk *= equip.bulkMult;
   if(equip && equip.bulkAdd) bulk += equip.bulkAdd;
   if(isDoublinatorActive()) bulk *= 2;
+  bulk = rouletteLessBulk(bulk);
   return bulk;
 }
 
@@ -3140,6 +3628,62 @@ const STORAGE_ENGINE_KEY = 'junis_rng_storage_engine';
 const STORAGE_ENGINE_DONT_ASK_KEY = 'junis_rng_storage_engine_dont_ask';
 const MODERN_LS_META_KEY = 'junis_rng_modern_meta';
 const MODERN_LS_INV_KEY = 'junis_rng_modern_inv';
+
+// ROULETTE STORAGE: a Roulette run's temp save persists under its OWN dedicated keys, entirely
+// separate from the main save's keys above. This means the main save is never touched — not read,
+// not written, not even loaded into memory — for as long as a Roulette run is active; it just sits
+// on disk exactly as it was left. ROULETTE_ACTIVE_KEY is the marker dbLoadAll checks on startup to
+// decide whether to resume a Roulette run instead of the main save.
+const ROULETTE_ACTIVE_KEY = 'junis_rng_roulette_active';
+const ROULETTE_LS_META_KEY = 'junis_rng_roulette_meta';
+const ROULETTE_LS_INV_KEY = 'junis_rng_roulette_inv';
+
+function isRouletteRunPersisted(){
+  try{ return localStorage.getItem(ROULETTE_ACTIVE_KEY) === '1'; }
+  catch(e){ return false; }
+}
+function setRouletteRunPersisted(active){
+  try{
+    if(active) localStorage.setItem(ROULETTE_ACTIVE_KEY, '1');
+    else localStorage.removeItem(ROULETTE_ACTIVE_KEY);
+  }catch(e){ /* best-effort */ }
+}
+// Roulette's meta blob is the SAME buildMetaSnapshot() shape as the main save, plus its own
+// roulette-run fields (debuffs/target/etc.) tacked on — so applyMetaToState can load it with zero
+// special-casing, it just also happens to carry a populated `roulette` field this time.
+function rouletteEngineSaveMeta(meta){
+  try{ localStorage.setItem(ROULETTE_LS_META_KEY, JSON.stringify(meta)); return true; }
+  catch(e){ console.error('Roulette: failed to save meta', e); return false; }
+}
+function rouletteEngineSaveInventory(inventoryObj){
+  try{
+    const compact = encodeCompactInventory(inventoryObj);
+    localStorage.setItem(ROULETTE_LS_INV_KEY, JSON.stringify(compact));
+    return true;
+  }catch(e){ console.error('Roulette: failed to save inventory', e); return false; }
+}
+function rouletteEngineLoad(){
+  let meta = null, items = null;
+  try{
+    const metaStr = localStorage.getItem(ROULETTE_LS_META_KEY);
+    if(metaStr) meta = JSON.parse(metaStr);
+  }catch(e){ console.error('Roulette: failed to parse saved meta', e); }
+  try{
+    const invStr = localStorage.getItem(ROULETTE_LS_INV_KEY);
+    if(invStr){
+      const saved = JSON.parse(invStr);
+      const inventoryObj = decodeCompactInventory(saved);
+      items = Object.values(inventoryObj);
+    }
+  }catch(e){ console.error('Roulette: failed to parse saved inventory', e); }
+  return { meta, items };
+}
+function clearRouletteStorage(){
+  try{ localStorage.removeItem(ROULETTE_LS_META_KEY); }catch(e){ /* best-effort */ }
+  try{ localStorage.removeItem(ROULETTE_LS_INV_KEY); }catch(e){ /* best-effort */ }
+  setRouletteRunPersisted(false);
+}
+
 
 function getStorageEngineChoice(){
   try{ return localStorage.getItem(STORAGE_ENGINE_KEY); } // 'legacy' | 'modern' | null
@@ -3458,23 +4002,7 @@ const ITEM_ID_TABLE = [
   [278,"Wasteland","Ruincrystal"],
   [279,"Wasteland","Slop"],
   [280,"Wasteland","Unfunctional Tool"],
-  [281,"Natural","el powder"],
-  [282,"Wasteland","el powder"],
-  [283,"Aberration","el powder"],
-  [284,"The Fridge","el powder"],
-  [285,"Scary Land","el powder"],
-  [286,"404","el powder"],
-  [287,"Factoritization","el powder"],
-  [288,"2048","el powder"],
-  [289,"ABC","el powder"],
-  [290,"Tiers","el powder"],
-  [291,"Gimmicks","el powder"],
-  [292,"LAME world","el powder"],
-  [293,"All","el powder"],
   [294,"Placeholder Land","el powder"],
-  [295,"winterstone","el powder"],
-  [296,"Boi World","el powder"],
-  [297,"Perilous","el powder"],
   [300,"Natural","WOKE"],
   [301,"Wasteland","WOKE"],
   [302,"Aberration","WOKE"],
@@ -3536,7 +4064,15 @@ const ITEM_ID_TABLE = [
   [360,"Gimmicks","injector"],
   [361,"Gimmicks","super gimmick crystal"],
   [362,"Gimmicks","ONE CHANCE"],
-  [363,"Gimmicks","1%"]
+  [363,"Gimmicks","1%"],
+  [364,"The Fridge","have fun getting this its unaffected by luck AND cant spawn when your offline Lol"],
+  [365,"Scary Land","have fun getting this its unaffected by luck AND cant spawn when your offline Lol"],
+  [366,"404","have fun getting this its unaffected by luck AND cant spawn when your offline Lol"],
+  [367,"Factoritization","have fun getting this its unaffected by luck AND cant spawn when your offline Lol"],
+  [368,"Scary Land","uhh maybe end of something. idk lol!"],
+  [369,"Scary Land","light Crystal"],
+  [370,"Natural","flowers"],
+  [371,"Natural","最後の花"]
 ];
 
 // variantId: 1 = normal (no variant), 2..5 = VARIANT_CHAIN index+2. Also permanent/versioned —
@@ -3755,41 +4291,21 @@ async function syncSaveIntoEngine(targetEngine){
   await writeSnapshotToEngine(targetEngine, meta, items);
 }
 
-// Blocks (via the returned Promise) until the player has an active storage engine choice.
-// Skips the modal entirely if a choice already exists AND "don't ask again" is set.
-function ensureStorageEngineChosen(){
-  return new Promise((resolve)=>{
-    const existing = getStorageEngineChoice();
-    if(existing && getStorageEngineDontAsk()){
-      resolve();
-      return;
-    }
-
-    const modal = document.getElementById('storageEngineModal');
-    if(!modal){ resolve(); return; } // markup missing somehow — don't hang init() forever
-
-    modal.style.display = 'flex';
-    const dontAskCheckbox = document.getElementById('storageEngineDontAsk');
-    if(dontAskCheckbox) dontAskCheckbox.checked = false;
-
-    const buttons = modal.querySelectorAll('[data-engine-choice]');
-    async function onChoose(engine){
-      buttons.forEach(b=> b.removeEventListener('click', clickHandler));
-      // Auto-copy whatever save exists on the other engine into this one BEFORE resolving, so
-      // the game never proceeds into a state where the just-chosen engine looks emptier than it
-      // should — that mismatch is what previously triggered a false "your save vanished" lockout
-      // right after picking/switching engines.
-      await syncSaveIntoEngine(engine);
-      setStorageEngineChoice(engine);
-      setStorageEngineDontAsk(dontAskCheckbox ? dontAskCheckbox.checked : false);
-      modal.style.display = 'none';
-      resolve();
-    }
-    function clickHandler(e){
-      onChoose(e.currentTarget.getAttribute('data-engine-choice'));
-    }
-    buttons.forEach(b=> b.addEventListener('click', clickHandler));
-  });
+// Storage engine is no longer a player-facing choice — Modern (localStorage) is the only engine
+// anyone plays on. This silently migrates any pre-existing Legacy (IndexedDB) save into Modern
+// exactly once, then locks the choice, so returning Legacy players don't lose anything. The
+// modal/UI for picking or switching engines is gone; readSnapshotFromEngine/writeSnapshotToEngine/
+// syncSaveIntoEngine and the 'legacy' engine code path are kept intact underneath as a hidden
+// recovery/debug path only — see forceLoadEngine, reachable from the console, not from any UI.
+async function ensureStorageEngineChosen(){
+  const existing = getStorageEngineChoice();
+  if(existing === 'modern') return; // already migrated (or a fresh player) — nothing to do
+  // Either no choice yet (fresh player OR an old Legacy player who never explicitly chose) or the
+  // stored choice is literally 'legacy' — either way, silently bring Modern up to date with
+  // whatever's the more complete save between the two, then lock in Modern from now on.
+  await syncSaveIntoEngine('modern');
+  setStorageEngineChoice('modern');
+  setStorageEngineDontAsk(true);
 }
 
 // Shows the switch-engine modal (Copy / Don't copy / Cancel), reachable from the logo's secret
@@ -3993,7 +4509,11 @@ self.onmessage = async (e)=>{
 `;
 
 let persistenceWorker = null;
-try{
+// Modern (localStorage) is the only engine normal players use, and its save path never touches
+// this worker — it's purely a Legacy/IndexedDB-era optimization. Only construct it at all when the
+// hidden dev/recovery path has explicitly selected Legacy, so the other ~100% of players never pay
+// for a Worker + Blob URL they'll never use.
+if(getStorageEngineChoice() === 'legacy') try{
   const workerBlob = new Blob([PERSISTENCE_WORKER_SRC], { type:'application/javascript' });
   persistenceWorker = new Worker(URL.createObjectURL(workerBlob));
   persistenceWorker.onmessage = (e)=>{
@@ -4220,6 +4740,15 @@ function dbSaveMetaImmediate(){
     return;
   }
 
+  // ROULETTE: while a run is active, EVERY save (from any of the hundreds of existing call sites
+  // in the game — crafting, clicking, buying, everything) goes to the Roulette-only keys instead
+  // of the main save's. The main save is never read or written while this branch is taken.
+  if(isRouletteActive()){
+    rouletteEngineSaveMeta({ ...buildMetaSnapshot(), roulette: state.roulette });
+    setRouletteRunPersisted(true);
+    return;
+  }
+
   // Mark that this browser has real save data, independent of the (larger, more fragile) backup
   // blobs. Used by the data-loss guard on next load: if this marker is set but a fresh load comes
   // back completely empty, that's a strong signal something broke rather than a new player.
@@ -4248,6 +4777,11 @@ function dbSaveMetaImmediate(){
 }
 
 function dbSaveInvItemImmediate(item){
+  if(isRouletteActive()){
+    rouletteEngineSaveInventory(state.inventory);
+    return;
+  }
+
   if(getStorageEngineChoice() === 'modern'){
     // localStorage has no per-key store like IndexedDB's object store — the Modern engine just
     // writes the whole current in-memory inventory each time. state.inventory is already kept
@@ -4268,6 +4802,11 @@ function dbSaveInvItemImmediate(item){
 }
 
 function dbDeleteInvItemImmediate(key){
+  if(isRouletteActive()){
+    rouletteEngineSaveInventory(state.inventory);
+    return;
+  }
+
   if(getStorageEngineChoice() === 'modern'){
     modernEngineSaveInventory(state.inventory);
     return;
@@ -4373,11 +4912,36 @@ function applyMetaToState(meta){
   state.stablizerUntil = meta.stablizerUntil || null;
   state.perilousVisit = (meta.perilousVisit && typeof meta.perilousVisit === 'object') ? meta.perilousVisit : null;
   state.trollRollHistory = Array.isArray(meta.trollRollHistory) ? meta.trollRollHistory : [];
+  state.roulette = (meta.roulette && typeof meta.roulette === 'object') ? meta.roulette : null;
   normalizeBallState();
   saveLoadedSuccessfully = true;
 }
 
 async function dbLoadAll(){
+  // ROULETTE RESUME: if a Roulette run was left active (person navigated away or closed the tab
+  // mid-run), resume it instead of the main save — the main save is left completely untouched on
+  // disk, exactly as it was before the run started, ready to be loaded normally once the run ends.
+  if(isRouletteRunPersisted()){
+    try{
+      const { meta, items } = rouletteEngineLoad();
+      if(meta){
+        applyMetaToState(meta);
+        state.inventory = {};
+        if(items && Array.isArray(items)) for(const it of items) state.inventory[it.key] = it;
+        // A run with no roulette field somehow got persisted (shouldn't happen, but don't strand
+        // the player in a broken half-state) — treat it as corrupt and fall through to the main save.
+        if(state.roulette && state.roulette.target){
+          return;
+        }
+      }
+      console.warn('Roulette: persisted run marker found but its save looked invalid — clearing it and loading the main save instead.');
+      clearRouletteStorage();
+    }catch(err){
+      console.error('Roulette: failed to resume persisted run, clearing it and loading the main save instead', err);
+      clearRouletteStorage();
+    }
+  }
+
   // MODERN ENGINE: skip IndexedDB entirely, load straight from its own localStorage keys.
   if(getStorageEngineChoice() === 'modern'){
     try{
@@ -4792,7 +5356,10 @@ function buildAreaPool(world, area, opts){
       }
     }
   }
-  for(const g of world.global) pool.push({ name:g.name, rng:g.rng === Infinity ? Infinity : g.rng * areaDebuffMult, isMutation:false });
+  for(const g of world.global){
+    if(g.oncePerClickOnly) continue; // handled once per CLICK, not per roll — see rollOncePerClickSpecialRank()
+    pool.push({ name:g.name, rng:g.rng === Infinity ? Infinity : g.rng * areaDebuffMult, isMutation:false });
+  }
 
   return pool;
 }
@@ -5062,9 +5629,15 @@ function fmtRng(n){
   return Math.round(n).toLocaleString();
 }
 
-// Secret ranks always display "???" for rarity, regardless of context
+// Secret ranks (and, via the same helper, any "gimmick" rank gated by a requirement/condition)
+// always show their real rarity number, just marked with a trailing "?" to flag that catching it
+// isn't purely luck-based — reaching in requires meeting whatever condition, so the plain 1/N odds
+// alone would be misleading without that context. Previously this fully hid the number as "???".
+function conditionalRarityDisplay(n){
+  return `(${fmtRng(n)})?`;
+}
 function fmtRngOrSecret(isSecret, n){
-  return isSecret ? '???' : fmtRng(n);
+  return isSecret ? conditionalRarityDisplay(n) : fmtRng(n);
 }
 
 /* ------------------------------------------------------------
@@ -5106,7 +5679,7 @@ function glitchRngText(name, n){
 // either .finalRng or .lastRng), applying the 404 truncation gimmick when relevant.
 function fmtRngForResult(r){
   const n = r.finalRng != null ? r.finalRng : r.lastRng;
-  if(r.isSecret) return '???';
+  if(r.isSecret) return conditionalRarityDisplay(n);
   if(r.areaLabel === '404' && !isErrRedirectorActive()) return glitchRngText(r.name, n);
   return fmtRng(n);
 }
@@ -6007,10 +6580,15 @@ function indexRankRowHtml(name, rng, isMutation, sourceTag, foundCheck, areaLabe
         </div>
       `;
   }
+  // Gimmick ranks (gated behind a requirement/condition, not pure luck) show their real rarity
+  // marked with a trailing "?" rather than the plain 1/N figure, since the number alone
+  // overstates how "random" landing one actually is — same convention as secret ranks.
+  const isGimmickRank = !!(rankObj && rankObj.requirement);
+  const rarityText = isGimmickRank ? conditionalRarityDisplay(rng) : `1/${fmtRng(rng)}`;
 
   const pinnedTag = (areaLabel && isInPinnedRecipe(areaLabel, name)) ? ' <span class="pin-tag">📌</span>' : '';
   const nameHtml = rankNameHtml(name, t.cls, null, '', t.key, displayName);
-  return `<div class="rank-row"${indent}><div style="flex:1;"><span${fontSize}>${arrow}${nameHtml}${pinnedTag}</span><span class="rrng">1/${fmtRng(rng)} · ${t.label}${src}</span>${reqHtml}</div></div>`;
+  return `<div class="rank-row"${indent}><div style="flex:1;"><span${fontSize}>${arrow}${nameHtml}${pinnedTag}</span><span class="rrng">${rarityText} · ${t.label}${src}</span>${reqHtml}</div></div>`;
 }
 
 // Dedicated Secrets section of the Index — independent of which world tab is selected, since
@@ -6897,6 +7475,7 @@ function useConsumable(key, options={}){
   const refreshStats = ()=>{ if(!silent){ renderAxeStrip(); updateStatStrip(); } };
   const deny = msg=>{ if(!silent && msg) alertUser(msg); return false; };
   if(getConsumableCount(key) <= 0) return false;
+  if(rouletteNoConsumables()) return deny('Consumables are blocked by this Roulette run\'s curse.');
 
   if(key === 'watergun'){
     if(!state.wgunStacks) state.wgunStacks = [];
@@ -7578,7 +8157,11 @@ function renderBallsView(){
 
 let currentView = 'roll';
 
-function hasRouletteUnlocked(){ return hasBallUpgrade('roulette'); }
+// The Roulette ball-upgrade unlock lives on the MAIN save only — a Roulette run's temp save always
+// starts blank (ballUpgrades: {}), so this alone would incorrectly gate the tab shut while a run
+// is actually in progress. isRouletteActive() covers that: if a run is live, the tab is always
+// reachable regardless of what the temp save's own ballUpgrades happen to contain.
+function hasRouletteUnlocked(){ return hasBallUpgrade('roulette') || isRouletteActive(); }
 function updateRouletteAvailability(){
   const nav = document.getElementById('rouletteNavBtn');
   if(nav) nav.hidden = !hasRouletteUnlocked();
@@ -7603,6 +8186,7 @@ function refreshLiveViews(){
   if(currentView === 'inventory') renderInventory();
   if(currentView === 'balls') renderBallsView();
   if(currentView === 'settings') renderSettingsView();
+  if(currentView === 'roulette') renderRouletteView();
   updateRouletteAvailability();
 }
 
@@ -7688,6 +8272,21 @@ function performClick(){
   tryAutoUseRecipeConsumables();
   state.trollstoneEligible = !!state.lastRollWasTroll;
   state.lastRollWasTroll = false;
+  // Roulette's "1/5 click = default axe + no equippable" curse: rolled fresh per click, and only
+  // ever suppresses THIS click's axe/equip — real gear is untouched on a miss or on other clicks.
+  // Set as a transient state flag (not a local variable) so it's honored by EVERY downstream call
+  // to currentAxe()/currentEquip(), including ones several layers deep (rollOnce, effectiveBulk,
+  // effectiveLuckMult, processClickBonusRules, etc.) — not just the two calls made directly here.
+  // try/finally guarantees this never gets stuck true if anything below throws mid-click.
+  state._rouletteForcedDefaultThisClick = rouletteClickDefaultAxeRoll();
+  try {
+    return performClickInner();
+  } finally {
+    state._rouletteForcedDefaultThisClick = false;
+  }
+}
+
+function performClickInner(){
   const axe = currentAxe();
   const equip = currentEquip();
   let bulk = effectiveBulk();
@@ -7714,24 +8313,36 @@ function performClick(){
 
   const world = WORLDS[state.worldIdx];
   const area = world.areas[state.areaIdx];
+
+  // Once-per-click special rank: exactly one check per click, entirely separate from the bulk
+  // roll loop above (a bulk-50 click still gets only this one shot, same as a bulk-1 click), and
+  // never counted toward state.rolls — same treatment as secret ranks, which also sit outside the
+  // normal per-roll accounting.
+  const onceClickHit = rollOncePerClickSpecialRank(world, area, false);
+  if(onceClickHit){
+    results.push(onceClickHit);
+    if(!best || onceClickHit.finalRng > best.finalRng) best = onceClickHit;
+  }
+
   const updateBest = (r) => { if(!best || r.finalRng > best.finalRng) best = r; };
 
   // [Magic Wand] Glitter Spread: a perRollBonus fires independently on EVERY roll in this click
   // (base rolls AND its own chained bonus rolls), not once per click like normal click bonuses.
   // Capped per-click via chainCapPerClick so a lucky chain can't run away indefinitely.
   let perRollBonusFired = 0;
-  if(axe.perRollBonus){
+  const bonusesBlocked = rouletteNoBonuses();
+  if(!bonusesBlocked && axe.perRollBonus){
     perRollBonusFired = processPerRollBonus(axe.perRollBonus, world, area, results, updateBest, bulk);
   }
-  if(equip && equip.perRollBonus){
+  if(!bonusesBlocked && equip && equip.perRollBonus){
     perRollBonusFired += processPerRollBonus(equip.perRollBonus, world, area, results, updateBest, bulk);
   }
 
   // Click-triggered bonus rolls from the axe (e.g. Food Eater, Dreamers Prism, GlowAxe Guidance)
-  let clickBonusFired = processClickBonusRules(axe.clickBonus, world, area, results, updateBest) + perRollBonusFired;
+  let clickBonusFired = (bonusesBlocked ? 0 : processClickBonusRules(axe.clickBonus, world, area, results, updateBest)) + perRollBonusFired;
 
   // Click-triggered bonus rolls from the equipped item, if any (same rule shape as axes)
-  if(equip){
+  if(!bonusesBlocked && equip){
     clickBonusFired += processClickBonusRules(ballAdjustedAxenadesRules(equip, 'clickBonus'), world, area, results, updateBest);
   }
 
@@ -7744,7 +8355,7 @@ function performClick(){
   }
 
   // Sunrays: every N clicks, add bonus rolls (e.g. GlowAxe every 75th click)
-  if(axe.sunrays && state.clickCount % axe.sunrays.everyNClicks === 0){
+  if(!bonusesBlocked && axe.sunrays && state.clickCount % axe.sunrays.everyNClicks === 0){
     for(let i=0;i<axe.sunrays.rolls;i++){
       const r = rollOnceForArea(world, area, axe.sunrays.luckMult);
       results.push(r);
@@ -8105,29 +8716,6 @@ initMobileAutoRollUI();
     const url = new URL(window.location.href);
     url.searchParams.set('_cb', Date.now().toString());
     window.location.href = url.toString();
-  });
-})();
-
-(function initStorageEngineChangeButton(){
-  const engineBtn = document.getElementById('storageEngineChangeBtn');
-  const choices = document.getElementById('storageEngineChangeChoices');
-  const toLegacyBtn = document.getElementById('storageEngineChangeToLegacy');
-  const toModernBtn = document.getElementById('storageEngineChangeToModern');
-  if(!engineBtn || !choices) return;
-
-  engineBtn.addEventListener('click', ()=>{
-    // Clear "don't ask again" so future launches prompt again too, matching the request that
-    // this button lets you "disable don't ask again" as well as switch right now.
-    setStorageEngineDontAsk(false);
-    choices.style.display = choices.style.display === 'flex' ? 'none' : 'flex';
-  });
-  if(toLegacyBtn) toLegacyBtn.addEventListener('click', ()=>{
-    choices.style.display = 'none';
-    showStorageEngineSwitchModal('legacy');
-  });
-  if(toModernBtn) toModernBtn.addEventListener('click', ()=>{
-    choices.style.display = 'none';
-    showStorageEngineSwitchModal('modern');
   });
 })();
 
@@ -8629,6 +9217,13 @@ async function resolveOfflineProgress(){
   // Perilous never generates idle rolls or offline-bonus results. Reset the baseline so leaving
   // it open cannot later be converted into gains after moving out of the area.
   if(isPerilousArea()){
+    state.lastSeenAt = Date.now();
+    dbSaveMeta();
+    return null;
+  }
+  // Roulette's "can't idle" curse: this game's only idle mechanic IS offline catch-up, so this
+  // fully disables it while active, same pattern as the Perilous guard just above.
+  if(rouletteCantIdle()){
     state.lastSeenAt = Date.now();
     dbSaveMeta();
     return null;
@@ -9138,14 +9733,13 @@ function showInitCrashGuard(err){
 }
 
 async function initInner(){
-  // STORAGE ENGINE CHOICE: must happen before dbLoadAll(), since dbLoadAll branches on it.
-  // Blocks (via an awaited Promise) until the player picks, unless a choice was already made
-  // AND "don't ask again" is set.
+  // STORAGE ENGINE CHOICE: silently forces Modern (with a one-time migration for any returning
+  // Legacy player) before dbLoadAll() runs, since dbLoadAll branches on it. No longer a
+  // player-facing choice — see ensureStorageEngineChosen().
   await ensureStorageEngineChosen();
 
-  // OFFLINE-ON-LEGACY GUARD: offline play is only supported on Modern (see offlineLegacyGuard
-  // markup for why). Checked here — after an engine choice exists, before dbLoadAll — so a cold
-  // launch that's already offline on Legacy is caught immediately rather than partially loading.
+  // Dead for every normal player post-migration (getStorageEngineChoice() is always 'modern' by
+  // this point) — only still meaningful if the hidden dev path has forced Legacy via the console.
   if(!navigator.onLine && getStorageEngineChoice() === 'legacy'){
     showOfflineLegacyGuard();
     return;
@@ -9215,6 +9809,12 @@ async function initInner(){
   renderBallsView();
   renderSettingsView();
   updateRouletteAvailability();
+
+  // If a Roulette run was left active (tab closed/refreshed mid-run), resuming it via dbLoadAll()
+  // already swapped state to the temp save — jump straight to the Roulette tab so this is
+  // immediately visible, rather than landing on the normal roll screen with no indication that
+  // the save now in play is the temp one.
+  if(isRouletteActive()) showView('roulette');
   setupConsumableBulkCraftControls();
   setupItemCategorySelect();
   updateStatStrip();
@@ -9295,6 +9895,13 @@ setInterval(async ()=>{
 // Perilous danger must progress at its specified 0.03-second cadence. The function measures real
 // elapsed time as well, so a backgrounded Perilous visit cannot be used to wait out the escape timer.
 setInterval(tickPerilousMeter, PERILOUS_METER_TICK_MS);
+
+// Roulette: bubble spawn/expiry timing (needs sub-second precision against a 1.5s window),
+// periodic snapshotting for the bubble-miss rollback, and live target-completion checks.
+setInterval(()=>{
+  rouletteTick();
+  if(currentView === 'roulette') renderRouletteView();
+}, 250);
 
 // Live countdowns and timed-effect recovery. All timer timestamps are persisted in meta, so this
 // loop rehydrates their UI/effects after a refresh instead of treating them as session-only state.
