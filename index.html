@@ -2937,6 +2937,7 @@ let state = {
   perilousVisit: null, // { meter, gains:{ inventoryKey:count }, startedAt } while currently risking Perilous
   trollRollHistory: [], // array of state.rolls snapshots at each troll-roll trigger, pruned to a 1,000-roll window
   roulette: null, // { debuffs:[wheel1Key,wheel2Key], target:{key,...}, startedAt, bubble:{...}, nextBubbleAt, snapshots:[...] } while a Roulette run is active — persisted to its own separate storage keys, see ROULETTE section
+  evilTokens: 0, // awarded on completing a Roulette run — see calculateEvilTokensReward(). Usage is still WIP.
   _rouletteForcedDefaultThisClick: false, // transient, scoped to exactly one performClick() call — see currentAxe()/currentEquip()
 };
 
@@ -3204,12 +3205,14 @@ function renderRouletteView(){
   if(!isRouletteActive()){
     const blackCount = (state.balls && state.balls.black) || 0;
     const canAfford = blackCount >= ROULETTE_COST_BLACK_BALLS;
+    const evilTokens = state.evilTokens || 0;
     el.innerHTML = `
       <p class="roulette-lede">Spin all three wheels at once for ${ROULETTE_COST_BLACK_BALLS} Black Balls. You'll get two curses to survive and one target to hit — clear it and everything you earned merges back into your real save. Walk away any time; nothing's lost except by getting ejected from Perilous the normal way, and you can pick the run back up here whenever you're ready.</p>
       <div class="roulette-cost-row">
         <button type="button" class="roulette-spin-btn" id="rouletteSpinBtn" ${canAfford ? '' : 'disabled'}>Spin</button>
         <span class="ball-cost"><img src="${BALL_BY_KEY.black.asset}" alt="Black ball"> ${blackCount.toLocaleString()} / ${ROULETTE_COST_BLACK_BALLS}</span>
-      </div>`;
+      </div>
+      <p class="roulette-abandon-note">😈 Evil Tokens: ${evilTokens.toLocaleString()} — earned by completing runs. What they're for is still being figured out.</p>`;
     const btn = document.getElementById('rouletteSpinBtn');
     if(btn) btn.addEventListener('click', ()=>{
       if(startRouletteSpin()){
@@ -3285,13 +3288,16 @@ const ROULETTE_WHEEL2 = [ // stat/item curses
   { key:'cant_idle',     label:"Can't Idle",                  chance:1/2 }, // most common; if this and everything above miss, the pass redoes
 ];
 
-const ROULETTE_WHEEL3 = [ // targets, checked rarest-to-commonest (first hit wins)
-  { key:'area100',    label:'100% An Area', chance:1/35 },
-  { key:'juniaxe',     label:'Unlock juni axe (1% power)', chance:1/25 },
-  { key:'uwin',        label:'Get "U Win" (excluding Sakura Tree)', chance:1/15 },
-  { key:'nanaxe',      label:'Craft nan.axe', chance:1/10 },
-  { key:'rarer250b',   label:'Catch Anything Rarer Than 1/250,000,000,000', chance:1/4 },
-  { key:'billionRolls',label:'Get 1,000,000,000 Rolls', chance:1/2 },
+const ROULETTE_WHEEL3 = [ // targets, checked rarest-to-commonest (first hit wins). "difficulty" is a
+  // hand-set score (not derived from the wheel odds above) used by the evil tokens formula — the
+  // wheel odds reflect how rare it is to be ASSIGNED a target, which isn't the same as how hard
+  // that target actually is to complete once assigned.
+  { key:'area100',    label:'100% An Area', chance:1/35, difficulty:5 },
+  { key:'juniaxe',     label:'Unlock juni axe (1% power)', chance:1/25, difficulty:20 },
+  { key:'uwin',        label:'Get "U Win" (excluding Sakura Tree)', chance:1/15, difficulty:15 },
+  { key:'nanaxe',      label:'Craft nan.axe', chance:1/10, difficulty:8 },
+  { key:'rarer250b',   label:'Catch Anything Rarer Than 1/250,000,000,000', chance:1/4, difficulty:6 },
+  { key:'billionRolls',label:'Get 1,000,000,000 Rolls', chance:1/2, difficulty:2 },
 ];
 
 const ROULETTE_AREA100_ELIGIBLE = ['Wasteland', 'Scary Land', 'ABC']; // every other area's rarest rank exceeds the 1/25b ceiling, or belongs to World 2 / is the All pool
@@ -3324,7 +3330,7 @@ function blankRouletteState(){
     superOptimize: state.superOptimize, errRedirectorUntil: null, doublinatorUntil: null,
     doublinatorCooldownUntil: null, boiConsumableUses: 0, balls: blankBallCounts(),
     spawnedBalls: [], ballUpgrades: {}, ballAutoUse: {}, stablizerUntil: null,
-    perilousVisit: null, trollRollHistory: [], roulette: null, _rouletteForcedDefaultThisClick: false,
+    perilousVisit: null, trollRollHistory: [], roulette: null, _rouletteForcedDefaultThisClick: false, evilTokens: 0,
   };
   return fresh;
 }
@@ -3372,6 +3378,26 @@ function rouletteHasDebuff(debuffList, key){
   return list.includes(key);
 }
 
+// Evil tokens reward, paid out once on successfully completing a Roulette run's target:
+//   random(2.00-5.00) x floor((1 / wheel1's luckMult) / 2) x (1 / wheel2's chance) / 1.5 x target's difficulty
+// "Rarity" of the wheel-2 curse and "how hard the requirement is" (the wheel-3 target) are both
+// fixed numbers set on the wheel data itself — wheel2Option.chance and wheel3Option.difficulty —
+// not derived from anything that happened during the run itself. Usage of evil tokens is still WIP.
+function calculateEvilTokensReward(wheelResults){
+  const w1 = ROULETTE_WHEEL1.find(o => o.key === wheelResults.wheel1);
+  const w2 = ROULETTE_WHEEL2.find(o => o.key === wheelResults.wheel2);
+  const w3 = ROULETTE_WHEEL3.find(o => o.key === wheelResults.wheel3);
+  if(!w1 || !w2 || !w3) return 0;
+
+  const randomFactor = 2 + Math.random() * 3; // 2.00-5.00
+  const luckFactor = Math.floor((1 / w1.luckMult) / 2);
+  const secondDebuffRarity = 1 / w2.chance;
+  const difficultyFactor = w3.difficulty;
+
+  const raw = randomFactor * luckFactor * secondDebuffRarity / 1.5 * difficultyFactor;
+  return Math.max(0, Math.round(raw));
+}
+
 // Merges the temp save's inventory/rolls/balls into the MAIN save — read fresh from its own
 // storage keys (never from any in-memory copy, since none is kept) — writes the merged result
 // back to those same main-save keys, then loads it as the live state. Called once the Wheel 3
@@ -3398,6 +3424,10 @@ function completeRouletteTarget(){
   mergedMeta.balls = { ...blankBallCounts(), ...(mainMeta && mainMeta.balls ? mainMeta.balls : {}) };
   for(const color of Object.keys(mergedMeta.balls)) mergedMeta.balls[color] += (temp.balls[color] || 0);
   if(temp.best && (!mergedMeta.best || temp.best.finalRng > mergedMeta.best.finalRng)) mergedMeta.best = temp.best;
+
+  const evilTokensAwarded = calculateEvilTokensReward(temp.roulette.wheelResults);
+  mergedMeta.evilTokens = (mainMeta && Number.isFinite(mainMeta.evilTokens) ? mainMeta.evilTokens : 0) + evilTokensAwarded;
+
   mergedMeta.roulette = null;
 
   modernEngineSaveMeta(mergedMeta);
@@ -3408,7 +3438,7 @@ function completeRouletteTarget(){
   state.inventory = mainInventory;
 
   renderRouletteBubble(); // clears any leftover bubble overlay from the just-ended temp save
-  alertUser('Roulette target complete! Everything earned has been merged into your main save.');
+  alertUser(`Roulette target complete! Everything earned has been merged into your main save, plus ${evilTokensAwarded.toLocaleString()} Evil Tokens.`);
   renderWorldTabs(); renderAreaSelect(); buildIndexAccordion(); renderInventory(); renderAxeStrip();
   refreshLiveViews();
   updateStatStrip();
@@ -4729,6 +4759,7 @@ function buildMetaSnapshot(){
     stablizerUntil: state.stablizerUntil,
     perilousVisit: state.perilousVisit,
     trollRollHistory: state.trollRollHistory,
+    evilTokens: state.evilTokens,
   };
 }
 
@@ -4968,6 +4999,7 @@ function applyMetaToState(meta){
   state.perilousVisit = (meta.perilousVisit && typeof meta.perilousVisit === 'object') ? meta.perilousVisit : null;
   state.trollRollHistory = Array.isArray(meta.trollRollHistory) ? meta.trollRollHistory : [];
   state.roulette = (meta.roulette && typeof meta.roulette === 'object') ? meta.roulette : null;
+  state.evilTokens = Number.isFinite(meta.evilTokens) ? meta.evilTokens : 0;
   normalizeBallState();
   saveLoadedSuccessfully = true;
 }
@@ -8068,8 +8100,7 @@ const BALL_UPGRADES = [
       { name:'Catastrophe', area:'Perilous', amount:20 },
       { name:'Armageddon', area:'Perilous', amount:12 },
       { name:'Incessant', area:'Perilous', amount:50 },
-      { ball:'pink', amount:25 },
-      { ball:'black', amount:5 },
+      { ball:'black', amount:3 },
       { name:'Aphanisis', area:'Perilous', amount:1 },
     ], desc:'unlock the machine!' },
 ];
