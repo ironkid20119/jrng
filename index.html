@@ -594,7 +594,10 @@
      own shake timing, so characters shake out of sync with each other instead of the whole word
      moving as one unit. text-shadow here is shared/static across all characters. */
   .t-wipehype{ font-family:var(--display); font-weight:900; letter-spacing:0.01em; text-shadow:0 0 24px rgba(255,47,176,0.6), 0 0 36px rgba(255,255,255,0.3); }
-  .t-wipehype .wipehype-char{ display:inline-block; animation-name:wipehypeshake; animation-timing-function:linear; animation-iteration-count:infinite; }
+  /* Generic (not scoped to .t-wipehype) so the Extreme VARIANT's per-character spans — which live
+     under whatever tier class the rank normally has, not .t-wipehype — get the same inline-block
+     shake-animation plumbing. Only the actual color/gradient differs between the two uses. */
+  .wipehype-char{ display:inline-block; animation-name:wipehypeshake; animation-timing-function:linear; animation-iteration-count:infinite; }
   @keyframes wipehypeshake{
     0%{ transform:translate(0,0) rotate(0deg); }
     15%{ transform:translate(-3px,2px) rotate(-6deg); }
@@ -619,28 +622,68 @@
   @keyframes hueflow{ from{ background-position:0% 50%;} to{ background-position:300% 50%; } }
   @keyframes jitter{ 0%{ transform:translate(0,0); } 50%{ transform:translate(1px,-1px); } 100%{ transform:translate(-1px,1px); } }
 
-  /* Variant name rendering: tier color shows through at ~50%, variant tints on top */
-  .vwrap{ position:relative; display:inline-block; }
-  .vwrap .vlayer{
-    position:absolute; inset:0; display:inline-block;
-    pointer-events:none; opacity:0.52;
-    mix-blend-mode:screen;
+  /* Variant name rendering: previously a two-layer overlay trick (a transparent tint span
+     absolutely-positioned on top of the real text) meant to blend with the tier's own color
+     underneath — but that positioning was fragile and could render as a second line of text
+     stacked below the real one instead of overlapping it. Replaced with a single layer: each
+     variant class is applied directly to the one visible text span and fully OWNS the color
+     (and animation, where relevant) rather than trying to tint whatever's under it. */
+  .v-weird{
+    font-family:var(--display); font-weight:800;
+    background:linear-gradient(120deg,#ff6ec7,#c299ff,#8ab4ff,#ff6ec7);
+    background-size:280% 100%;
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent; color:transparent;
+    animation:hueflow 3.2s linear infinite;
   }
-  .v-weird  .vlayer{ filter:saturate(1.4) hue-rotate(14deg); background:inherit; background-clip:text; -webkit-background-clip:text; }
-  .v-odd    .vlayer{ font-style:italic; filter:saturate(1.6) hue-rotate(-18deg); background:inherit; background-clip:text; -webkit-background-clip:text; }
-  .v-rainbow .vlayer{
+  .v-odd{
+    font-family:var(--display); font-weight:700; font-style:italic;
+    background:linear-gradient(120deg,#ffb347,#ff5c8a,#ffb347);
+    background-size:280% 100%;
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent; color:transparent;
+    animation:hueflow 2.6s linear infinite reverse;
+  }
+  .v-rainbow{
+    font-family:var(--display); font-weight:800;
     background:linear-gradient(90deg,#ff0055,#ff9900,#ffee00,#33ff77,#00e5ff,#7c5cff,#ff5ca8,#ff0055);
     background-size:400% 100%;
     -webkit-background-clip:text; background-clip:text;
     -webkit-text-fill-color:transparent; color:transparent;
     animation:hueflow 2s linear infinite;
   }
-  .v-grayscale .vlayer{
-    background:none;
-    -webkit-text-fill-color:initial;
-    color:#d0d0d0;
-    filter:grayscale(0.7);
+  .v-grayscale{
     font-family:var(--mono); letter-spacing:0.02em;
+    color:#d0d0d0; filter:grayscale(0.7);
+  }
+  /* Frozen (chains after Grayscale): repeating cyan/white per-character isn't needed here since
+     this is a flat-color variant like Grayscale, not per-character like WIPE HYPE — a two-stop
+     hard-edged repeating gradient across the string gives the alternating cyan/white feel instead. */
+  .v-frozen{
+    font-family:var(--mono); letter-spacing:0.02em;
+    background:repeating-linear-gradient(90deg,#7fe9ff 0,#7fe9ff 1ch,#ffffff 1ch,#ffffff 2ch);
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent; color:transparent;
+    text-shadow:0 0 14px rgba(127,233,255,0.55);
+  }
+  /* Extreme (chains after Frozen): explicitly reuses Insanity's ACTUAL tier gradient colors
+     (#ff003c / #1a0008, matching .t-insanity exactly, not a reinvented palette) + WIPE HYPE's
+     per-character violent shake, applied here as a variant rather than a tier. Per-character
+     shake needs actual per-character spans (see wipeHypeCharsHtml, reused for this variant too),
+     not just a CSS class, so the shake spans are generated at the HTML layer in rankNameHtml. */
+  .v-extreme{
+    font-family:var(--display); font-weight:900;
+    text-shadow:0 0 26px rgba(255,0,60,0.6);
+  }
+  .v-extreme .wipehype-char{
+    background:linear-gradient(90deg,#ff003c,#1a0008,#ff003c);
+    background-size:300% 100%;
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent; color:transparent;
+    animation-name:wipehypeshake, hueflow;
+    animation-duration:0.16s, 1.4s;
+    animation-timing-function:linear, linear;
+    animation-iteration-count:infinite, infinite;
   }
 
   .glow-epic{ text-shadow:0 0 22px rgba(168,85,247,0.45); }
@@ -679,6 +722,10 @@
   html.low-stim .t-insanity,
   html.low-stim .t-impossible,
   html.low-stim .t-wipehype,
+  html.low-stim .v-weird,
+  html.low-stim .v-odd,
+  html.low-stim .v-rainbow,
+  html.low-stim .v-extreme,
   html.low-stim [style*="hueflow"]{
     animation:none !important;
     background:none !important;
@@ -686,9 +733,12 @@
     color:var(--accent) !important;
     text-shadow:none !important;
   }
-  html.low-stim .t-wipehype .wipehype-char{
+  html.low-stim .t-wipehype .wipehype-char,
+  html.low-stim .v-extreme .wipehype-char{
     animation:none !important;
     transform:none !important;
+    background:none !important;
+    -webkit-text-fill-color:var(--accent) !important;
     color:var(--accent) !important;
   }
   html.low-stim .flash-bg.go{
@@ -1429,12 +1479,11 @@ function rankVisualStyleAttr(name, tierKey){
   return `${base} color:${v.colorCss};`;
 }
 
-// FONT ONLY — no color/background. Used for the variant .vlayer overlay, which must render text
-// at the exact same glyph shape/width as the base layer underneath it (same font-family/weight/
-// style/letter-spacing) so the two layers align pixel-for-pixel. The variant's own CSS class
-// (.v-weird, .v-rainbow, etc.) then supplies ONLY the color/tint on top of this matching shape —
-// without this, the overlay would render in some other ambient font and visibly peek out from
-// behind the base text as extra, misaligned characters.
+// FONT ONLY — no color/background. Used when rendering a rank that has a variant: the variant's
+// own CSS class (.v-weird, .v-rainbow, etc.) needs to fully own color/background/animation on the
+// single text span, and an inline color/background here would out-specificity the variant class
+// and silently hide it — so only the per-rank font choice (family/weight/style/letter-spacing)
+// is applied inline, leaving color entirely to the variant class. See rankNameHtml.
 function rankVisualFontOnlyStyleAttr(name){
   if(state.lowDetailMode || state.superOptimize || isLegacyColorFontEnabled()) return '';
   // tierKey doesn't affect font selection (only color/gradient does), so any tierKey value works
@@ -1448,6 +1497,8 @@ const VARIANT_CHAIN = [
   { key:'odd',       label:'Odd',       rng:20, mult:20, cls:'v-odd' },
   { key:'rainbow',   label:'Rainbow',   rng:10, mult:10, cls:'v-rainbow' },
   { key:'grayscale', label:'Grayscale', rng:25, mult:25, cls:'v-grayscale' },
+  { key:'frozen',    label:'Frozen',    rng:13.3333333333, mult:13.3333333333, cls:'v-frozen' }, // chain total through here: 1/1,000,000
+  { key:'extreme',   label:'Extreme',   rng:1000, mult:1000, cls:'v-extreme' }, // chain total through here: 1/1,000,000,000
 ];
 
 function rollVariant(){
@@ -2045,9 +2096,10 @@ const WORLD0 = {
         { name: 'Portable Rechargable Axenades', rng: 750000000, requirement: 'Have Portable Rechargable Axenades equipped', condition: () => currentEquip() && currentEquip().key === 'axenades' },
         { name: 'Trollstone', rng: 3, requirement: 'Has a chance to appear next roll if youve been troll rolled', condition: () => state.trollstoneEligible },
         { 
-          name: 'U Win', rng: 1500000000, requirement: 'Can only spawn if you have found every OTHER rank rarer than or equal to 1/1,000,000,000 in this area',
+          name: 'U Win', rng: 1500000000, requirement: 'Can only spawn if you have found every OTHER rank rarer than or equal to 1/1,000,000,000 in this area (Sakura Tree, Fishy Starsystem, craziest TROLLSTONE, Specific Minute, and Portable Rechargable Axenades are excluded — too extreme to require)',
           condition: (world, area, opts) => {
-            for(const r of area.ranks) if(r.name !== 'U Win' && r.rng < 1000000000 && !hasEverFoundRank(area.label, r.name)) return false;
+            const uWinExcluded = ['Sakura Tree', 'Fishy Starsystem', 'craziest TROLLSTONE', 'Specific Minute', 'Portable Rechargable Axenades'];
+            for(const r of area.ranks) if(r.name !== 'U Win' && !uWinExcluded.includes(r.name) && r.rng < 1000000000 && !hasEverFoundRank(area.label, r.name)) return false;
             return true;
           }
         },
@@ -4160,8 +4212,10 @@ const ITEM_ID_TABLE = [
   [388,"Cinnamon","the scary evil gigantic house sized cinnamon box"]
 ];
 
-// variantId: 1 = normal (no variant), 2..5 = VARIANT_CHAIN index+2. Also permanent/versioned —
-// VARIANT_CHAIN's current order (weird, odd, rainbow, grayscale) defines 2,3,4,5 respectively.
+// variantId: 1 = normal (no variant), 2..7 = VARIANT_CHAIN index+2. Also permanent/versioned —
+// VARIANT_CHAIN's current order (weird, odd, rainbow, grayscale, frozen, extreme) defines 2-7
+// respectively. New variants must always be APPENDED to VARIANT_CHAIN, never inserted/reordered,
+// or every existing save's stored variantId would silently point at the wrong variant.
 const VARIANT_ID_NORMAL = 1;
 function variantKeyToId(variantKey){
   if(!variantKey) return VARIANT_ID_NORMAL;
@@ -5674,7 +5728,10 @@ function rollOnce(opts){
 // character position + rank name (not Math.random()) so the same rank always renders the same way
 // rather than re-randomizing on every re-render.
 const WIPE_HYPE_COLORS = ['#ff2fb0', '#ffffff', '#ff7fd0', '#ffffff'];
-function wipeHypeCharsHtml(text){
+// Shared by the WIPE HYPE tier (pink/white per-character shake) and the Extreme variant (Insanity
+// gradient + shake). skipColor=true for Extreme: its gradient lives entirely in the .v-extreme
+// .wipehype-char CSS class, and an inline per-character color here would out-specificity and hide it.
+function wipeHypeCharsHtml(text, skipColor){
   let out = '';
   for(let i = 0; i < text.length; i++){
     const ch = text[i];
@@ -5683,31 +5740,33 @@ function wipeHypeCharsHtml(text){
     const color = WIPE_HYPE_COLORS[h % WIPE_HYPE_COLORS.length];
     const dur = (0.1 + (h % 7) * 0.02).toFixed(2); // 0.10s–0.22s, per-char varied
     const delay = ((h % 11) * 0.017).toFixed(3);    // desynced start so chars don't shake in unison
-    out += `<span class="wipehype-char" style="color:${color}; animation-duration:${dur}s; animation-delay:-${delay}s;">${ch}</span>`;
+    const colorStyle = skipColor ? '' : `color:${color}; `;
+    out += `<span class="wipehype-char" style="${colorStyle}animation-duration:${dur}s; animation-delay:-${delay}s;">${ch}</span>`;
   }
   return out;
 }
 
 // Renders a rank name with: tier class (for glow/structural styling) + this rank's own unique
-// deterministic color/font (inline style, wins over the tier's flat color) + 50% variant overlay.
+// deterministic color/font (inline style, wins over the tier's flat color) + variant override.
 // displayText optionally overrides what's actually shown (e.g. "???" for a mystery-hidden rank)
 // while the color/font are still deterministically derived from the REAL name — so once a 1b+
 // rank is finally revealed, its "???" placeholder already looked/felt exactly like its true self.
 function rankNameHtml(name, tierCls, variant, extraCls, tierKey, displayText){
   extraCls = extraCls || '';
   const rawText = displayText != null ? displayText : name;
-  const text = tierKey === 'wipehype' && isLegacyColorFontEnabled() && !(state.lowDetailMode || state.superOptimize)
-    ? wipeHypeCharsHtml(escapeHtml(rawText))
+  const usePerCharShake = (tierKey === 'wipehype' && isLegacyColorFontEnabled()) || (variant && variant.key === 'extreme');
+  const isExtremeVariant = !!(variant && variant.key === 'extreme');
+  const text = usePerCharShake && !(state.lowDetailMode || state.superOptimize)
+    ? wipeHypeCharsHtml(escapeHtml(rawText), isExtremeVariant)
     : escapeHtml(rawText);
-  const styleAttr = tierKey ? ` style="${rankVisualStyleAttr(name, tierKey)}"` : '';
+  // When a variant is present, its class must fully own color/background/animation — an inline
+  // style from rankVisualStyleAttr sets background/color too, and inline styles beat classes on
+  // specificity, which would silently make the variant invisible. So variants get the FONT-ONLY
+  // style (family/weight/style/letter-spacing, no color) instead, leaving color entirely to the
+  // variant's CSS class.
+  const styleAttr = tierKey ? ` style="${variant ? rankVisualFontOnlyStyleAttr(name) : rankVisualStyleAttr(name, tierKey)}"` : '';
   if(!variant) return `<span class="${tierCls} ${extraCls}"${styleAttr}>${text}</span>`;
-  // vwrap carries variant class for CSS scoping; inner text has this rank's own color/font; vlayer
-  // overlays the variant tint on top. The vlayer MUST share the exact same font-family/weight/
-  // style/letter-spacing as the base layer — otherwise the two text layers render at different
-  // glyph widths and the mismatch shows up as extra/ghosted text bleeding out from behind the
-  // overlay in the wrong font. Only the color/background is variant-specific; font must match.
-  const fontOnlyStyle = tierKey ? ` style="${rankVisualFontOnlyStyleAttr(name)}"` : '';
-  return `<span class="vwrap ${variant.cls} ${extraCls}"><span class="${tierCls}"${styleAttr}>${text}</span><span class="vlayer"${fontOnlyStyle} aria-hidden="true">${text}</span></span>`;
+  return `<span class="${tierCls} ${variant.cls} ${extraCls}"${styleAttr}>${text}</span>`;
 }
 
 function fmtRng(n){
@@ -6708,7 +6767,7 @@ function buildSecretsAccordion(){
 
     const variantRows = variantResults.map(({v, found}) => `
       <div class="rank-row ${found?'':'mystery-row'}" style="padding-left:16px; opacity:0.9;">
-        <span class="rname ${found?'t-secret vwrap '+v.cls:''}" style="font-size:13px;">${found ? `🔒 ↳ ${secret.name} ✦` : `↳ ???`}</span>
+        <span class="rname ${found?'t-secret '+v.cls:''}" style="font-size:13px;">${found ? `🔒 ↳ ${secret.name} ✦` : `↳ ???`}</span>
         <span class="rrng">${found ? `??? · Secret (${v.label})` : '??? · ???'}</span>
       </div>
     `).join('');
@@ -6788,7 +6847,7 @@ function buildIndexAccordion(){
       }
       for(const v of VARIANT_CHAIN){
         if(isSecretDiscovered(secret.key, v.key)){
-          rowsHtml += `<div class="rank-row secret-row" style="padding-left:16px; opacity:0.9;"><span class="rname t-secret vwrap ${v.cls}" style="font-size:13px;">🔒 ↳ ${secret.name} ✦</span><span class="rrng">??? · Secret (${v.label})</span></div>`;
+          rowsHtml += `<div class="rank-row secret-row" style="padding-left:16px; opacity:0.9;"><span class="rname t-secret ${v.cls}" style="font-size:13px;">🔒 ↳ ${secret.name} ✦</span><span class="rrng">??? · Secret (${v.label})</span></div>`;
         }
       }
     }
