@@ -1450,3 +1450,216 @@ if ("serviceWorker" in navigator) {
     });
   });
 }
+
+/* ============================================================
+   GAMEPAD SUPPORT — Joy-Con, Xbox, PS4/5, and anything else the browser's Gamepad API can see.
+   Never announced anywhere in the UI copy — it just works the moment a controller is connected,
+   with a small icon as the only acknowledgment. Standard Gamepad API only; no per-controller
+   drivers or special-casing needed since Chrome/Edge/Safari all normalize button/axis layout to
+   the "standard" gamepad mapping for anything that reports one (which covers all three).
+   ============================================================ */
+(function initGamepadSupport() {
+  const STANDARD_BUTTONS = {
+    0: "face-down", 1: "face-right", 2: "face-left", 3: "face-up", // A/B/X/Y, X/O/□/△, etc.
+    4: "l1", 5: "r1", 6: "l2", 7: "r2",
+    8: "select", 9: "start",
+    12: "dpad-up", 13: "dpad-down", 14: "dpad-left", 15: "dpad-right",
+  };
+  const FACE_BUTTONS = ["face-down", "face-right", "face-left", "face-up"];
+  const STICK_DEADZONE = 0.5;
+  const REPEAT_DELAY_MS = 380; // initial hold-to-repeat delay for held D-pad/stick directions
+  const REPEAT_RATE_MS = 140;
+
+  let connectedPads = new Map(); // gamepad.index -> true, just for the indicator + "any pad connected" check
+  let prevButtonStates = new Map(); // gamepad.index -> array of bool, for press-edge detection
+  let focusEl = null;
+  let lastDirection = null;
+  let lastDirectionAt = 0;
+  let rafHandle = null;
+
+  function updateIndicator() {
+    let el = document.getElementById("gamepadIndicator");
+    if (connectedPads.size === 0) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "gamepadIndicator";
+      el.textContent = "🎮";
+      el.style.cssText = "position:fixed; top:8px; right:8px; z-index:99996; font-size:16px; opacity:0.55; pointer-events:none; filter:drop-shadow(0 0 3px rgba(0,0,0,0.6));";
+      document.body.appendChild(el);
+    }
+  }
+
+  window.addEventListener("gamepadconnected", e => {
+    connectedPads.set(e.gamepad.index, true);
+    updateIndicator();
+    if (!rafHandle) rafHandle = requestAnimationFrame(pollGamepads);
+  });
+  window.addEventListener("gamepaddisconnected", e => {
+    connectedPads.delete(e.gamepad.index);
+    prevButtonStates.delete(e.gamepad.index);
+    updateIndicator();
+  });
+
+  // Any element a controller could reasonably land on: nav buttons (including the scroll
+  // arrows), roulette subtabs, and anything with the shared .btn family of classes, but only
+  // ones that are actually visible right now (offscreen nav buttons, hidden subtabs, and
+  // display:none panels are excluded) — this is re-queried fresh every navigation press, so it
+  // stays correct across re-renders without needing any per-view hardcoded list.
+  function focusableElements() {
+    const all = Array.from(document.querySelectorAll(
+      '.nav-btn:not(.nav-btn-offscreen), .nav-scroll-arrow, .roulette-subtab-btn, .btn, .seg-btn, .area-btn, .roulette-spin-btn, .cache-reset-btn, button.folder-row, button.acc-head'
+    ));
+    return all.filter(el => {
+      if (el.hidden || el.disabled) return false;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return false;
+      const style = window.getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+      // Exclude elements inside a view that isn't the active one.
+      const view = el.closest(".view");
+      if (view && !view.classList.contains("active")) return false;
+      // Exclude elements inside a Roulette subtab panel that's currently display:none.
+      const subtabPanel = el.closest("#rouletteContent, #miningContent, #lorebookContent");
+      if (subtabPanel && window.getComputedStyle(subtabPanel).display === "none") return false;
+      return true;
+    });
+  }
+
+  function ensureFocus() {
+    const els = focusableElements();
+    if (els.length === 0) { focusEl = null; return null; }
+    if (focusEl && els.includes(focusEl)) return focusEl;
+    // Default to the roll button if it's on screen (the most common starting point), else the
+    // first focusable element in reading order.
+    focusEl = els.find(el => el.id === "rollBtn") || els[0];
+    return focusEl;
+  }
+
+  function setFocus(el) {
+    if (focusEl) focusEl.classList.remove("gamepad-focus");
+    focusEl = el;
+    if (focusEl) {
+      focusEl.classList.add("gamepad-focus");
+      focusEl.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }
+
+  // Nearest-neighbor focus movement: among all focusable elements roughly in the pressed
+  // direction from the current one, pick whichever is closest by straight-line distance. This
+  // works generically across every view without any hardcoded per-page layout.
+  function moveFocus(direction) {
+    const current = ensureFocus();
+    if (!current) return;
+    const currentRect = current.getBoundingClientRect();
+    const cx = currentRect.left + currentRect.width / 2;
+    const cy = currentRect.top + currentRect.height / 2;
+    const candidates = focusableElements().filter(el => el !== current);
+    let best = null, bestScore = Infinity;
+    for (const el of candidates) {
+      const r = el.getBoundingClientRect();
+      const ex = r.left + r.width / 2, ey = r.top + r.height / 2;
+      const dx = ex - cx, dy = ey - cy;
+      let inDirection = false;
+      if (direction === "up") inDirection = dy < -4;
+      if (direction === "down") inDirection = dy > 4;
+      if (direction === "left") inDirection = dx < -4;
+      if (direction === "right") inDirection = dx > 4;
+      if (!inDirection) continue;
+      // Penalize perpendicular drift so moving "down" prefers something roughly below, not
+      // diagonally far off to the side, while still allowing some slack for staggered grids.
+      const primary = direction === "up" || direction === "down" ? Math.abs(dy) : Math.abs(dx);
+      const secondary = direction === "up" || direction === "down" ? Math.abs(dx) : Math.abs(dy);
+      const score = primary + secondary * 2;
+      if (score < bestScore) { bestScore = score; best = el; }
+    }
+    if (best) setFocus(best);
+  }
+
+  function activateFocus() {
+    const current = ensureFocus();
+    if (current) current.click();
+  }
+
+  // L1/R1 cycle the main bottom-nav tabs directly, independent of D-pad focus — the most natural
+  // controller mapping for switching tabs, matching the existing scroll-arrow behavior.
+  function cycleNavTab(delta) {
+    const buttons = navVisibleButtons();
+    if (buttons.length === 0) return;
+    const idx = buttons.findIndex(b => b.dataset.view === currentView);
+    const nextIdx = ((idx === -1 ? 0 : idx) + delta + buttons.length) % buttons.length;
+    showView(buttons[nextIdx].dataset.view);
+  }
+
+  function pollGamepads() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const now = Date.now();
+    let anyConnected = false;
+
+    for (const pad of pads) {
+      if (!pad) continue;
+      anyConnected = true;
+      const prev = prevButtonStates.get(pad.index) || [];
+      const curr = pad.buttons.map(b => b.pressed);
+
+      for (let i = 0; i < curr.length; i++) {
+        const wasPressed = !!prev[i];
+        const isPressed = curr[i];
+        if (isPressed && !wasPressed) {
+          const name = STANDARD_BUTTONS[i];
+          if (!name) continue;
+          if (name === "l1") cycleNavTab(-1);
+          else if (name === "r1") cycleNavTab(1);
+          else if (name === "dpad-up") { moveFocus("up"); lastDirection = "up"; lastDirectionAt = now; }
+          else if (name === "dpad-down") { moveFocus("down"); lastDirection = "down"; lastDirectionAt = now; }
+          else if (name === "dpad-left") { moveFocus("left"); lastDirection = "left"; lastDirectionAt = now; }
+          else if (name === "dpad-right") { moveFocus("right"); lastDirection = "right"; lastDirectionAt = now; }
+          else if (FACE_BUTTONS.includes(name)) {
+            // On the Roll view, any face button mashes Roll directly — the whole point of this.
+            if (currentView === "roll" && document.getElementById("rollBtn")) {
+              document.getElementById("rollBtn").click();
+            } else {
+              activateFocus();
+            }
+          }
+        }
+      }
+      prevButtonStates.set(pad.index, curr);
+
+      // Left stick also moves focus, treated the same as D-pad taps (press-edge + hold-repeat),
+      // not continuous per-frame movement, so a full stick push doesn't fly across the screen.
+      const [lx, ly] = [pad.axes[0] || 0, pad.axes[1] || 0];
+      let stickDir = null;
+      if (ly < -STICK_DEADZONE) stickDir = "up";
+      else if (ly > STICK_DEADZONE) stickDir = "down";
+      else if (lx < -STICK_DEADZONE) stickDir = "left";
+      else if (lx > STICK_DEADZONE) stickDir = "right";
+      if (stickDir) {
+        const held = stickDir === lastDirection;
+        const elapsed = now - lastDirectionAt;
+        if (!held || (elapsed > REPEAT_DELAY_MS && elapsed % REPEAT_RATE_MS < 20)) {
+          moveFocus(stickDir);
+          lastDirection = stickDir;
+          lastDirectionAt = held ? lastDirectionAt : now;
+        }
+      } else if (lastDirection && ["up", "down", "left", "right"].includes(lastDirection)) {
+        lastDirection = null;
+      }
+    }
+
+    if (anyConnected) ensureFocus();
+    rafHandle = requestAnimationFrame(pollGamepads);
+  }
+
+  // Some browsers fire gamepadconnected only on first input rather than at page load if a
+  // controller was already connected before the page opened — polling starts immediately if any
+  // pad is already present, and gamepadconnected above covers pads connected afterward.
+  const existing = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (const pad of existing) {
+    if (pad) { connectedPads.set(pad.index, true); }
+  }
+  updateIndicator();
+  if (connectedPads.size > 0) rafHandle = requestAnimationFrame(pollGamepads);
+})();

@@ -824,10 +824,32 @@
     backdrop-filter:blur(14px);
     border-top:1px solid var(--border);
     display:flex;
+    align-items:stretch;
     z-index:20;
   }
-  .nav-btn{
+  .nav-btn-window{
     flex:1;
+    display:flex;
+    overflow:hidden;
+    min-width:0;
+  }
+  .nav-scroll-arrow{
+    flex:0 0 34px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:none;
+    border:none;
+    color:var(--text-faint);
+    font-size:20px;
+    font-weight:700;
+    cursor:pointer;
+    transition:color .15s ease, opacity .15s ease;
+  }
+  .nav-scroll-arrow:disabled{ opacity:0.25; cursor:default; }
+  .nav-scroll-arrow:not(:disabled):active{ color:var(--text); transform:scale(0.92); }
+  .nav-btn{
+    flex:0 0 calc(100% / 3);
     display:flex;
     flex-direction:column;
     align-items:center;
@@ -843,8 +865,10 @@
     letter-spacing:0.02em;
     transition:color .15s ease;
   }
+  .nav-btn.nav-btn-offscreen{ display:none; }
   .nav-btn .icon{ font-size:19px; line-height:1; }
   .nav-btn.active{ color:var(--text); }
+  .gamepad-focus{ outline:2px solid var(--accent) !important; outline-offset:2px; border-radius:6px; }
   .nav-btn.active .icon{ filter:drop-shadow(0 0 6px rgba(124,92,255,0.7)); }
   .nav-btn:active{ transform:scale(0.96); }
 
@@ -894,6 +918,14 @@
   .ball-upgrade-card.owned{ border-color:rgba(34,197,94,.6); box-shadow:inset 0 0 0 1px rgba(34,197,94,.12); }
 
   /* ROULETTE */
+  .roulette-subtabs{ display:flex; gap:8px; margin-bottom:16px; border-bottom:1px solid var(--border); }
+  .roulette-subtab-btn{
+    background:none; border:none; border-bottom:2px solid transparent;
+    color:var(--text-faint); font-family:var(--sans); font-size:13px; font-weight:700;
+    padding:8px 4px 10px; cursor:pointer; transition:color .15s ease, border-color .15s ease;
+  }
+  .roulette-subtab-btn.active{ color:var(--text); border-bottom-color:var(--accent); }
+  .roulette-subtab-btn:not(.active):hover{ color:var(--text-dim); }
   .roulette-lede{ color:var(--text-dim); line-height:1.55; margin-bottom:16px; }
   .roulette-cost-row{ display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
   .roulette-spin-btn{

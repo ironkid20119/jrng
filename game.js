@@ -3597,7 +3597,8 @@ const BALL_UPGRADE_LIMITS = {
   doubleChance: 5,
   offlineTickspeed: 5,
   expoballs: 5,
-  holdToClick: 5
+  holdToClick: 5,
+  moreWatergun: 7
 };
 
 function blankBallCounts() {
@@ -3954,6 +3955,56 @@ function rouletteTargetDescription(target) {
   return opt.label + ".";
 }
 
+const MINING_LOREBOOK_UNLOCK_COST = 12500;
+
+function hasMiningLorebookUnlocked() {
+  return !!(state.ballUpgrades && state.ballUpgrades.miningLorebook);
+}
+
+function purchaseMiningLorebookUnlock() {
+  if (hasMiningLorebookUnlocked()) return false;
+  if ((state.evilTokens || 0) < MINING_LOREBOOK_UNLOCK_COST) return false;
+  state.evilTokens -= MINING_LOREBOOK_UNLOCK_COST;
+  if (!state.ballUpgrades) state.ballUpgrades = {};
+  state.ballUpgrades.miningLorebook = true;
+  dbSaveMeta();
+  return true;
+}
+
+let currentRouletteSubtab = "roulette";
+function updateRouletteSubtabAvailability() {
+  const unlocked = hasMiningLorebookUnlocked();
+  document.querySelectorAll('.roulette-subtab-btn[data-subtab="mining"], .roulette-subtab-btn[data-subtab="lorebook"]').forEach(b => {
+    b.hidden = !unlocked;
+  });
+  if (!unlocked && currentRouletteSubtab !== "roulette") showRouletteSubtab("roulette");
+}
+function showRouletteSubtab(name) {
+  if ((name === "mining" || name === "lorebook") && !hasMiningLorebookUnlocked()) name = "roulette";
+  currentRouletteSubtab = name;
+  document.querySelectorAll(".roulette-subtab-btn").forEach(b => b.classList.toggle("active", b.dataset.subtab === name));
+  document.getElementById("rouletteContent").style.display = name === "roulette" ? "" : "none";
+  document.getElementById("miningContent").style.display = name === "mining" ? "" : "none";
+  document.getElementById("lorebookContent").style.display = name === "lorebook" ? "" : "none";
+  if (name === "mining") renderMiningView();
+  if (name === "lorebook") renderLorebookView();
+}
+document.querySelectorAll(".roulette-subtab-btn").forEach(btn => {
+  btn.addEventListener("click", () => showRouletteSubtab(btn.dataset.subtab));
+});
+
+// Both WIP — placeholder content until built out.
+function renderMiningView() {
+  const el = document.getElementById("miningContent");
+  if (!el) return;
+  el.innerHTML = `<p class="roulette-lede">⛏️ Mining is still WIP — nothing here yet.</p>`;
+}
+function renderLorebookView() {
+  const el = document.getElementById("lorebookContent");
+  if (!el) return;
+  el.innerHTML = `<p class="roulette-lede">📓 Lorebook is still WIP — nothing here yet.</p>`;
+}
+
 function renderRouletteView() {
   const el = document.getElementById("rouletteContent");
   if (!el) return;
@@ -3961,7 +4012,22 @@ function renderRouletteView() {
     const blackCount = state.balls && state.balls.black || 0;
     const canAfford = blackCount >= ROULETTE_COST_BLACK_BALLS;
     const evilTokens = state.evilTokens || 0;
-    el.innerHTML = `\n      <p class="roulette-lede">Spin all three wheels at once for ${ROULETTE_COST_BLACK_BALLS} Black Balls. You'll get two curses to survive and one target to hit — clear it and everything you earned merges back into your real save. Walk away any time; nothing's lost except by getting ejected from Perilous the normal way, and you can pick the run back up here whenever you're ready.</p>\n      <div class="roulette-cost-row">\n        <button type="button" class="roulette-spin-btn" id="rouletteSpinBtn" ${canAfford ? "" : "disabled"}>Spin</button>\n        <span class="ball-cost"><img src="${BALL_BY_KEY.black.asset}" alt="Black ball"> ${blackCount.toLocaleString()} / ${ROULETTE_COST_BLACK_BALLS}</span>\n      </div>\n      <p class="roulette-abandon-note">😈 Evil Tokens: ${evilTokens.toLocaleString()} — earned by completing runs. What they're for is still being figured out.</p>`;
+    const unlockUnlocked = hasMiningLorebookUnlocked();
+    const unlockAffordable = evilTokens >= MINING_LOREBOOK_UNLOCK_COST;
+    const unlockRow = unlockUnlocked
+      ? `<p class="roulette-abandon-note">⛏️📓 Mining & Lorebook unlocked.</p>`
+      : `<div class="roulette-cost-row">
+           <button type="button" class="roulette-spin-btn" id="miningLorebookUnlockBtn" ${unlockAffordable ? "" : "disabled"}>Unlock Mining &amp; Lorebook</button>
+           <span class="ball-cost">😈 ${evilTokens.toLocaleString()} / ${MINING_LOREBOOK_UNLOCK_COST.toLocaleString()}</span>
+         </div>`;
+    el.innerHTML = `\n      <p class="roulette-lede">Spin all three wheels at once for ${ROULETTE_COST_BLACK_BALLS} Black Balls. You'll get two curses to survive and one target to hit — clear it and everything you earned merges back into your real save. Walk away any time; nothing's lost except by getting ejected from Perilous the normal way, and you can pick the run back up here whenever you're ready.</p>\n      <div class="roulette-cost-row">\n        <button type="button" class="roulette-spin-btn" id="rouletteSpinBtn" ${canAfford ? "" : "disabled"}>Spin</button>\n        <span class="ball-cost"><img src="${BALL_BY_KEY.black.asset}" alt="Black ball"> ${blackCount.toLocaleString()} / ${ROULETTE_COST_BLACK_BALLS}</span>\n      </div>\n      <p class="roulette-abandon-note">😈 Evil Tokens: ${evilTokens.toLocaleString()}</p>\n      ${unlockRow}`;
+    const unlockBtn = document.getElementById("miningLorebookUnlockBtn");
+    if (unlockBtn) unlockBtn.addEventListener("click", () => {
+      if (purchaseMiningLorebookUnlock()) {
+        updateRouletteSubtabAvailability();
+        renderRouletteView();
+      }
+    });
     const btn = document.getElementById("rouletteSpinBtn");
     if (btn) btn.addEventListener("click", () => {
       if (startRouletteSpin()) {
@@ -7993,12 +8059,14 @@ function normalizeBallState() {
     sentientWaterhose: !!sourceUpgrades.sentientWaterhose,
     unlockJuniAxe: !!sourceUpgrades.unlockJuniAxe,
     roulette: !!sourceUpgrades.roulette,
+    miningLorebook: !!sourceUpgrades.miningLorebook,
     manualAutoroll: Math.min(BALL_UPGRADE_LIMITS.manualAutoroll, Math.max(0, Math.floor(Number(sourceUpgrades.manualAutoroll) || 0))),
     discount: Math.min(BALL_UPGRADE_LIMITS.discount, Math.max(0, Math.floor(Number(sourceUpgrades.discount) || 0))),
     doubleChance: Math.min(BALL_UPGRADE_LIMITS.doubleChance, Math.max(0, Math.floor(Number(sourceUpgrades.doubleChance) || 0))),
     offlineTickspeed: Math.min(BALL_UPGRADE_LIMITS.offlineTickspeed, Math.max(0, Math.floor(Number(sourceUpgrades.offlineTickspeed) || 0))),
     expoballs: Math.min(BALL_UPGRADE_LIMITS.expoballs, Math.max(0, Math.floor(Number(sourceUpgrades.expoballs) || 0))),
-    holdToClick: Math.min(BALL_UPGRADE_LIMITS.holdToClick, Math.max(0, Math.floor(Number(sourceUpgrades.holdToClick) || 0)))
+    holdToClick: Math.min(BALL_UPGRADE_LIMITS.holdToClick, Math.max(0, Math.floor(Number(sourceUpgrades.holdToClick) || 0))),
+    moreWatergun: Math.min(BALL_UPGRADE_LIMITS.moreWatergun, Math.max(0, Math.floor(Number(sourceUpgrades.moreWatergun) || 0)))
   };
   const sourceAutoUse = state.ballAutoUse && typeof state.ballAutoUse === "object" ? state.ballAutoUse : {};
   state.ballAutoUse = {
@@ -8263,7 +8331,7 @@ const BALL_UPGRADES = [ {
 }, {
   key: "moreWatergun",
   title: "MORE WATERGUN idk",
-  max: 7,
+  max: BALL_UPGRADE_LIMITS.moreWatergun,
   costForLevel: level => ({
     pink: 3 + level
   }),
@@ -8510,6 +8578,7 @@ function updateRouletteAvailability() {
   const nav = document.getElementById("rouletteNavBtn");
   if (nav) nav.hidden = !hasRouletteUnlocked();
   if (!hasRouletteUnlocked() && currentView === "roulette") currentView = "roll";
+  if (typeof renderNavWindow === "function") renderNavWindow();
 }
 
 function showView(name) {
@@ -8519,11 +8588,52 @@ function showView(name) {
   document.getElementById("view-" + name).classList.add("active");
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.view === name));
   refreshLiveViews();
+  scrollNavToActive();
 }
 
 document.querySelectorAll(".nav-btn").forEach(btn => {
   btn.addEventListener("click", () => showView(btn.dataset.view));
 });
+
+// Bottom nav windowing: only 3 buttons show at once (the rest get .nav-btn-offscreen), with two
+// arrows shifting which 3 are visible. "hidden" buttons (like rouletteNavBtn before it's
+// unlocked) are excluded from the visible set entirely — they don't count as one of the 3 slots
+// and can't be scrolled to, same as if they didn't exist in the DOM at all.
+let navScrollOffset = 0;
+function navVisibleButtons() {
+  return Array.from(document.querySelectorAll(".nav-btn")).filter(b => !b.hidden);
+}
+function renderNavWindow() {
+  const buttons = navVisibleButtons();
+  const maxOffset = Math.max(0, buttons.length - 3);
+  navScrollOffset = Math.min(navScrollOffset, maxOffset);
+  buttons.forEach((b, i) => {
+    b.classList.toggle("nav-btn-offscreen", i < navScrollOffset || i >= navScrollOffset + 3);
+  });
+  const leftArrow = document.getElementById("navScrollLeft");
+  const rightArrow = document.getElementById("navScrollRight");
+  if (leftArrow) leftArrow.disabled = navScrollOffset <= 0;
+  if (rightArrow) rightArrow.disabled = navScrollOffset >= maxOffset;
+}
+function scrollNavToActive() {
+  const buttons = navVisibleButtons();
+  const activeIdx = buttons.findIndex(b => b.dataset.view === currentView);
+  if (activeIdx === -1) { renderNavWindow(); return; }
+  const maxOffset = Math.max(0, buttons.length - 3);
+  if (activeIdx < navScrollOffset) navScrollOffset = activeIdx;
+  else if (activeIdx >= navScrollOffset + 3) navScrollOffset = Math.min(maxOffset, activeIdx - 2);
+  renderNavWindow();
+}
+document.getElementById("navScrollLeft").addEventListener("click", () => {
+  navScrollOffset = Math.max(0, navScrollOffset - 1);
+  renderNavWindow();
+});
+document.getElementById("navScrollRight").addEventListener("click", () => {
+  const buttons = navVisibleButtons();
+  navScrollOffset = Math.min(Math.max(0, buttons.length - 3), navScrollOffset + 1);
+  renderNavWindow();
+});
+renderNavWindow();
 
 function refreshLiveViews() {
   if (currentView === "items") {
@@ -8534,7 +8644,12 @@ function refreshLiveViews() {
   if (currentView === "inventory") renderInventory();
   if (currentView === "balls") renderBallsView();
   if (currentView === "settings") renderSettingsView();
-  if (currentView === "roulette") renderRouletteView();
+  if (currentView === "roulette") {
+    renderRouletteView();
+    updateRouletteSubtabAvailability();
+    if (currentRouletteSubtab === "mining") renderMiningView();
+    if (currentRouletteSubtab === "lorebook") renderLorebookView();
+  }
   updateRouletteAvailability();
 }
 

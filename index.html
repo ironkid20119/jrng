@@ -224,7 +224,14 @@
   <div class="view" id="view-roulette">
     <div class="panel">
       <h2 class="ptitle">Roulette</h2>
+      <div class="roulette-subtabs" id="rouletteSubtabs">
+        <button type="button" class="roulette-subtab-btn active" data-subtab="roulette">Roulette</button>
+        <button type="button" class="roulette-subtab-btn" data-subtab="mining" hidden>Mining</button>
+        <button type="button" class="roulette-subtab-btn" data-subtab="lorebook" hidden>Lorebook</button>
+      </div>
       <div id="rouletteContent"></div>
+      <div id="miningContent" style="display:none;"></div>
+      <div id="lorebookContent" style="display:none;"></div>
     </div>
   </div>
 
@@ -295,13 +302,17 @@
 </div>
 
 <nav class="bottom-nav">
-  <button class="nav-btn active" data-view="roll"><span class="icon">🎲</span>Roll</button>
-  <button class="nav-btn" data-view="inventory"><span class="icon">🎒</span>Inventory</button>
-  <button class="nav-btn" data-view="index"><span class="icon">📖</span>Index</button>
-  <button class="nav-btn" data-view="items"><span class="icon">🪓</span>Items</button>
-  <button class="nav-btn" data-view="balls"><span class="icon">🔮</span>Balls<span id="ballsNavDot" class="balls-nav-dot" hidden aria-label="Collectible balls available"></span></button>
-  <button id="rouletteNavBtn" class="nav-btn" data-view="roulette" hidden><span class="icon">🎰</span>Roulette</button>
-  <button class="nav-btn" data-view="settings"><span class="icon">⚙</span>Settings</button>
+  <button class="nav-scroll-arrow" id="navScrollLeft" type="button" aria-label="Scroll tabs left">‹</button>
+  <div class="nav-btn-window" id="navBtnWindow">
+    <button class="nav-btn active" data-view="roll"><span class="icon">🎲</span>Roll</button>
+    <button class="nav-btn" data-view="inventory"><span class="icon">🎒</span>Inventory</button>
+    <button class="nav-btn" data-view="index"><span class="icon">📖</span>Index</button>
+    <button class="nav-btn" data-view="items"><span class="icon">🪓</span>Items</button>
+    <button class="nav-btn" data-view="balls"><span class="icon">🔮</span>Balls<span id="ballsNavDot" class="balls-nav-dot" hidden aria-label="Collectible balls available"></span></button>
+    <button id="rouletteNavBtn" class="nav-btn" data-view="roulette" hidden><span class="icon">🎰</span>Roulette</button>
+    <button class="nav-btn" data-view="settings"><span class="icon">⚙</span>Settings</button>
+  </div>
+  <button class="nav-scroll-arrow" id="navScrollRight" type="button" aria-label="Scroll tabs right">›</button>
 </nav>
 
 
