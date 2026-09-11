@@ -26,7 +26,8 @@
     background:var(--bg-0);
     color:var(--text);
     font-family:var(--sans);
-    min-height:100vh;
+    min-height:100vh; /* fallback for browsers without dvh support */
+    min-height:100dvh; /* actual visible viewport height on mobile, accounting for browser chrome */
     overflow-x:hidden;
     touch-action:manipulation;
   }
@@ -48,7 +49,7 @@
       radial-gradient(ellipse 900px 500px at 15% -10%, rgba(124,92,255,0.15), transparent),
       radial-gradient(ellipse 700px 500px at 100% 10%, rgba(255,92,168,0.10), transparent),
       var(--bg-0);
-    padding-bottom:calc(var(--navh) + 24px);
+    padding-bottom:calc(var(--navh) + env(safe-area-inset-bottom, 0px) + 24px);
   }
 
   ::selection{ background:var(--accent); color:#fff; }
@@ -819,7 +820,8 @@
   .bottom-nav{
     position:fixed;
     left:0; right:0; bottom:0;
-    height:var(--navh);
+    height:calc(var(--navh) + env(safe-area-inset-bottom, 0px));
+    padding-bottom:env(safe-area-inset-bottom, 0px);
     background:rgba(15,13,22,0.92);
     backdrop-filter:blur(14px);
     border-top:1px solid var(--border);
@@ -834,7 +836,8 @@
     min-width:0;
   }
   .nav-scroll-arrow{
-    flex:0 0 34px;
+    flex:0 0 40px;
+    min-width:40px;
     display:flex;
     align-items:center;
     justify-content:center;

@@ -1476,6 +1476,7 @@ if ("serviceWorker" in navigator) {
   let lastDirection = null;
   let lastDirectionAt = 0;
   let rafHandle = null;
+  let lastIndicatorCount = 0;
 
   function updateIndicator() {
     let el = document.getElementById("gamepadIndicator");
@@ -1495,7 +1496,6 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("gamepadconnected", e => {
     connectedPads.set(e.gamepad.index, true);
     updateIndicator();
-    if (!rafHandle) rafHandle = requestAnimationFrame(pollGamepads);
   });
   window.addEventListener("gamepaddisconnected", e => {
     connectedPads.delete(e.gamepad.index);
@@ -1597,10 +1597,13 @@ if ("serviceWorker" in navigator) {
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     const now = Date.now();
     let anyConnected = false;
+    const seenThisFrame = new Set();
 
     for (const pad of pads) {
       if (!pad) continue;
       anyConnected = true;
+      seenThisFrame.add(pad.index);
+      if (!connectedPads.has(pad.index)) connectedPads.set(pad.index, true); // Safari doesn't always fire gamepadconnected — this is the real source of truth
       const prev = prevButtonStates.get(pad.index) || [];
       const curr = pad.buttons.map(b => b.pressed);
 
@@ -1649,17 +1652,20 @@ if ("serviceWorker" in navigator) {
       }
     }
 
+    // Catch disconnects even if gamepaddisconnected never fires (same Safari unreliability).
+    for (const idx of Array.from(connectedPads.keys())) {
+      if (!seenThisFrame.has(idx)) { connectedPads.delete(idx); prevButtonStates.delete(idx); }
+    }
+    if (connectedPads.size !== lastIndicatorCount) { updateIndicator(); lastIndicatorCount = connectedPads.size; }
+
     if (anyConnected) ensureFocus();
     rafHandle = requestAnimationFrame(pollGamepads);
   }
 
-  // Some browsers fire gamepadconnected only on first input rather than at page load if a
-  // controller was already connected before the page opened — polling starts immediately if any
-  // pad is already present, and gamepadconnected above covers pads connected afterward.
-  const existing = navigator.getGamepads ? navigator.getGamepads() : [];
-  for (const pad of existing) {
-    if (pad) { connectedPads.set(pad.index, true); }
-  }
-  updateIndicator();
-  if (connectedPads.size > 0) rafHandle = requestAnimationFrame(pollGamepads);
+  // Always polling from page load, independent of gamepadconnected ever firing — Safari has two
+  // confirmed WebKit bugs (bugs.webkit.org #270575, #284375) where that event only fires on a
+  // button press (not stick movement) and can fail to fire at all until getGamepads() has already
+  // been called once. Continuous polling from the start sidesteps both, and is a strict superset
+  // of event-driven detection so it changes nothing for browsers where the events work fine.
+  rafHandle = requestAnimationFrame(pollGamepads);
 })();
