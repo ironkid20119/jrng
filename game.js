@@ -6590,6 +6590,14 @@ function updateAberrationVisual() {
   updatePerilousPresentation();
 }
 
+function updateGameFooter() {
+  const el = document.getElementById("gameFooterText");
+  if (!el) return;
+  const world = WORLDS[state.worldIdx];
+  const area = world && world.areas[state.areaIdx];
+  el.textContent = `juni's rng game v1.9 ${world ? world.label : "?"} • ${area ? area.label : "?"}`;
+}
+
 function renderAreaSelect() {
   const world = WORLDS[state.worldIdx];
   const el = document.getElementById("areaSelect");
@@ -6606,6 +6614,7 @@ function renderAreaSelect() {
       dbSaveMeta();
     });
   });
+  updateGameFooter();
 }
 
 function renderInventory() {
@@ -8594,6 +8603,9 @@ function showView(name) {
 document.querySelectorAll(".nav-btn").forEach(btn => {
   btn.addEventListener("click", () => showView(btn.dataset.view));
 });
+
+const settingsFooterBtn = document.getElementById("settingsFooterBtn");
+if (settingsFooterBtn) settingsFooterBtn.addEventListener("click", () => showView("settings"));
 
 // Bottom nav windowing: only 3 buttons show at once (the rest get .nav-btn-offscreen), with two
 // arrows shifting which 3 are visible. "hidden" buttons (like rouletteNavBtn before it's

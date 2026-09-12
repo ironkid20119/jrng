@@ -1510,7 +1510,7 @@ if ("serviceWorker" in navigator) {
   // stays correct across re-renders without needing any per-view hardcoded list.
   function focusableElements() {
     const all = Array.from(document.querySelectorAll(
-      '.nav-btn:not(.nav-btn-offscreen), .nav-scroll-arrow, .roulette-subtab-btn, .btn, .seg-btn, .area-btn, .roulette-spin-btn, .cache-reset-btn, button.folder-row, button.acc-head'
+      '.nav-btn:not(.nav-btn-offscreen), .nav-scroll-arrow, .roulette-subtab-btn, .btn, .seg-btn, .area-btn, .roulette-spin-btn, .cache-reset-btn, #settingsFooterBtn, button.folder-row, button.acc-head'
     ));
     return all.filter(el => {
       if (el.hidden || el.disabled) return false;
