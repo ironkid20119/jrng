@@ -1508,8 +1508,25 @@ if ("serviceWorker" in navigator) {
   // ones that are actually visible right now (offscreen nav buttons, hidden subtabs, and
   // display:none panels are excluded) — this is re-queried fresh every navigation press, so it
   // stays correct across re-renders without needing any per-view hardcoded list.
+  // Any of these being visible means the game underneath is NOT actually playable yet — state
+  // may not be loaded, or the whole app is intentionally frozen. The gamepad must never be able
+  // to reach anything underneath (like rollBtn, which stays in the DOM the whole time, just
+  // visually covered) while one of these is up — this is what let a stray controller press
+  // during the disclaimer screen call rollBtn.click() before state was ever loaded, silently
+  // overwriting a real save with a blank one on the very next auto-save.
+  const BLOCKING_OVERLAY_IDS = ["photosensitivityDisclaimer", "disclaimerBlocked", "dataLossGuard", "initCrashGuard", "offlineCatchupOverlay"];
+  function activeBlockingOverlay() {
+    for (const id of BLOCKING_OVERLAY_IDS) {
+      const el = document.getElementById(id);
+      if (el && window.getComputedStyle(el).display !== "none") return el;
+    }
+    return null;
+  }
+
   function focusableElements() {
-    const all = Array.from(document.querySelectorAll(
+    const overlay = activeBlockingOverlay();
+    const scope = overlay || document;
+    const all = Array.from(scope.querySelectorAll(
       '.nav-btn:not(.nav-btn-offscreen), .nav-scroll-arrow, .roulette-subtab-btn, .btn, .seg-btn, .area-btn, .roulette-spin-btn, .cache-reset-btn, #settingsFooterBtn, button.folder-row, button.acc-head'
     ));
     return all.filter(el => {
@@ -1518,7 +1535,8 @@ if ("serviceWorker" in navigator) {
       if (rect.width === 0 && rect.height === 0) return false;
       const style = window.getComputedStyle(el);
       if (style.display === "none" || style.visibility === "hidden") return false;
-      // Exclude elements inside a view that isn't the active one.
+      // Exclude elements inside a view that isn't the active one (irrelevant while scoped to an
+      // overlay, but harmless — the overlay's own buttons aren't inside any .view anyway).
       const view = el.closest(".view");
       if (view && !view.classList.contains("active")) return false;
       // Exclude elements inside a Roulette subtab panel that's currently display:none.
@@ -1613,6 +1631,14 @@ if ("serviceWorker" in navigator) {
         if (isPressed && !wasPressed) {
           const name = STANDARD_BUTTONS[i];
           if (!name) continue;
+          const blocked = !!activeBlockingOverlay();
+          if (blocked) {
+            // Only activating whatever's focused (now scoped to the overlay's own buttons by
+            // focusableElements()) is allowed — no nav switching, no roll shortcut, nothing that
+            // could reach past the overlay into the game underneath.
+            if (FACE_BUTTONS.includes(name)) activateFocus();
+            continue;
+          }
           if (name === "l1") cycleNavTab(-1);
           else if (name === "r1") cycleNavTab(1);
           else if (name === "dpad-up") { moveFocus("up"); lastDirection = "up"; lastDirectionAt = now; }
